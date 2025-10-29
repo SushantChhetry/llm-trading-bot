@@ -9,6 +9,7 @@ import logging
 import time
 import sys
 import argparse
+import json
 from pathlib import Path
 from datetime import datetime
 from typing import Dict
@@ -77,7 +78,40 @@ class TradingBot:
         logger.info(f"Symbol: {config.SYMBOL}")
         logger.info(f"Run Interval: {config.RUN_INTERVAL_SECONDS} seconds")
         logger.info(f"Initial Balance: ${config.INITIAL_BALANCE:,.2f}")
+        
+        # Log hyperparameters for experiment tracking
+        self._log_hyperparameters()
+        
         logger.info("=" * 60)
+    
+    def _log_hyperparameters(self):
+        """Log all hyperparameters for experiment tracking."""
+        hyperparams = {
+            "trading_mode": config.TRADING_MODE,
+            "use_testnet": config.USE_TESTNET,
+            "llm_provider": config.LLM_PROVIDER,
+            "llm_model": config.LLM_MODEL,
+            "exchange": config.EXCHANGE,
+            "symbol": config.SYMBOL,
+            "initial_balance": config.INITIAL_BALANCE,
+            "max_position_size": config.MAX_POSITION_SIZE,
+            "stop_loss_percent": config.STOP_LOSS_PERCENT,
+            "take_profit_percent": config.TAKE_PROFIT_PERCENT,
+            "run_interval_seconds": config.RUN_INTERVAL_SECONDS,
+            "llm_mock_mode": self.llm_client.mock_mode
+        }
+        
+        logger.info("HYPERPARAMETERS:")
+        for key, value in hyperparams.items():
+            logger.info(f"  {key}: {value}")
+        
+        # Save hyperparameters to file for experiment tracking
+        hyperparams_file = config.DATA_DIR / "hyperparameters.json"
+        with open(hyperparams_file, 'w') as f:
+            json.dump({
+                "timestamp": datetime.now().isoformat(),
+                "hyperparameters": hyperparams
+            }, f, indent=2)
     
     def run_cycle(self):
         """
@@ -268,11 +302,11 @@ Examples:
     )
     
     # Exchange arguments
-    parser.add_argument(
-        "--exchange", 
-        choices=["bybit", "binance"],
-        help="Exchange to use (default: from config)"
-    )
+            parser.add_argument(
+                "--exchange", 
+                choices=["bybit", "binance", "coinbase", "kraken"],
+                help="Exchange to use (default: from config). Note: Bybit/Binance restricted in USA"
+            )
     parser.add_argument(
         "--symbol", 
         help="Trading pair symbol (default: from config)"

@@ -9,7 +9,7 @@ import logging
 import json
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Any
 
 from config import config
 
@@ -247,6 +247,9 @@ class TradingEngine:
         total_return = total_value - initial_balance
         total_return_pct = (total_return / initial_balance) * 100
         
+        # Calculate advanced metrics
+        advanced_metrics = self._calculate_advanced_metrics()
+        
         return {
             "balance": self.balance,
             "positions_value": total_value - self.balance,
@@ -255,6 +258,140 @@ class TradingEngine:
             "total_return": total_return,
             "total_return_pct": total_return_pct,
             "open_positions": len(self.positions),
-            "total_trades": len(self.trades)
+            "total_trades": len(self.trades),
+            **advanced_metrics
         }
+    
+    def _calculate_advanced_metrics(self) -> Dict[str, Any]:
+        """Calculate advanced trading metrics."""
+        if not self.trades:
+            return {
+                "win_rate": 0.0,
+                "avg_profit_per_trade": 0.0,
+                "max_drawdown": 0.0,
+                "sharpe_ratio": 0.0,
+                "volatility": 0.0,
+                "profit_factor": 0.0,
+                "avg_trade_duration_hours": 0.0,
+                "max_consecutive_wins": 0,
+                "max_consecutive_losses": 0
+            }
+        
+        # Basic trade analysis
+        sell_trades = [t for t in self.trades if t.get("side") == "sell"]
+        profits = [t.get("profit", 0) for t in sell_trades]
+        
+        if not profits:
+            return {
+                "win_rate": 0.0,
+                "avg_profit_per_trade": 0.0,
+                "max_drawdown": 0.0,
+                "sharpe_ratio": 0.0,
+                "volatility": 0.0,
+                "profit_factor": 0.0,
+                "avg_trade_duration_hours": 0.0,
+                "max_consecutive_wins": 0,
+                "max_consecutive_losses": 0
+            }
+        
+        # Win rate
+        winning_trades = [p for p in profits if p > 0]
+        win_rate = (len(winning_trades) / len(profits) * 100) if profits else 0
+        
+        # Average profit per trade
+        avg_profit = sum(profits) / len(profits)
+        
+        # Max drawdown
+        max_drawdown = self._calculate_max_drawdown(profits)
+        
+        # Sharpe ratio (assuming risk-free rate = 0)
+        if len(profits) > 1:
+            mean_return = sum(profits) / len(profits)
+            variance = sum((p - mean_return) ** 2 for p in profits) / (len(profits) - 1)
+            volatility = variance ** 0.5
+            sharpe_ratio = mean_return / volatility if volatility > 0 else 0
+        else:
+            volatility = 0.0
+            sharpe_ratio = 0.0
+        
+        # Profit factor
+        gross_profit = sum(p for p in profits if p > 0)
+        gross_loss = abs(sum(p for p in profits if p < 0))
+        profit_factor = gross_profit / gross_loss if gross_loss > 0 else float('inf') if gross_profit > 0 else 0
+        
+        # Trade duration analysis
+        trade_durations = []
+        for trade in self.trades:
+            if "timestamp" in trade:
+                try:
+                    trade_time = datetime.fromisoformat(trade["timestamp"].replace('Z', '+00:00'))
+                    # Find corresponding buy trade for duration calculation
+                    if trade.get("side") == "sell":
+                        buy_trades = [t for t in self.trades 
+                                    if t.get("side") == "buy" 
+                                    and t.get("symbol") == trade.get("symbol")
+                                    and t.get("timestamp") < trade.get("timestamp")]
+                        if buy_trades:
+                            buy_time = datetime.fromisoformat(buy_trades[-1]["timestamp"].replace('Z', '+00:00'))
+                            duration = (trade_time - buy_time).total_seconds() / 3600  # hours
+                            trade_durations.append(duration)
+                except (ValueError, TypeError):
+                    continue
+        
+        avg_trade_duration = sum(trade_durations) / len(trade_durations) if trade_durations else 0
+        
+        # Consecutive wins/losses
+        max_consecutive_wins = self._calculate_max_consecutive(profits, lambda x: x > 0)
+        max_consecutive_losses = self._calculate_max_consecutive(profits, lambda x: x < 0)
+        
+        return {
+            "win_rate": win_rate,
+            "avg_profit_per_trade": avg_profit,
+            "max_drawdown": max_drawdown,
+            "sharpe_ratio": sharpe_ratio,
+            "volatility": volatility,
+            "profit_factor": profit_factor,
+            "avg_trade_duration_hours": avg_trade_duration,
+            "max_consecutive_wins": max_consecutive_wins,
+            "max_consecutive_losses": max_consecutive_losses
+        }
+    
+    def _calculate_max_drawdown(self, profits: List[float]) -> float:
+        """Calculate maximum drawdown from profit series."""
+        if not profits:
+            return 0.0
+        
+        cumulative = []
+        running_sum = 0
+        for profit in profits:
+            running_sum += profit
+            cumulative.append(running_sum)
+        
+        peak = cumulative[0]
+        max_dd = 0
+        for value in cumulative:
+            if value > peak:
+                peak = value
+            drawdown = peak - value
+            if drawdown > max_dd:
+                max_dd = drawdown
+        
+        return max_dd
+    
+    def _calculate_max_consecutive(self, profits: List[float], condition) -> int:
+        """Calculate maximum consecutive wins or losses."""
+        if not profits:
+            return 0
+        
+        max_consecutive = 0
+        current_consecutive = 0
+        
+        for profit in profits:
+            if condition(profit):
+                current_consecutive += 1
+                max_consecutive = max(max_consecutive, current_consecutive)
+            else:
+                current_consecutive = 0
+        
+        return max_consecutive
 

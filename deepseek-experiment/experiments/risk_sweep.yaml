@@ -1,0 +1,11 @@
+# Risk Level Sweep Experiment Configuration
+# Tests different position sizes and risk management parameters
+
+llm_provider: "deepseek"
+llm_model: "deepseek-chat"
+max_position_size: [0.01, 0.05, 0.10, 0.20]
+stop_loss_percent: [2.0, 5.0, 10.0]
+take_profit_percent: [5.0, 10.0, 20.0]
+run_interval: 300
+use_testnet: true
+trading_mode: "paper"

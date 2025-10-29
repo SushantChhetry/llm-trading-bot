@@ -18,7 +18,7 @@ DATA_DIR.mkdir(exist_ok=True)
 LOG_DIR.mkdir(exist_ok=True)
 
 # Exchange configuration
-EXCHANGE = os.getenv("EXCHANGE", "bybit")  # Options: "bybit", "binance"
+EXCHANGE = os.getenv("EXCHANGE", "bybit")  # Options: "bybit", "binance", "coinbase", "kraken"
 USE_TESTNET = os.getenv("USE_TESTNET", "true").lower() == "true"
 
 # Exchange API keys (set via environment variables for security)

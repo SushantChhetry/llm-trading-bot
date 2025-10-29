@@ -1,0 +1,11 @@
+# LLM Provider Comparison Experiment Configuration
+# Tests different LLM providers with identical parameters
+
+llm_provider: ["deepseek", "openai", "anthropic"]
+llm_model: ["deepseek-chat", "gpt-3.5-turbo", "claude-3-sonnet-20240229"]
+max_position_size: 0.05
+stop_loss_percent: 5.0
+take_profit_percent: 10.0
+run_interval: 300
+use_testnet: true
+trading_mode: "paper"

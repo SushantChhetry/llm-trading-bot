@@ -47,11 +47,17 @@ class DataFetcher:
             "enableRateLimit": True,
         }
         
-        # Configure testnet
+        # Configure testnet and exchange-specific options
         if exchange_name == "bybit" and use_testnet:
             exchange_params["options"] = {"defaultType": "test"}
         elif exchange_name == "binance" and use_testnet:
             exchange_params["options"] = {"defaultType": "testnet"}
+        elif exchange_name == "coinbase":
+            # Coinbase Pro/Advanced Trade (US-friendly)
+            exchange_params["options"] = {"defaultType": "spot"}
+        elif exchange_name == "kraken":
+            # Kraken (US-friendly)
+            exchange_params["options"] = {"defaultType": "spot"}
         
         self.exchange = exchange_class(exchange_params)
         
