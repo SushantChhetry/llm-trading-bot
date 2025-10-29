@@ -29,3 +29,28 @@ data/
 .DS_Store
 Thumbs.db
 
+# Web Dashboard (React + Vite)
+web-dashboard/node_modules/
+web-dashboard/dist/
+web-dashboard/build/
+web-dashboard/.vite/
+web-dashboard/.cache/
+web-dashboard/coverage/
+
+# Web Dashboard logs
+web-dashboard/*.log
+web-dashboard/npm-debug.log*
+web-dashboard/yarn-debug.log*
+web-dashboard/yarn-error.log*
+
+# Web Dashboard environment
+web-dashboard/.env
+web-dashboard/.env.local
+web-dashboard/.env.development.local
+web-dashboard/.env.test.local
+web-dashboard/.env.production.local
+
+# Web Dashboard IDE
+web-dashboard/.vscode/
+web-dashboard/.idea/
+
