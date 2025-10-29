@@ -13,6 +13,18 @@ import json
 from pathlib import Path
 from datetime import datetime
 from typing import Dict
+from rich.console import Console
+from rich.panel import Panel
+from rich.table import Table
+from rich.text import Text
+from rich.progress import Progress, SpinnerColumn, TextColumn
+from rich.live import Live
+from rich import box
+import colorama
+from colorama import Fore, Back, Style
+
+# Initialize colorama for cross-platform color support
+colorama.init(autoreset=True)
 
 # Add project root to path for imports
 project_root = Path(__file__).parent.parent
@@ -52,32 +64,45 @@ class TradingBot:
             testnet_mode: Override testnet setting from config
             live_mode: Override live trading setting from config
         """
+        # Initialize colorful console
+        self.console = Console()
+        
         # Override config settings if provided
         if testnet_mode is not None:
             config.USE_TESTNET = testnet_mode
         if live_mode is not None:
             config.TRADING_MODE = "live" if live_mode else "paper"
         
-        logger.info("=" * 60)
-        logger.info("INITIALIZING DEEPSEEK TRADING BOT")
-        logger.info("=" * 60)
+        # Colorful initialization banner
+        self.console.print(Panel.fit(
+            "[bold blue]🤖 DEEPSEEK TRADING BOT[/bold blue]",
+            border_style="blue",
+            padding=(1, 2)
+        ))
         
         self.data_fetcher = DataFetcher()
         self.llm_client = LLMClient()
         self.trading_engine = TradingEngine()
+        
+        # Create colorful status table
+        status_table = Table(title="Bot Configuration", show_header=True, header_style="bold magenta")
+        status_table.add_column("Setting", style="cyan", no_wrap=True)
+        status_table.add_column("Value", style="green")
         
         # Enhanced logging with clear mode indicators
         mode_indicator = "🔴 LIVE" if config.TRADING_MODE == "live" else "🟡 PAPER"
         testnet_indicator = "🧪 TESTNET" if config.USE_TESTNET else "🌐 LIVE DATA"
         llm_indicator = f"🤖 {config.LLM_PROVIDER.upper()}" + (" (MOCK)" if self.llm_client.mock_mode else " (LIVE)")
         
-        logger.info(f"Trading Mode: {mode_indicator}")
-        logger.info(f"Data Source: {testnet_indicator}")
-        logger.info(f"LLM Provider: {llm_indicator}")
-        logger.info(f"Exchange: {config.EXCHANGE.upper()}")
-        logger.info(f"Symbol: {config.SYMBOL}")
-        logger.info(f"Run Interval: {config.RUN_INTERVAL_SECONDS} seconds")
-        logger.info(f"Initial Balance: ${config.INITIAL_BALANCE:,.2f}")
+        status_table.add_row("Trading Mode", mode_indicator)
+        status_table.add_row("Data Source", testnet_indicator)
+        status_table.add_row("LLM Provider", llm_indicator)
+        status_table.add_row("Exchange", config.EXCHANGE.upper())
+        status_table.add_row("Symbol", config.SYMBOL)
+        status_table.add_row("Run Interval", f"{config.RUN_INTERVAL_SECONDS} seconds")
+        status_table.add_row("Initial Balance", f"${config.INITIAL_BALANCE:,.2f}")
+        
+        self.console.print(status_table)
         
         # Log hyperparameters for experiment tracking
         self._log_hyperparameters()
@@ -120,13 +145,13 @@ class TradingBot:
         Fetches market data, gets LLM decision, and executes trades if needed.
         """
         try:
-            logger.info("-" * 60)
-            logger.info(f"Starting trading cycle at {datetime.now()}")
+            # Colorful cycle header
+            self.console.print(f"\n[bold cyan]🔄 Starting trading cycle at {datetime.now().strftime('%H:%M:%S')}[/bold cyan]")
             
             # 1. Fetch market data
-            logger.info("Fetching market data...")
-            ticker = self.data_fetcher.get_ticker()
-            current_price = float(ticker["last"])
+            with self.console.status("[bold green]Fetching market data...", spinner="dots"):
+                ticker = self.data_fetcher.get_ticker()
+                current_price = float(ticker["last"])
             
             market_data = {
                 "symbol": config.SYMBOL,
@@ -135,16 +160,22 @@ class TradingBot:
                 "change_24h": ticker.get("percentage", 0)
             }
             
-            logger.info(f"Current price: ${current_price:.2f}")
+            # Display market data
+            price_change = ticker.get("percentage", 0)
+            price_color = "green" if price_change >= 0 else "red"
+            self.console.print(f"[bold]💰 Current Price:[/bold] [bold {price_color}]${current_price:,.2f}[/bold {price_color}] "
+                             f"([{price_color}]{price_change:+.2f}%[/{price_color}])")
             
             # 2. Get portfolio summary
             portfolio = self.trading_engine.get_portfolio_summary(current_price)
-            logger.info(f"Portfolio value: ${portfolio['total_value']:.2f} "
-                       f"(Return: {portfolio['total_return_pct']:.2f}%)")
+            return_pct = portfolio['total_return_pct']
+            return_color = "green" if return_pct >= 0 else "red"
+            self.console.print(f"[bold]📊 Portfolio Value:[/bold] [bold {return_color}]${portfolio['total_value']:,.2f}[/bold {return_color}] "
+                             f"([{return_color}]{return_pct:+.2f}%[/{return_color}])")
             
             # 3. Get LLM decision with portfolio context
-            logger.info("Consulting LLM for trading decision...")
-            decision = self.llm_client.get_trading_decision(market_data, portfolio)
+            with self.console.status("[bold blue]🤖 Consulting AI for trading decision...", spinner="dots"):
+                decision = self.llm_client.get_trading_decision(market_data, portfolio)
             
             action = decision.get("action", "hold").lower()
             confidence = decision.get("confidence", 0.0)
@@ -152,15 +183,26 @@ class TradingBot:
             position_size = decision.get("position_size", 0.1)
             risk_assessment = decision.get("risk_assessment", "medium")
             
-            logger.info("=" * 50)
-            logger.info("LLM TRADING DECISION")
-            logger.info("=" * 50)
-            logger.info(f"Action: {action.upper()}")
-            logger.info(f"Confidence: {confidence:.2f}")
-            logger.info(f"Position Size: {position_size:.2f}")
-            logger.info(f"Risk Assessment: {risk_assessment.upper()}")
-            logger.info(f"Reasoning: {reasoning}")
-            logger.info("=" * 50)
+            # Create colorful decision panel
+            action_emoji = {"buy": "🟢", "sell": "🔴", "hold": "🟡"}.get(action, "❓")
+            action_color = {"buy": "green", "sell": "red", "hold": "yellow"}.get(action, "white")
+            confidence_color = "green" if confidence > 0.7 else "yellow" if confidence > 0.4 else "red"
+            risk_color = {"low": "green", "medium": "yellow", "high": "red"}.get(risk_assessment.lower(), "white")
+            
+            decision_text = f"""
+[bold]Action:[/bold] [{action_color}]{action_emoji} {action.upper()}[/{action_color}]
+[bold]Confidence:[/bold] [{confidence_color}]{confidence:.2f}[/{confidence_color}]
+[bold]Position Size:[/bold] {position_size:.2f}
+[bold]Risk Assessment:[/bold] [{risk_color}]{risk_assessment.upper()}[/{risk_color}]
+[bold]Reasoning:[/bold] {reasoning}
+            """.strip()
+            
+            self.console.print(Panel(
+                decision_text,
+                title="[bold blue]🤖 AI Trading Decision[/bold blue]",
+                border_style="blue",
+                padding=(1, 2)
+            ))
             
             # 4. Execute trade based on decision
             trade_executed = False
@@ -172,7 +214,7 @@ class TradingBot:
                     base_amount = available_balance * config.MAX_POSITION_SIZE
                     trade_amount = base_amount * position_size * confidence
                     
-                    logger.info(f"Executing BUY: ${trade_amount:.2f} (position_size: {position_size:.2f})")
+                    self.console.print(f"[bold green]🟢 Executing BUY: ${trade_amount:.2f}[/bold green]")
                     trade = self.trading_engine.execute_buy(
                         config.SYMBOL,
                         current_price,
@@ -182,14 +224,14 @@ class TradingBot:
                     )
                     if trade:
                         trade_executed = True
-                        logger.info(f"✅ BUY trade executed successfully (ID: {trade['id']})")
+                        self.console.print(f"[bold green]✅ BUY trade executed successfully (ID: {trade['id']})[/bold green]")
                     else:
-                        logger.warning("❌ BUY trade failed (insufficient balance or other error)")
+                        self.console.print("[bold red]❌ BUY trade failed (insufficient balance or other error)[/bold red]")
                         
             elif action == "sell" and confidence > 0.6:
                 # Sell all or partial position
                 if config.SYMBOL in self.trading_engine.positions:
-                    logger.info(f"Executing SELL: {position_size:.2f} of position")
+                    self.console.print(f"[bold red]🔴 Executing SELL: {position_size:.2f} of position[/bold red]")
                     trade = self.trading_engine.execute_sell(
                         config.SYMBOL,
                         current_price,
@@ -198,21 +240,24 @@ class TradingBot:
                     )
                     if trade:
                         trade_executed = True
-                        logger.info(f"✅ SELL trade executed successfully (ID: {trade['id']}, "
-                                   f"Profit: ${trade.get('profit', 0):.2f})")
+                        profit = trade.get('profit', 0)
+                        profit_color = "green" if profit >= 0 else "red"
+                        self.console.print(f"[bold green]✅ SELL trade executed successfully[/bold green] "
+                                         f"(ID: {trade['id']}, Profit: [{profit_color}]${profit:.2f}[/{profit_color}])")
                     else:
-                        logger.warning("❌ SELL trade failed (no position or other error)")
+                        self.console.print("[bold red]❌ SELL trade failed (no position or other error)[/bold red]")
                 else:
-                    logger.info("No position to sell")
+                    self.console.print("[yellow]No position to sell[/yellow]")
             else:
-                logger.info("Decision is to HOLD or confidence too low. No action taken.")
+                self.console.print("[yellow]🟡 Decision is to HOLD or confidence too low. No action taken.[/yellow]")
             
             if not trade_executed:
-                logger.info("No trade executed this cycle")
+                self.console.print("[dim]No trade executed this cycle[/dim]")
             
-            logger.info("Trading cycle completed successfully")
+            self.console.print("[bold green]✅ Trading cycle completed successfully[/bold green]")
             
         except Exception as e:
+            self.console.print(f"[bold red]❌ Error in trading cycle: {e}[/bold red]")
             logger.error(f"Error in trading cycle: {e}", exc_info=True)
             # Continue running despite errors
     
@@ -223,18 +268,23 @@ class TradingBot:
         Executes trading cycles at intervals defined by config.RUN_INTERVAL_SECONDS.
         Can be stopped with Ctrl+C.
         """
-        logger.info("Starting bot scheduler...")
-        logger.info(f"Bot will run every {config.RUN_INTERVAL_SECONDS} seconds")
-        logger.info("Press Ctrl+C to stop")
+        # Colorful startup message
+        self.console.print(Panel.fit(
+            f"[bold green]🚀 Bot Starting![/bold green]\n"
+            f"[cyan]Running every {config.RUN_INTERVAL_SECONDS} seconds[/cyan]\n"
+            f"[yellow]Press Ctrl+C to stop[/yellow]",
+            border_style="green",
+            padding=(1, 2)
+        ))
         
         try:
             while True:
                 self.run_cycle()
-                logger.info(f"Waiting {config.RUN_INTERVAL_SECONDS} seconds until next cycle...")
+                self.console.print(f"[dim]⏳ Waiting {config.RUN_INTERVAL_SECONDS} seconds until next cycle...[/dim]")
                 time.sleep(config.RUN_INTERVAL_SECONDS)
                 
         except KeyboardInterrupt:
-            logger.info("Bot stopped by user")
+            self.console.print("\n[bold yellow]🛑 Bot stopped by user[/bold yellow]")
             
             # Print final portfolio summary
             try:
@@ -242,19 +292,25 @@ class TradingBot:
                 current_price = float(ticker["last"])
                 portfolio = self.trading_engine.get_portfolio_summary(current_price)
                 
-                logger.info("=" * 60)
-                logger.info("FINAL PORTFOLIO SUMMARY")
-                logger.info("=" * 60)
-                logger.info(f"Initial Balance: ${portfolio['initial_balance']:.2f}")
-                logger.info(f"Current Balance: ${portfolio['balance']:.2f}")
-                logger.info(f"Positions Value: ${portfolio['positions_value']:.2f}")
-                logger.info(f"Total Value: ${portfolio['total_value']:.2f}")
-                logger.info(f"Total Return: ${portfolio['total_return']:.2f} ({portfolio['total_return_pct']:.2f}%)")
-                logger.info(f"Total Trades: {portfolio['total_trades']}")
-                logger.info("=" * 60)
+                # Create colorful final summary table
+                final_table = Table(title="📊 Final Portfolio Summary", show_header=True, header_style="bold magenta")
+                final_table.add_column("Metric", style="cyan", no_wrap=True)
+                final_table.add_column("Value", style="green")
+                
+                return_pct = portfolio['total_return_pct']
+                return_color = "green" if return_pct >= 0 else "red"
+                
+                final_table.add_row("Initial Balance", f"${portfolio['initial_balance']:,.2f}")
+                final_table.add_row("Current Balance", f"${portfolio['balance']:,.2f}")
+                final_table.add_row("Positions Value", f"${portfolio['positions_value']:,.2f}")
+                final_table.add_row("Total Value", f"${portfolio['total_value']:,.2f}")
+                final_table.add_row("Total Return", f"[{return_color}]${portfolio['total_return']:,.2f} ({return_pct:+.2f}%)[/{return_color}]")
+                final_table.add_row("Total Trades", str(portfolio['total_trades']))
+                
+                self.console.print(final_table)
                 
             except Exception as e:
-                logger.error(f"Error generating final summary: {e}")
+                self.console.print(f"[bold red]❌ Error generating final summary: {e}[/bold red]")
             
             sys.exit(0)
 
