@@ -55,7 +55,16 @@ class DataFetcher:
         
         self.exchange = exchange_class(exchange_params)
         
-        logger.info(f"Initialized {exchange_name} {'testnet' if use_testnet else 'live'}")
+        # Enhanced logging with clear indicators
+        mode_indicator = "🧪 TESTNET" if use_testnet else "🌐 LIVE"
+        api_status = "with API keys" if (exchange_params.get("apiKey") and exchange_params.get("secret")) else "without API keys"
+        
+        logger.info(f"Exchange initialized: {exchange_name.upper()} {mode_indicator} {api_status}")
+        
+        if use_testnet:
+            logger.info("📝 Testnet mode: Using simulated trading environment")
+        else:
+            logger.warning("⚠️  Live mode: Real market data and potential real trading")
     
     def get_ticker(self) -> Dict:
         """
@@ -69,10 +78,11 @@ class DataFetcher:
         """
         try:
             ticker = self.exchange.fetch_ticker(self.symbol)
-            logger.debug(f"Fetched ticker for {self.symbol}: {ticker['last']}")
+            mode_indicator = "🧪" if config.USE_TESTNET else "🌐"
+            logger.debug(f"{mode_indicator} Fetched ticker for {self.symbol}: ${ticker['last']:,.2f}")
             return ticker
         except Exception as e:
-            logger.error(f"Error fetching ticker: {e}")
+            logger.error(f"❌ Error fetching ticker: {e}")
             raise
     
     def get_price(self) -> float:

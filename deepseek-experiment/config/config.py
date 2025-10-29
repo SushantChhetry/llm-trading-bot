@@ -21,21 +21,39 @@ LOG_DIR.mkdir(exist_ok=True)
 EXCHANGE = os.getenv("EXCHANGE", "bybit")  # Options: "bybit", "binance"
 USE_TESTNET = os.getenv("USE_TESTNET", "true").lower() == "true"
 
-# API keys (set via environment variables for security)
+# Exchange API keys (set via environment variables for security)
 EXCHANGE_API_KEY = os.getenv("EXCHANGE_API_KEY", "")
 EXCHANGE_API_SECRET = os.getenv("EXCHANGE_API_SECRET", "")
+
+# Testnet API keys (separate from live trading keys)
+TESTNET_API_KEY = os.getenv("TESTNET_API_KEY", "")
+TESTNET_API_SECRET = os.getenv("TESTNET_API_SECRET", "")
+
+# Use testnet keys if available and in testnet mode
+if USE_TESTNET and TESTNET_API_KEY:
+    EXCHANGE_API_KEY = TESTNET_API_KEY
+    EXCHANGE_API_SECRET = TESTNET_API_SECRET
 
 # Trading configuration
 SYMBOL = os.getenv("SYMBOL", "BTC/USDT")  # Trading pair
 INITIAL_BALANCE = float(os.getenv("INITIAL_BALANCE", "10000.0"))  # Starting paper balance
 
-# DeepSeek API configuration
-DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY", "")
-DEEPSEEK_API_URL = os.getenv(
-    "DEEPSEEK_API_URL",
-    "https://api.deepseek.com/v1/chat/completions"
-)
-DEEPSEEK_MODEL = os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
+# LLM Provider configuration
+LLM_PROVIDER = os.getenv("LLM_PROVIDER", "mock")  # Options: "mock", "deepseek", "openai", "anthropic"
+LLM_API_KEY = os.getenv("LLM_API_KEY", "")
+LLM_API_URL = os.getenv("LLM_API_URL", "")
+LLM_MODEL = os.getenv("LLM_MODEL", "")
+
+# Provider-specific defaults
+if LLM_PROVIDER == "deepseek":
+    LLM_API_URL = LLM_API_URL or "https://api.deepseek.com/v1/chat/completions"
+    LLM_MODEL = LLM_MODEL or "deepseek-chat"
+elif LLM_PROVIDER == "openai":
+    LLM_API_URL = LLM_API_URL or "https://api.openai.com/v1/chat/completions"
+    LLM_MODEL = LLM_MODEL or "gpt-3.5-turbo"
+elif LLM_PROVIDER == "anthropic":
+    LLM_API_URL = LLM_API_URL or "https://api.anthropic.com/v1/messages"
+    LLM_MODEL = LLM_MODEL or "claude-3-sonnet-20240229"
 
 # Bot workflow configuration
 RUN_INTERVAL_SECONDS = int(os.getenv("RUN_INTERVAL_SECONDS", "300"))  # 5 minutes

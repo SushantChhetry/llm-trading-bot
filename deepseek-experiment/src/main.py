@@ -8,6 +8,7 @@ handles logging, and coordinates data fetching, LLM decisions, and trade executi
 import logging
 import time
 import sys
+import argparse
 from pathlib import Path
 from datetime import datetime
 from typing import Dict
@@ -42,24 +43,41 @@ class TradingBot:
     Runs on a schedule defined by config.RUN_INTERVAL_SECONDS.
     """
     
-    def __init__(self):
-        """Initialize all bot components."""
-        logger.info("=" * 60)
-        logger.info("Initializing DeepSeek Trading Bot")
-        logger.info("=" * 60)
+    def __init__(self, testnet_mode: bool = None, live_mode: bool = None):
+        """
+        Initialize all bot components.
         
-        # Check if we're in mock mode (no API key)
-        use_mock_llm = not config.DEEPSEEK_API_KEY
+        Args:
+            testnet_mode: Override testnet setting from config
+            live_mode: Override live trading setting from config
+        """
+        # Override config settings if provided
+        if testnet_mode is not None:
+            config.USE_TESTNET = testnet_mode
+        if live_mode is not None:
+            config.TRADING_MODE = "live" if live_mode else "paper"
+        
+        logger.info("=" * 60)
+        logger.info("INITIALIZING DEEPSEEK TRADING BOT")
+        logger.info("=" * 60)
         
         self.data_fetcher = DataFetcher()
-        self.llm_client = LLMClient(mock_mode=use_mock_llm)
+        self.llm_client = LLMClient()
         self.trading_engine = TradingEngine()
         
-        logger.info(f"Trading mode: {config.TRADING_MODE}")
-        logger.info(f"Exchange: {config.EXCHANGE} ({'testnet' if config.USE_TESTNET else 'live'})")
+        # Enhanced logging with clear mode indicators
+        mode_indicator = "🔴 LIVE" if config.TRADING_MODE == "live" else "🟡 PAPER"
+        testnet_indicator = "🧪 TESTNET" if config.USE_TESTNET else "🌐 LIVE DATA"
+        llm_indicator = f"🤖 {config.LLM_PROVIDER.upper()}" + (" (MOCK)" if self.llm_client.mock_mode else " (LIVE)")
+        
+        logger.info(f"Trading Mode: {mode_indicator}")
+        logger.info(f"Data Source: {testnet_indicator}")
+        logger.info(f"LLM Provider: {llm_indicator}")
+        logger.info(f"Exchange: {config.EXCHANGE.upper()}")
         logger.info(f"Symbol: {config.SYMBOL}")
-        logger.info(f"Run interval: {config.RUN_INTERVAL_SECONDS} seconds")
-        logger.info(f"LLM mode: {'MOCK' if use_mock_llm else 'LIVE'}")
+        logger.info(f"Run Interval: {config.RUN_INTERVAL_SECONDS} seconds")
+        logger.info(f"Initial Balance: ${config.INITIAL_BALANCE:,.2f}")
+        logger.info("=" * 60)
     
     def run_cycle(self):
         """
@@ -207,8 +225,99 @@ class TradingBot:
             sys.exit(0)
 
 
+def parse_arguments():
+    """Parse command line arguments."""
+    parser = argparse.ArgumentParser(
+        description="DeepSeek Trading Bot - AI-powered cryptocurrency trading",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  python -m src.main                    # Run with default settings (testnet + mock)
+  python -m src.main --live             # Enable live trading mode
+  python -m src.main --no-testnet       # Use live market data
+  python -m src.main --provider deepseek --api-key YOUR_KEY  # Use DeepSeek API
+  python -m src.main --provider openai --api-key YOUR_KEY    # Use OpenAI API
+        """
+    )
+    
+    # Trading mode arguments
+    parser.add_argument(
+        "--live", 
+        action="store_true", 
+        help="Enable live trading mode (default: paper trading)"
+    )
+    parser.add_argument(
+        "--no-testnet", 
+        action="store_true", 
+        help="Use live market data instead of testnet (default: testnet)"
+    )
+    
+    # LLM provider arguments
+    parser.add_argument(
+        "--provider", 
+        choices=["mock", "deepseek", "openai", "anthropic"],
+        help="LLM provider to use (default: from config)"
+    )
+    parser.add_argument(
+        "--api-key", 
+        help="API key for LLM provider"
+    )
+    parser.add_argument(
+        "--model", 
+        help="Model name to use (default: provider default)"
+    )
+    
+    # Exchange arguments
+    parser.add_argument(
+        "--exchange", 
+        choices=["bybit", "binance"],
+        help="Exchange to use (default: from config)"
+    )
+    parser.add_argument(
+        "--symbol", 
+        help="Trading pair symbol (default: from config)"
+    )
+    
+    # Other arguments
+    parser.add_argument(
+        "--interval", 
+        type=int,
+        help="Run interval in seconds (default: from config)"
+    )
+    parser.add_argument(
+        "--balance", 
+        type=float,
+        help="Initial paper trading balance (default: from config)"
+    )
+    
+    return parser.parse_args()
+
+
 def main():
     """Main entry point."""
+    args = parse_arguments()
+    
+    # Override config with command line arguments
+    if args.live:
+        config.TRADING_MODE = "live"
+    if args.no_testnet:
+        config.USE_TESTNET = False
+    if args.provider:
+        config.LLM_PROVIDER = args.provider
+    if args.api_key:
+        config.LLM_API_KEY = args.api_key
+    if args.model:
+        config.LLM_MODEL = args.model
+    if args.exchange:
+        config.EXCHANGE = args.exchange
+    if args.symbol:
+        config.SYMBOL = args.symbol
+    if args.interval:
+        config.RUN_INTERVAL_SECONDS = args.interval
+    if args.balance:
+        config.INITIAL_BALANCE = args.balance
+    
+    # Initialize and run bot
     bot = TradingBot()
     bot.run()
 

@@ -33,28 +33,38 @@ class LLMClient:
     
     def __init__(
         self,
+        provider: str = None,
         api_key: str = None,
         api_url: str = None,
         model: str = None,
-        mock_mode: bool = False
+        mock_mode: bool = None
     ):
         """
         Initialize the LLM client.
         
         Args:
-            api_key: DeepSeek API key. Defaults to config.
+            provider: LLM provider ("mock", "deepseek", "openai", "anthropic"). Defaults to config.
+            api_key: API key. Defaults to config.
             api_url: API endpoint URL. Defaults to config.
             model: Model name. Defaults to config.
-            mock_mode: If True, returns mock responses without API calls
+            mock_mode: If True, returns mock responses without API calls. Auto-detected if None.
         """
-        self.api_key = api_key or config.DEEPSEEK_API_KEY
-        self.api_url = api_url or config.DEEPSEEK_API_URL
-        self.model = model or config.DEEPSEEK_MODEL
-        self.mock_mode = mock_mode
+        self.provider = provider or config.LLM_PROVIDER
+        self.api_key = api_key or config.LLM_API_KEY
+        self.api_url = api_url or config.LLM_API_URL
+        self.model = model or config.LLM_MODEL
+        
+        # Auto-detect mock mode if not specified
+        if mock_mode is None:
+            self.mock_mode = (self.provider == "mock" or not self.api_key)
+        else:
+            self.mock_mode = mock_mode
         
         if not self.mock_mode and not self.api_key:
-            logger.warning("No API key provided and mock_mode=False. Will use mock responses.")
+            logger.warning(f"No API key provided for {self.provider}. Will use mock responses.")
             self.mock_mode = True
+        
+        logger.info(f"LLM Client initialized: {self.provider.upper()} {'(MOCK)' if self.mock_mode else '(LIVE)'}")
     
     def _format_trading_prompt(self, market_data: Dict, portfolio_state: Dict) -> str:
         """
@@ -194,11 +204,10 @@ Provide your trading decision in the exact JSON format above. Be concise but cle
     
     def _make_api_request(self, prompt: str) -> Dict:
         """
-        Make actual API request to DeepSeek.
+        Make actual API request to the configured LLM provider.
         
-        TODO: Implement DeepSeek API call
-        This is a placeholder for the actual DeepSeek API integration.
-        Replace with real API call when credentials are available.
+        Supports DeepSeek, OpenAI, and Anthropic APIs with proper error handling
+        and automatic fallback to mock mode on API failures.
         
         Args:
             prompt: The prompt text to send
@@ -209,8 +218,17 @@ Provide your trading decision in the exact JSON format above. Be concise but cle
         Raises:
             Exception: If API request fails
         """
-        # TODO: Implement DeepSeek API call
-        # Replace this placeholder with actual API call
+        if self.provider == "deepseek":
+            return self._make_deepseek_request(prompt)
+        elif self.provider == "openai":
+            return self._make_openai_request(prompt)
+        elif self.provider == "anthropic":
+            return self._make_anthropic_request(prompt)
+        else:
+            raise ValueError(f"Unsupported LLM provider: {self.provider}")
+    
+    def _make_deepseek_request(self, prompt: str) -> Dict:
+        """Make API request to DeepSeek."""
         headers = {
             "Content-Type": "application/json",
             "Authorization": f"Bearer {self.api_key}"
@@ -233,17 +251,89 @@ Provide your trading decision in the exact JSON format above. Be concise but cle
         }
         
         try:
-            # TODO: Replace with actual DeepSeek API call
-            # response = requests.post(self.api_url, headers=headers, json=payload, timeout=30)
-            # response.raise_for_status()
-            # return response.json()
-            
-            # Placeholder - this should never be reached in mock mode
-            raise NotImplementedError("DeepSeek API not implemented yet. Use mock_mode=True for testing.")
-            
+            response = requests.post(self.api_url, headers=headers, json=payload, timeout=30)
+            response.raise_for_status()
+            return response.json()
         except Exception as e:
-            logger.error(f"API request failed: {e}")
+            logger.error(f"DeepSeek API request failed: {e}")
             raise
+    
+    def _make_openai_request(self, prompt: str) -> Dict:
+        """Make API request to OpenAI."""
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {self.api_key}"
+        }
+        
+        payload = {
+            "model": self.model,
+            "messages": [
+                {
+                    "role": "system",
+                    "content": "You are a cryptocurrency trading assistant. Always respond with valid JSON in the exact format requested."
+                },
+                {
+                    "role": "user",
+                    "content": prompt
+                }
+            ],
+            "temperature": 0.7,
+            "max_tokens": 500
+        }
+        
+        try:
+            response = requests.post(self.api_url, headers=headers, json=payload, timeout=30)
+            response.raise_for_status()
+            return response.json()
+        except Exception as e:
+            logger.error(f"OpenAI API request failed: {e}")
+            raise
+    
+    def _make_anthropic_request(self, prompt: str) -> Dict:
+        """Make API request to Anthropic Claude."""
+        headers = {
+            "Content-Type": "application/json",
+            "x-api-key": self.api_key,
+            "anthropic-version": "2023-06-01"
+        }
+        
+        payload = {
+            "model": self.model,
+            "max_tokens": 500,
+            "temperature": 0.7,
+            "system": "You are a cryptocurrency trading assistant. Always respond with valid JSON in the exact format requested.",
+            "messages": [
+                {
+                    "role": "user",
+                    "content": prompt
+                }
+            ]
+        }
+        
+        try:
+            response = requests.post(self.api_url, headers=headers, json=payload, timeout=30)
+            response.raise_for_status()
+            return response.json()
+        except Exception as e:
+            logger.error(f"Anthropic API request failed: {e}")
+            raise
+    
+    def _extract_response_content(self, response: Dict) -> str:
+        """
+        Extract content from API response based on provider format.
+        
+        Args:
+            response: Raw API response dictionary
+            
+        Returns:
+            Extracted text content
+        """
+        if self.provider in ["deepseek", "openai"]:
+            return response["choices"][0]["message"]["content"]
+        elif self.provider == "anthropic":
+            return response["content"][0]["text"]
+        else:
+            raise ValueError(f"Unknown provider for response parsing: {self.provider}")
     
     def _get_mock_response(self, market_data: Dict, portfolio_state: Dict) -> Dict:
         """
@@ -322,14 +412,19 @@ Provide your trading decision in the exact JSON format above. Be concise but cle
         
         try:
             if self.mock_mode:
-                logger.info("Using mock LLM response")
+                logger.info(f"Using mock LLM response ({self.provider})")
                 response = self._get_mock_response(market_data, portfolio_state)
             else:
-                logger.info("Calling DeepSeek API")
-                response = self._make_api_request(prompt)
+                logger.info(f"Calling {self.provider.upper()} API")
+                try:
+                    response = self._make_api_request(prompt)
+                except Exception as api_error:
+                    logger.error(f"API call failed: {api_error}")
+                    logger.warning("Falling back to mock mode for this cycle")
+                    response = self._get_mock_response(market_data, portfolio_state)
             
-            # Extract content from response
-            content = response["choices"][0]["message"]["content"]
+            # Extract content from response based on provider
+            content = self._extract_response_content(response)
             logger.debug(f"Raw LLM response: {content}")
             
             # Validate and parse response

@@ -47,39 +47,57 @@ pip install -r requirements.txt
 
 ### 2. Configure Settings
 
-Edit `config/config.py` or set environment variables:
-
+**Option A: Use .env file (Recommended)**
 ```bash
-# Exchange API (optional for testnet)
-export EXCHANGE_API_KEY="your_key"
-export EXCHANGE_API_SECRET="your_secret"
+# Copy the template
+cp .env.template .env
 
-# DeepSeek API (required for live mode)
-export DEEPSEEK_API_KEY="your_deepseek_key"
-
-# Trading settings
-export SYMBOL="BTC/USDT"
-export INITIAL_BALANCE="10000.0"
-export RUN_INTERVAL_SECONDS="300"  # 5 minutes
+# Edit with your settings
+nano .env
 ```
 
-Or modify values directly in `config/config.py`.
+**Option B: Set environment variables**
+```bash
+# Basic testnet setup (no API keys needed)
+export USE_TESTNET=true
+export TRADING_MODE=paper
+export LLM_PROVIDER=mock
+
+# For real LLM API
+export LLM_PROVIDER=deepseek
+export LLM_API_KEY="your_api_key"
+
+# For testnet API keys
+export TESTNET_API_KEY="your_testnet_key"
+export TESTNET_API_SECRET="your_testnet_secret"
+```
 
 ### 3. Run the Bot
 
 ```bash
-# From project root
+# Basic run (testnet + mock LLM)
 python -m src.main
+
+# With command line arguments
+python -m src.main --provider deepseek --api-key YOUR_KEY
+python -m src.main --no-testnet --live
+python -m src.main --help  # See all options
 ```
 
-The bot will:
-- Run on a 5-minute schedule (configurable)
-- Fetch market data from Bybit/Binance testnet
-- Get trading decisions from DeepSeek (or mock mode)
-- Execute paper trades and track portfolio
-- Log all activity to `data/logs/bot.log`
+### 4. Monitor Performance
 
-### 4. Stop the Bot
+```bash
+# View real-time logs
+tail -f data/logs/bot.log
+
+# Analyze trading performance
+python scripts/visualize_pnl.py
+
+# Save performance charts
+python scripts/visualize_pnl.py --save-charts
+```
+
+### 5. Stop the Bot
 
 Press `Ctrl+C` to gracefully stop. The bot will print a final portfolio summary.
 
@@ -153,18 +171,55 @@ The bot executes trades based on:
 
 ### Upgrading to Real LLM APIs
 
-To use DeepSeek or other LLM providers:
+The bot now supports multiple LLM providers with automatic fallback to mock mode on API failures.
 
-1. **Get API credentials** from your chosen provider
-2. **Set environment variable**: `export DEEPSEEK_API_KEY="your_key"`
-3. **Update API call** in `src/llm_client.py`:
-   ```python
-   # TODO: Replace with actual DeepSeek API call
-   response = requests.post(self.api_url, headers=headers, json=payload, timeout=30)
-   ```
+#### Supported Providers
 
-4. **For OpenAI**: Change API URL and headers in `_make_api_request()`
-5. **For Anthropic**: Update payload format for Claude API
+| Provider | Status | API Key Required | Cost |
+|----------|--------|------------------|------|
+| **Mock** | ✅ Built-in | No | Free |
+| **DeepSeek** | ✅ Ready | Yes | Low |
+| **OpenAI** | ✅ Ready | Yes | Medium |
+| **Anthropic** | ✅ Ready | Yes | Medium |
+
+#### Setup Instructions
+
+**1. DeepSeek API (Recommended)**
+```bash
+# Get API key from https://platform.deepseek.com/
+export LLM_PROVIDER=deepseek
+export LLM_API_KEY="sk-your-deepseek-key"
+
+# Run bot
+python -m src.main
+```
+
+**2. OpenAI API**
+```bash
+# Get API key from https://platform.openai.com/
+export LLM_PROVIDER=openai
+export LLM_API_KEY="sk-your-openai-key"
+
+# Run bot
+python -m src.main
+```
+
+**3. Anthropic Claude API**
+```bash
+# Get API key from https://console.anthropic.com/
+export LLM_PROVIDER=anthropic
+export LLM_API_KEY="sk-ant-your-anthropic-key"
+
+# Run bot
+python -m src.main
+```
+
+#### API Fallback Behavior
+
+- ✅ **Automatic fallback**: If API call fails, bot automatically switches to mock mode for that cycle
+- ✅ **Transparent logging**: All API failures are logged with clear error messages
+- ✅ **No interruption**: Bot continues running even if API is temporarily unavailable
+- ✅ **Easy debugging**: Check logs to see which mode is being used
 
 ## 🔧 Configuration
 
@@ -174,18 +229,73 @@ The bot defaults to **paper trading** mode. All trades are simulated and recorde
 
 ### Exchange Setup
 
+#### Testnet Mode (Recommended for Development)
+
 **Bybit Testnet** (default):
-- No API keys needed for testnet
-- Automatically uses testnet when `USE_TESTNET=true`
+```bash
+# No API keys needed for basic testnet
+export USE_TESTNET=true
+export EXCHANGE=bybit
+
+# Optional: Add testnet API keys for more features
+export TESTNET_API_KEY="your_bybit_testnet_key"
+export TESTNET_API_SECRET="your_bybit_testnet_secret"
+```
 
 **Binance Testnet**:
-- Set `EXCHANGE="binance"` in config
-- Testnet is automatically enabled
+```bash
+export USE_TESTNET=true
+export EXCHANGE=binance
+export TESTNET_API_KEY="your_binance_testnet_key"
+export TESTNET_API_SECRET="your_binance_testnet_secret"
+```
 
-**Switching to Live Trading**:
-1. Set `USE_TESTNET=false`
-2. Add real API keys via environment variables
-3. **Warning**: Only do this after thorough testing!
+#### Getting Testnet API Keys
+
+**Bybit Testnet:**
+1. Go to [https://testnet.bybit.com/](https://testnet.bybit.com/)
+2. Create account and verify email
+3. Go to API Management → Create New Key
+4. Set permissions: **Read** (for market data)
+5. Copy API Key and Secret
+
+**Binance Testnet:**
+1. Go to [https://testnet.binance.vision/](https://testnet.binance.vision/)
+2. Create account and verify email
+3. Go to API Management → Create API
+4. Set permissions: **Enable Reading** (for market data)
+5. Copy API Key and Secret
+
+#### Live Trading Setup (Advanced)
+
+⚠️ **WARNING**: Only enable live trading after thorough testnet testing!
+
+```bash
+# Enable live trading
+export TRADING_MODE=live
+export USE_TESTNET=false
+
+# Add live API keys
+export EXCHANGE_API_KEY="your_live_api_key"
+export EXCHANGE_API_SECRET="your_live_api_secret"
+
+# Set appropriate permissions for live trading
+# Bybit: Enable "Trade" permissions
+# Binance: Enable "Spot & Margin Trading"
+```
+
+#### Command Line Overrides
+
+```bash
+# Force testnet mode
+python -m src.main --no-testnet
+
+# Force live trading
+python -m src.main --live
+
+# Use specific exchange
+python -m src.main --exchange binance
+```
 
 ### LLM Setup
 
@@ -321,6 +431,30 @@ tail -f data/logs/bot.log
 # Review trade history with LLM context
 cat data/trades.json | jq '.[] | {action, confidence, llm_reasoning, llm_risk_assessment}'
 ```
+
+### Performance Analysis
+
+Use the built-in P&L visualization script:
+
+```bash
+# Show performance summary and charts
+python scripts/visualize_pnl.py
+
+# Save charts to files
+python scripts/visualize_pnl.py --save-charts
+
+# Show only summary statistics
+python scripts/visualize_pnl.py --summary-only
+
+# Analyze specific data directory
+python scripts/visualize_pnl.py --data-dir /path/to/data
+```
+
+**Visualization Features:**
+- 📊 **P&L Timeline**: Cumulative profit over time
+- 📈 **Trade Analysis**: Individual trade profits/losses
+- 🤖 **LLM Insights**: Confidence distribution, risk assessment patterns
+- 📋 **Performance Summary**: Win rate, average profit, total trades
 
 ## 💡 Tips for Solo Workflow
 
