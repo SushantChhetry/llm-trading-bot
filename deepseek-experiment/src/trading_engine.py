@@ -93,37 +93,56 @@ class TradingEngine:
         position_value = 0.0
         for symbol, position in self.positions.items():
             if position['side'] == 'long':
+                # Long position: profit/loss from price appreciation
                 position_value += position['quantity'] * current_price
+            elif position['side'] == 'short':
+                # Short position: profit/loss from price decline
+                # Short profit = (entry_price - current_price) * quantity
+                entry_value = position['quantity'] * position['avg_price']
+                current_value = position['quantity'] * current_price
+                short_pnl = entry_value - current_value  # Profit when price goes down
+                position_value += entry_value + short_pnl  # Original value + PnL
             else:
-                # For short positions, value is stored differently
-                position_value += position['value']
+                # Fallback for other position types
+                position_value += position.get('value', 0)
         
         return self.balance + position_value
     
-    def execute_buy(self, symbol: str, price: float, amount_usdt: float, confidence: float, llm_decision: Dict = None) -> Optional[Dict]:
+    def execute_buy(self, symbol: str, price: float, amount_usdt: float, confidence: float, llm_decision: Dict = None, leverage: float = 1.0) -> Optional[Dict]:
         """
-        Execute a buy order (paper trading).
+        Execute a buy order (paper trading) with leverage support.
         
         Args:
             symbol: Trading pair symbol
             price: Execution price
-            amount_usdt: Amount in USDT to spend
+            amount_usdt: Amount in USDT to spend (notional value)
             confidence: LLM confidence score
             llm_decision: Full LLM decision dict for additional context
+            leverage: Leverage multiplier (1.0-10.0)
             
         Returns:
             Trade dictionary if successful, None otherwise
         """
-        # Check if we have enough balance
-        if amount_usdt > self.balance:
-            logger.warning(f"Insufficient balance. Available: {self.balance}, Required: {amount_usdt}")
+        # Validate leverage
+        leverage = max(1.0, min(leverage, config.MAX_LEVERAGE))  # Clamp between 1.0 and MAX_LEVERAGE
+        
+        # Calculate required margin (amount_usdt / leverage)
+        required_margin = amount_usdt / leverage
+        
+        # Check if we have enough balance for margin
+        if required_margin > self.balance:
+            logger.warning(f"Insufficient balance for margin. Available: {self.balance}, Required margin: {required_margin}")
             return None
         
-        # Apply position size limit
-        max_amount = self.balance * config.MAX_POSITION_SIZE
-        amount_usdt = min(amount_usdt, max_amount)
+        # Apply position size limit based on margin
+        max_margin = self.balance * config.MAX_POSITION_SIZE
+        required_margin = min(required_margin, max_margin)
+        amount_usdt = required_margin * leverage
         
         quantity = amount_usdt / price
+        
+        # Calculate trading fees
+        trading_fee = amount_usdt * (config.TRADING_FEE_PERCENT / 100)
         
         # Record trade with enhanced LLM context
         trade = {
@@ -131,35 +150,47 @@ class TradingEngine:
             "timestamp": datetime.now().isoformat(),
             "symbol": symbol,
             "side": "buy",
+            "direction": "long",
             "price": price,
             "quantity": quantity,
             "amount_usdt": amount_usdt,
+            "leverage": leverage,
+            "margin_used": required_margin,
+            "trading_fee": trading_fee,
             "confidence": confidence,
             "mode": config.TRADING_MODE,
-            "llm_reasoning": llm_decision.get("reasoning", "") if llm_decision else "",
+            "llm_justification": llm_decision.get("justification", "") if llm_decision else "",
             "llm_risk_assessment": llm_decision.get("risk_assessment", "medium") if llm_decision else "medium",
-            "llm_position_size": llm_decision.get("position_size", 0.1) if llm_decision else 0.1
+            "llm_position_size_usdt": llm_decision.get("position_size_usdt", 0.0) if llm_decision else 0.0,
+            "exit_plan": llm_decision.get("exit_plan", {}) if llm_decision else {}
         }
         
-        # Update balance and positions
-        self.balance -= amount_usdt
+        # Update balance and positions (deduct margin + fees)
+        self.balance -= (required_margin + trading_fee)
         if symbol in self.positions:
             # Average in if position exists
             pos = self.positions[symbol]
             total_cost = (pos['quantity'] * pos['avg_price']) + amount_usdt
             total_quantity = pos['quantity'] + quantity
+            total_margin = pos.get('margin_used', 0) + required_margin
             self.positions[symbol] = {
                 'side': 'long',
                 'quantity': total_quantity,
                 'avg_price': total_cost / total_quantity,
-                'value': total_cost
+                'value': amount_usdt,
+                'leverage': leverage,
+                'margin_used': total_margin,
+                'notional_value': total_quantity * price
             }
         else:
             self.positions[symbol] = {
                 'side': 'long',
                 'quantity': quantity,
                 'avg_price': price,
-                'value': amount_usdt
+                'value': amount_usdt,
+                'leverage': leverage,
+                'margin_used': required_margin,
+                'notional_value': quantity * price
             }
         
         self.trades.append(trade)
@@ -169,9 +200,9 @@ class TradingEngine:
         logger.info(f"BUY executed: {quantity:.6f} {symbol} @ ${price:.2f} (${amount_usdt:.2f})")
         return trade
     
-    def execute_sell(self, symbol: str, price: float, quantity: float = None, confidence: float = 0.0, llm_decision: Dict = None) -> Optional[Dict]:
+    def execute_sell(self, symbol: str, price: float, quantity: float = None, confidence: float = 0.0, llm_decision: Dict = None, leverage: float = 1.0) -> Optional[Dict]:
         """
-        Execute a sell order (paper trading).
+        Execute a sell order (paper trading) with leverage support.
         
         Args:
             symbol: Trading pair symbol
@@ -179,6 +210,7 @@ class TradingEngine:
             quantity: Quantity to sell (None to sell entire position)
             confidence: LLM confidence score
             llm_decision: Full LLM decision dict for additional context
+            leverage: Leverage multiplier (1.0-10.0)
             
         Returns:
             Trade dictionary if successful, None otherwise
@@ -197,28 +229,40 @@ class TradingEngine:
         amount_usdt = sell_quantity * price
         profit = (price - position['avg_price']) * sell_quantity
         
+        # Calculate trading fees
+        trading_fee = amount_usdt * (config.TRADING_FEE_PERCENT / 100)
+        
+        # Calculate margin to return (proportional to quantity sold)
+        margin_returned = (position.get('margin_used', 0) * sell_quantity) / position['quantity']
+        
         # Record trade with enhanced LLM context
         trade = {
             "id": len(self.trades) + 1,
             "timestamp": datetime.now().isoformat(),
             "symbol": symbol,
             "side": "sell",
+            "direction": "long",
             "price": price,
             "quantity": sell_quantity,
             "amount_usdt": amount_usdt,
+            "leverage": position.get('leverage', 1.0),
+            "margin_returned": margin_returned,
+            "trading_fee": trading_fee,
             "profit": profit,
             "profit_pct": (profit / (position['avg_price'] * sell_quantity)) * 100,
             "confidence": confidence,
             "mode": config.TRADING_MODE,
-            "llm_reasoning": llm_decision.get("reasoning", "") if llm_decision else "",
+            "llm_justification": llm_decision.get("justification", "") if llm_decision else "",
             "llm_risk_assessment": llm_decision.get("risk_assessment", "medium") if llm_decision else "medium",
-            "llm_position_size": llm_decision.get("position_size", 0.1) if llm_decision else 0.1
+            "llm_position_size_usdt": llm_decision.get("position_size_usdt", 0.0) if llm_decision else 0.0,
+            "exit_plan": llm_decision.get("exit_plan", {}) if llm_decision else {}
         }
         
-        # Update balance and positions
-        self.balance += amount_usdt
+        # Update balance and positions (add margin returned + profit - fees)
+        self.balance += (margin_returned + profit - trading_fee)
         position['quantity'] -= sell_quantity
         position['value'] -= position['avg_price'] * sell_quantity
+        position['margin_used'] -= margin_returned
         
         if position['quantity'] <= 0:
             del self.positions[symbol]
@@ -230,6 +274,98 @@ class TradingEngine:
         self._save_portfolio_state()
         
         logger.info(f"SELL executed: {sell_quantity:.6f} {symbol} @ ${price:.2f} (profit: ${profit:.2f})")
+        return trade
+    
+    def execute_short(self, symbol: str, price: float, amount_usdt: float, confidence: float, llm_decision: Dict = None, leverage: float = 1.0) -> Optional[Dict]:
+        """
+        Execute a short order (paper trading) with leverage support.
+        
+        Args:
+            symbol: Trading pair symbol
+            price: Execution price
+            amount_usdt: Amount in USDT to short (notional value)
+            confidence: LLM confidence score
+            llm_decision: Full LLM decision dict for additional context
+            leverage: Leverage multiplier (1.0-10.0)
+            
+        Returns:
+            Trade dictionary if successful, None otherwise
+        """
+        # Validate leverage
+        leverage = max(1.0, min(leverage, config.MAX_LEVERAGE))
+        
+        # Calculate required margin (amount_usdt / leverage)
+        required_margin = amount_usdt / leverage
+        
+        # Check if we have enough balance for margin
+        if required_margin > self.balance:
+            logger.warning(f"Insufficient balance for short margin. Available: {self.balance}, Required margin: {required_margin}")
+            return None
+        
+        # Apply position size limit based on margin
+        max_margin = self.balance * config.MAX_POSITION_SIZE
+        required_margin = min(required_margin, max_margin)
+        amount_usdt = required_margin * leverage
+        
+        quantity = amount_usdt / price
+        
+        # Calculate trading fees
+        trading_fee = amount_usdt * (config.TRADING_FEE_PERCENT / 100)
+        
+        # Record trade with enhanced LLM context
+        trade = {
+            "id": len(self.trades) + 1,
+            "timestamp": datetime.now().isoformat(),
+            "symbol": symbol,
+            "side": "short",
+            "direction": "short",
+            "price": price,
+            "quantity": quantity,
+            "amount_usdt": amount_usdt,
+            "leverage": leverage,
+            "margin_used": required_margin,
+            "trading_fee": trading_fee,
+            "confidence": confidence,
+            "mode": config.TRADING_MODE,
+            "llm_justification": llm_decision.get("justification", "") if llm_decision else "",
+            "llm_risk_assessment": llm_decision.get("risk_assessment", "medium") if llm_decision else "medium",
+            "llm_position_size_usdt": llm_decision.get("position_size_usdt", 0.0) if llm_decision else 0.0,
+            "exit_plan": llm_decision.get("exit_plan", {}) if llm_decision else {}
+        }
+        
+        # Update balance and positions (deduct margin + fees)
+        self.balance -= (required_margin + trading_fee)
+        if symbol in self.positions:
+            # Average in if position exists
+            pos = self.positions[symbol]
+            total_cost = (pos['quantity'] * pos['avg_price']) + amount_usdt
+            total_quantity = pos['quantity'] + quantity
+            total_margin = pos.get('margin_used', 0) + required_margin
+            self.positions[symbol] = {
+                'side': 'short',
+                'quantity': total_quantity,
+                'avg_price': total_cost / total_quantity,
+                'value': amount_usdt,
+                'leverage': leverage,
+                'margin_used': total_margin,
+                'notional_value': total_quantity * price
+            }
+        else:
+            self.positions[symbol] = {
+                'side': 'short',
+                'quantity': quantity,
+                'avg_price': price,
+                'value': amount_usdt,
+                'leverage': leverage,
+                'margin_used': required_margin,
+                'notional_value': quantity * price
+            }
+        
+        self.trades.append(trade)
+        self._save_trades()
+        self._save_portfolio_state()
+        
+        logger.info(f"SHORT executed: {quantity:.6f} {symbol} @ ${price:.2f} (${amount_usdt:.2f})")
         return trade
     
     def get_portfolio_summary(self, current_price: float) -> Dict:
@@ -263,7 +399,7 @@ class TradingEngine:
         }
     
     def _calculate_advanced_metrics(self) -> Dict[str, Any]:
-        """Calculate advanced trading metrics."""
+        """Calculate advanced trading metrics including Sharpe ratio for Alpha Arena style feedback."""
         if not self.trades:
             return {
                 "win_rate": 0.0,
@@ -274,7 +410,9 @@ class TradingEngine:
                 "profit_factor": 0.0,
                 "avg_trade_duration_hours": 0.0,
                 "max_consecutive_wins": 0,
-                "max_consecutive_losses": 0
+                "max_consecutive_losses": 0,
+                "excess_return": 0.0,
+                "risk_adjusted_return": 0.0
             }
         
         # Basic trade analysis
@@ -304,15 +442,24 @@ class TradingEngine:
         # Max drawdown
         max_drawdown = self._calculate_max_drawdown(profits)
         
-        # Sharpe ratio (assuming risk-free rate = 0)
+        # Enhanced Sharpe ratio calculation (Alpha Arena style)
         if len(profits) > 1:
             mean_return = sum(profits) / len(profits)
             variance = sum((p - mean_return) ** 2 for p in profits) / (len(profits) - 1)
             volatility = variance ** 0.5
-            sharpe_ratio = mean_return / volatility if volatility > 0 else 0
+            
+            # Risk-free rate assumed to be 0 for crypto trading
+            risk_free_rate = 0.0
+            excess_return = mean_return - risk_free_rate
+            sharpe_ratio = excess_return / volatility if volatility > 0 else 0
+            
+            # Risk-adjusted return (excess return per unit of risk)
+            risk_adjusted_return = excess_return / max(volatility, 0.001)  # Avoid division by zero
         else:
             volatility = 0.0
             sharpe_ratio = 0.0
+            excess_return = 0.0
+            risk_adjusted_return = 0.0
         
         # Profit factor
         gross_profit = sum(p for p in profits if p > 0)
@@ -353,7 +500,9 @@ class TradingEngine:
             "profit_factor": profit_factor,
             "avg_trade_duration_hours": avg_trade_duration,
             "max_consecutive_wins": max_consecutive_wins,
-            "max_consecutive_losses": max_consecutive_losses
+            "max_consecutive_losses": max_consecutive_losses,
+            "excess_return": excess_return,
+            "risk_adjusted_return": risk_adjusted_return
         }
     
     def _calculate_max_drawdown(self, profits: List[float]) -> float:

@@ -1,0 +1,54 @@
+version: '3.8'
+
+services:
+  # API Server (Backend) - Development mode
+  api:
+    build:
+      context: ./web-dashboard
+      dockerfile: Dockerfile.api
+    container_name: trading-bot-api-dev
+    ports:
+      - "8001:8001"
+    environment:
+      - TRADING_MODE=${TRADING_MODE:-paper}
+      - USE_TESTNET=${USE_TESTNET:-true}
+      - LLM_PROVIDER=${LLM_PROVIDER:-mock}
+      - LLM_API_KEY=${LLM_API_KEY:-}
+      - LLM_MODEL=${LLM_MODEL:-}
+      - EXCHANGE=${EXCHANGE:-bybit}
+      - SYMBOL=${SYMBOL:-BTC/USDT}
+      - INITIAL_BALANCE=${INITIAL_BALANCE:-10000.0}
+      - MAX_POSITION_SIZE=${MAX_POSITION_SIZE:-0.1}
+      - STOP_LOSS_PERCENT=${STOP_LOSS_PERCENT:-2.0}
+      - TAKE_PROFIT_PERCENT=${TAKE_PROFIT_PERCENT:-3.0}
+      - RUN_INTERVAL_SECONDS=${RUN_INTERVAL_SECONDS:-300}
+      - LOG_LEVEL=${LOG_LEVEL:-DEBUG}
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+      - ./web-dashboard/api_server.py:/app/api_server.py:ro
+    networks:
+      - trading-network
+    restart: unless-stopped
+
+  # React Frontend - Development mode with hot reload
+  frontend:
+    build:
+      context: ./web-dashboard
+      dockerfile: Dockerfile.frontend.dev
+    container_name: trading-bot-frontend-dev
+    ports:
+      - "3000:3000"
+    environment:
+      - VITE_API_URL=http://localhost:8001
+    volumes:
+      - ./web-dashboard/src:/app/src
+      - ./web-dashboard/public:/app/public
+      - ./web-dashboard/index.html:/app/index.html
+    networks:
+      - trading-network
+    restart: unless-stopped
+
+networks:
+  trading-network:
+    driver: bridge

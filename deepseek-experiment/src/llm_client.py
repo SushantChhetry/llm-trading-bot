@@ -108,38 +108,72 @@ class LLMClient:
         except (ValueError, TypeError):
             return_pct = 0.0
 
-        prompt = f"""
-You are an expert cryptocurrency trading assistant. Analyze the following market data and portfolio state to make a trading decision.
+        # Extract Sharpe ratio and risk metrics for Alpha Arena style feedback
+        sharpe_ratio = portfolio_state.get('sharpe_ratio', 0.0) if portfolio_state else 0.0
+        volatility = portfolio_state.get('volatility', 0.0) if portfolio_state else 0.0
+        max_drawdown = portfolio_state.get('max_drawdown', 0.0) if portfolio_state else 0.0
+        risk_adjusted_return = portfolio_state.get('risk_adjusted_return', 0.0) if portfolio_state else 0.0
 
-MARKET DATA:
+        prompt = f"""
+You are a quantitative cryptocurrency trader in the Alpha Arena competition. Your goal is to maximize PnL through systematic analysis of numerical data only. You have $10,000 to trade perpetual futures with leverage.
+
+MARKET DATA (Quantitative Only):
 - Symbol: {market_data.get('symbol', 'N/A') if market_data else 'N/A'}
 - Current Price: ${price:.2f}
 - 24h Volume: {volume:,.0f}
 - 24h Change: {change_24h:.2f}%
 
-PORTFOLIO STATE:
-- Available Balance: ${balance:.2f}
+ACCOUNT STATE:
+- Available Cash: ${balance:.2f}
 - Total Portfolio Value: ${total_value:.2f}
 - Open Positions: {portfolio_state.get('open_positions', 0) if portfolio_state else 0}
 - Total Return: {return_pct:.2f}%
 - Total Trades: {portfolio_state.get('total_trades', 0) if portfolio_state else 0}
 
-TRADING RULES:
-- Only trade if confidence > 0.6
-- Consider risk management and position sizing
-- Look for clear market signals and trends
-- Avoid overtrading and emotional decisions
+RISK PERFORMANCE METRICS (Alpha Arena Feedback):
+- Sharpe Ratio: {sharpe_ratio:.3f} (excess return per unit of risk)
+- Volatility: {volatility:.3f}
+- Max Drawdown: ${max_drawdown:.2f}
+- Risk-Adjusted Return: {risk_adjusted_return:.3f}
+
+TRADING PARAMETERS:
+- Maximum Leverage: 10x (use responsibly)
+- Trading Fees: 0.05% per trade (taker)
+- Position Sizing: Calculate based on available cash, leverage, and risk tolerance
+- Minimum Confidence: 0.6 for trade execution
+
+ALPHA ARENA OBJECTIVES:
+- PRIMARY GOAL: Maximize PnL (profit and loss)
+- Use Sharpe ratio feedback to normalize for risky behavior
+- Focus purely on quantitative data analysis
+- No access to news or market narratives - infer from time-series data only
+- Systematic trading based on numerical patterns
+
+RISK MANAGEMENT:
+- Never risk more than 2% of portfolio per trade
+- Use stop losses and take profits
+- Consider Sharpe ratio when making decisions (higher is better)
+- Maintain discipline and avoid emotional decisions
+- Optimize for risk-adjusted returns, not just raw profits
 
 REQUIRED RESPONSE FORMAT (JSON only):
 {{
     "action": "buy|sell|hold",
+    "direction": "long|short|none",
+    "quantity": 0.0,
+    "leverage": 1.0-10.0,
     "confidence": 0.0-1.0,
-    "reasoning": "Brief explanation of your decision",
-    "position_size": 0.0-1.0,
+    "justification": "Brief explanation of your decision",
+    "exit_plan": {{
+        "profit_target": 0.0,
+        "stop_loss": 0.0,
+        "invalidation_conditions": ["condition1", "condition2"]
+    }},
+    "position_size_usdt": 0.0,
     "risk_assessment": "low|medium|high"
 }}
 
-Provide your trading decision in the exact JSON format above. Be concise but clear in your reasoning.
+Provide your trading decision in the exact JSON format above. Include specific exit conditions and risk parameters.
 """
         return prompt.strip()
     
@@ -170,7 +204,7 @@ Provide your trading decision in the exact JSON format above. Be concise but cle
                 return None
         
         # Validate required fields
-        required_fields = ["action", "confidence", "reasoning"]
+        required_fields = ["action", "confidence", "justification"]
         for field in required_fields:
             if field not in response:
                 logger.error(f"Missing required field '{field}' in response")
@@ -180,6 +214,13 @@ Provide your trading decision in the exact JSON format above. Be concise but cle
         valid_actions = ["buy", "sell", "hold"]
         if response["action"].lower() not in valid_actions:
             logger.error(f"Invalid action '{response['action']}'. Must be one of: {valid_actions}")
+            return None
+        
+        # Validate direction
+        valid_directions = ["long", "short", "none"]
+        direction = response.get("direction", "none")
+        if direction.lower() not in valid_directions:
+            logger.error(f"Invalid direction '{direction}'. Must be one of: {valid_directions}")
             return None
         
         # Validate confidence
@@ -193,9 +234,32 @@ Provide your trading decision in the exact JSON format above. Be concise but cle
             logger.error(f"Invalid confidence value: {response['confidence']}")
             return None
         
+        # Validate leverage
+        try:
+            leverage = float(response.get("leverage", 1.0))
+            if not 1.0 <= leverage <= 10.0:
+                logger.error(f"Leverage {leverage} must be between 1.0 and 10.0")
+                return None
+            response["leverage"] = leverage
+        except (ValueError, TypeError):
+            logger.error(f"Invalid leverage value: {response.get('leverage')}")
+            return None
+        
+        # Validate exit plan structure
+        exit_plan = response.get("exit_plan", {})
+        if not isinstance(exit_plan, dict):
+            exit_plan = {}
+        
         # Set defaults for optional fields
-        response["position_size"] = response.get("position_size", 0.1)
+        response["direction"] = direction.lower()
+        response["quantity"] = float(response.get("quantity", 0.0))
+        response["position_size_usdt"] = float(response.get("position_size_usdt", 0.0))
         response["risk_assessment"] = response.get("risk_assessment", "medium")
+        response["exit_plan"] = {
+            "profit_target": float(exit_plan.get("profit_target", 0.0)),
+            "stop_loss": float(exit_plan.get("stop_loss", 0.0)),
+            "invalidation_conditions": exit_plan.get("invalidation_conditions", [])
+        }
         
         # Normalize action to lowercase
         response["action"] = response["action"].lower()
@@ -354,25 +418,46 @@ Provide your trading decision in the exact JSON format above. Be concise but cle
         balance = portfolio_state.get('balance', 10000)
         open_positions = portfolio_state.get('open_positions', 0)
         
-        # Simple mock logic based on market conditions
+        # Enhanced mock logic for Alpha Arena style trading
         if change_24h > 2.0 and balance > 1000:
             action = "buy"
+            direction = "long"
             confidence = random.uniform(0.7, 0.9)
-            reasoning = f"Mock: Strong positive momentum (+{change_24h:.1f}%) suggests buying opportunity"
-        elif change_24h < -2.0 and open_positions > 0:
+            reasoning = f"Mock: Strong positive momentum (+{change_24h:.1f}%) suggests long opportunity"
+        elif change_24h < -2.0 and balance > 1000:
+            action = "buy"
+            direction = "short"
+            confidence = random.uniform(0.7, 0.9)
+            reasoning = f"Mock: Strong negative momentum ({change_24h:.1f}%) suggests short opportunity"
+        elif change_24h < -1.0 and open_positions > 0:
             action = "sell"
+            direction = "none"
             confidence = random.uniform(0.7, 0.9)
-            reasoning = f"Mock: Negative momentum ({change_24h:.1f}%) suggests selling to limit losses"
+            reasoning = f"Mock: Negative momentum ({change_24h:.1f}%) suggests closing positions to limit losses"
         else:
             action = "hold"
+            direction = "none"
             confidence = random.uniform(0.5, 0.7)
             reasoning = f"Mock: Market conditions unclear ({change_24h:.1f}%), holding position"
         
+        # Calculate position size based on available balance and confidence
+        position_size_usdt = min(balance * 0.1 * confidence, balance * 0.2)  # Max 20% of balance
+        leverage = random.uniform(1.0, 3.0)  # Conservative leverage for mock
+        quantity = position_size_usdt * leverage / price if price > 0 else 0
+        
         mock_decision = {
             "action": action,
+            "direction": direction,
+            "quantity": round(quantity, 6),
+            "leverage": round(leverage, 1),
             "confidence": round(confidence, 2),
-            "reasoning": reasoning,
-            "position_size": round(random.uniform(0.05, 0.15), 2),
+            "justification": reasoning,
+            "exit_plan": {
+                "profit_target": round(price * 0.02, 2) if action == "buy" else round(price * 0.02, 2) if action == "sell" else 0.0,
+                "stop_loss": round(price * 0.01, 2) if action in ["buy", "sell"] else 0.0,
+                "invalidation_conditions": ["market_volatility_spike", "unexpected_news"] if action in ["buy", "sell"] else []
+            },
+            "position_size_usdt": round(position_size_usdt, 2),
             "risk_assessment": random.choice(["low", "medium", "high"])
         }
         
@@ -434,16 +519,24 @@ Provide your trading decision in the exact JSON format above. Be concise but cle
                 logger.error("Invalid LLM response, falling back to hold")
                 return {
                     "action": "hold",
+                    "direction": "none",
+                    "quantity": 0.0,
+                    "leverage": 1.0,
                     "confidence": 0.0,
-                    "reasoning": "Invalid LLM response format",
-                    "position_size": 0.0,
+                    "justification": "Invalid LLM response format",
+                    "exit_plan": {
+                        "profit_target": 0.0,
+                        "stop_loss": 0.0,
+                        "invalidation_conditions": []
+                    },
+                    "position_size_usdt": 0.0,
                     "risk_assessment": "high"
                 }
             
             logger.info(f"LLM decision: {decision['action'].upper()} "
                        f"(confidence: {decision['confidence']:.2f}, "
                        f"risk: {decision['risk_assessment']})")
-            logger.info(f"LLM reasoning: {decision['reasoning']}")
+            logger.info(f"LLM justification: {decision['justification']}")
             
             return decision
             
@@ -452,9 +545,17 @@ Provide your trading decision in the exact JSON format above. Be concise but cle
             # Fallback to hold on error
             return {
                 "action": "hold",
+                "direction": "none",
+                "quantity": 0.0,
+                "leverage": 1.0,
                 "confidence": 0.0,
-                "reasoning": f"Error occurred: {str(e)}",
-                "position_size": 0.0,
+                "justification": f"Error occurred: {str(e)}",
+                "exit_plan": {
+                    "profit_target": 0.0,
+                    "stop_loss": 0.0,
+                    "invalidation_conditions": []
+                },
+                "position_size_usdt": 0.0,
                 "risk_assessment": "high"
             }
 

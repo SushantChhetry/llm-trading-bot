@@ -170,18 +170,26 @@ class TradingBot:
             portfolio = self.trading_engine.get_portfolio_summary(current_price)
             return_pct = portfolio['total_return_pct']
             return_color = "green" if return_pct >= 0 else "red"
+            sharpe_ratio = portfolio.get('sharpe_ratio', 0.0)
+            sharpe_color = "green" if sharpe_ratio > 1.0 else "yellow" if sharpe_ratio > 0.5 else "red"
+            
             self.console.print(f"[bold]📊 Portfolio Value:[/bold] [bold {return_color}]${portfolio['total_value']:,.2f}[/bold {return_color}] "
                              f"([{return_color}]{return_pct:+.2f}%[/{return_color}])")
+            self.console.print(f"[bold]📈 Sharpe Ratio:[/bold] [{sharpe_color}]{sharpe_ratio:.3f}[/{sharpe_color}] "
+                             f"(Risk-Adjusted Return: {portfolio.get('risk_adjusted_return', 0.0):.3f})")
             
             # 3. Get LLM decision with portfolio context
             with self.console.status("[bold blue]🤖 Consulting AI for trading decision...", spinner="dots"):
                 decision = self.llm_client.get_trading_decision(market_data, portfolio)
             
             action = decision.get("action", "hold").lower()
+            direction = decision.get("direction", "none")
             confidence = decision.get("confidence", 0.0)
-            reasoning = decision.get("reasoning", "No reasoning provided")
-            position_size = decision.get("position_size", 0.1)
+            justification = decision.get("justification", "No justification provided")
+            position_size_usdt = decision.get("position_size_usdt", 0.0)
+            leverage = decision.get("leverage", 1.0)
             risk_assessment = decision.get("risk_assessment", "medium")
+            exit_plan = decision.get("exit_plan", {})
             
             # Create colorful decision panel
             action_emoji = {"buy": "🟢", "sell": "🔴", "hold": "🟡"}.get(action, "❓")
@@ -190,11 +198,13 @@ class TradingBot:
             risk_color = {"low": "green", "medium": "yellow", "high": "red"}.get(risk_assessment.lower(), "white")
             
             decision_text = f"""
-[bold]Action:[/bold] [{action_color}]{action_emoji} {action.upper()}[/{action_color}]
+[bold]Action:[/bold] [{action_color}]{action_emoji} {action.upper()}[/{action_color}] ({direction.upper()})
 [bold]Confidence:[/bold] [{confidence_color}]{confidence:.2f}[/{confidence_color}]
-[bold]Position Size:[/bold] {position_size:.2f}
+[bold]Position Size:[/bold] ${position_size_usdt:.2f}
+[bold]Leverage:[/bold] {leverage:.1f}x
 [bold]Risk Assessment:[/bold] [{risk_color}]{risk_assessment.upper()}[/{risk_color}]
-[bold]Reasoning:[/bold] {reasoning}
+[bold]Justification:[/bold] {justification}
+[bold]Exit Plan:[/bold] Profit Target: ${exit_plan.get('profit_target', 0):.2f}, Stop Loss: ${exit_plan.get('stop_loss', 0):.2f}
             """.strip()
             
             self.console.print(Panel(
@@ -206,21 +216,21 @@ class TradingBot:
             
             # 4. Execute trade based on decision
             trade_executed = False
-            if action == "buy" and confidence > 0.6:
-                # Calculate trade amount based on confidence and LLM position size
+            if action == "buy" and confidence > 0.6 and direction == "long":
+                # Use LLM's position size and leverage directly
                 available_balance = portfolio["balance"]
-                if available_balance > 0:
-                    # Use LLM position size and confidence for trade amount
-                    base_amount = available_balance * config.MAX_POSITION_SIZE
-                    trade_amount = base_amount * position_size * confidence
+                if available_balance > 0 and position_size_usdt > 0:
+                    # Use LLM's calculated position size
+                    trade_amount = min(position_size_usdt, available_balance * config.MAX_POSITION_SIZE)
                     
-                    self.console.print(f"[bold green]🟢 Executing BUY: ${trade_amount:.2f}[/bold green]")
+                    self.console.print(f"[bold green]🟢 Executing BUY: ${trade_amount:.2f} with {leverage:.1f}x leverage[/bold green]")
                     trade = self.trading_engine.execute_buy(
                         config.SYMBOL,
                         current_price,
                         trade_amount,
                         confidence,
-                        decision
+                        decision,
+                        leverage
                     )
                     if trade:
                         trade_executed = True
@@ -228,15 +238,37 @@ class TradingBot:
                     else:
                         self.console.print("[bold red]❌ BUY trade failed (insufficient balance or other error)[/bold red]")
                         
+            elif action == "buy" and confidence > 0.6 and direction == "short":
+                # Execute short position
+                available_balance = portfolio["balance"]
+                if available_balance > 0 and position_size_usdt > 0:
+                    trade_amount = min(position_size_usdt, available_balance * config.MAX_POSITION_SIZE)
+                    
+                    self.console.print(f"[bold red]🔴 Executing SHORT: ${trade_amount:.2f} with {leverage:.1f}x leverage[/bold red]")
+                    trade = self.trading_engine.execute_short(
+                        config.SYMBOL,
+                        current_price,
+                        trade_amount,
+                        confidence,
+                        decision,
+                        leverage
+                    )
+                    if trade:
+                        trade_executed = True
+                        self.console.print(f"[bold red]✅ SHORT trade executed successfully (ID: {trade['id']})[/bold red]")
+                    else:
+                        self.console.print("[bold red]❌ SHORT trade failed (insufficient balance or other error)[/bold red]")
+                        
             elif action == "sell" and confidence > 0.6:
                 # Sell all or partial position
                 if config.SYMBOL in self.trading_engine.positions:
-                    self.console.print(f"[bold red]🔴 Executing SELL: {position_size:.2f} of position[/bold red]")
+                    self.console.print(f"[bold red]🔴 Executing SELL with {leverage:.1f}x leverage[/bold red]")
                     trade = self.trading_engine.execute_sell(
                         config.SYMBOL,
                         current_price,
                         confidence=confidence,
-                        llm_decision=decision
+                        llm_decision=decision,
+                        leverage=leverage
                     )
                     if trade:
                         trade_executed = True

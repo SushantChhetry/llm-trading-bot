@@ -59,8 +59,8 @@ elif LLM_PROVIDER == "anthropic":
     LLM_API_URL = LLM_API_URL or "https://api.anthropic.com/v1/messages"
     LLM_MODEL = LLM_MODEL or "claude-3-sonnet-20240229"
 
-# Bot workflow configuration
-RUN_INTERVAL_SECONDS = int(os.getenv("RUN_INTERVAL_SECONDS", "300"))  # 5 minutes
+# Bot workflow configuration - Alpha Arena style 2-3 minute cycles
+RUN_INTERVAL_SECONDS = int(os.getenv("RUN_INTERVAL_SECONDS", "150"))  # 2.5 minutes (150 seconds)
 TRADING_MODE = os.getenv("TRADING_MODE", "paper")  # "paper" or "live"
 
 # Logging configuration
@@ -70,5 +70,11 @@ LOG_FILE = LOG_DIR / "bot.log"
 # Trading limits (safety measures)
 MAX_POSITION_SIZE = float(os.getenv("MAX_POSITION_SIZE", "0.1"))  # Max % of balance per trade
 STOP_LOSS_PERCENT = float(os.getenv("STOP_LOSS_PERCENT", "2.0"))  # 2% stop loss
-TAKE_PROFIT_PERCENT = float(os.getenv("TAKE_PROFIT_PERCENT", "3.0"))  # 3% take profit
+TAKE_PROFIT_PERCENT = float(os.getenv("TAKE_PROFIT_PERCENT", "3.0"))
+
+# Leverage and risk management
+MAX_LEVERAGE = float(os.getenv("MAX_LEVERAGE", "10.0"))  # Maximum allowed leverage
+DEFAULT_LEVERAGE = float(os.getenv("DEFAULT_LEVERAGE", "1.0"))  # Default leverage if not specified
+TRADING_FEE_PERCENT = float(os.getenv("TRADING_FEE_PERCENT", "0.05"))  # 0.05% taker fee
+MAX_RISK_PER_TRADE = float(os.getenv("MAX_RISK_PER_TRADE", "2.0"))  # Max 2% risk per trade
 
