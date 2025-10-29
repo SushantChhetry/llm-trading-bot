@@ -11,6 +11,8 @@ import hashlib
 import logging
 import argparse
 import time
+import random
+import os
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Any, Optional
@@ -67,7 +69,8 @@ class ExperimentRunner:
     def run_single_experiment(self, 
                             experiment_params: Dict[str, Any],
                             duration_minutes: int = 30,
-                            run_id: str = None) -> Dict[str, Any]:
+                            run_id: str = None,
+                            seed: int = None) -> Dict[str, Any]:
         """
         Run a single experiment with given parameters.
         
@@ -85,14 +88,29 @@ class ExperimentRunner:
         logger.info(f"Starting experiment {run_id}")
         logger.info(f"Parameters: {experiment_params}")
         
+        # Set random seed for reproducibility
+        if seed is not None:
+            random.seed(seed)
+            os.environ['PYTHONHASHSEED'] = str(seed)
+            logger.info(f"Random seed set to: {seed}")
+        
         # Create experiment directory
         exp_dir = self.experiments_dir / "logs" / run_id
         exp_dir.mkdir(exist_ok=True)
         
-        # Save experiment configuration
+        # Save experiment configuration with metadata
+        experiment_metadata = {
+            "parameters": experiment_params,
+            "duration_minutes": duration_minutes,
+            "seed": seed,
+            "timestamp": datetime.now().isoformat(),
+            "python_hashseed": os.environ.get('PYTHONHASHSEED'),
+            "random_state": random.getstate() if seed is not None else None
+        }
+        
         config_file = exp_dir / "experiment_config.json"
         with open(config_file, 'w') as f:
-            json.dump(experiment_params, f, indent=2)
+            json.dump(experiment_metadata, f, indent=2)
         
         # Override config with experiment parameters
         original_config = self._backup_config()

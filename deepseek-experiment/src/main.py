@@ -302,11 +302,11 @@ Examples:
     )
     
     # Exchange arguments
-            parser.add_argument(
-                "--exchange", 
-                choices=["bybit", "binance", "coinbase", "kraken"],
-                help="Exchange to use (default: from config). Note: Bybit/Binance restricted in USA"
-            )
+    parser.add_argument(
+        "--exchange", 
+        choices=["bybit", "binance", "coinbase", "kraken"],
+        help="Exchange to use (default: from config). Note: Bybit/Binance restricted in USA"
+    )
     parser.add_argument(
         "--symbol", 
         help="Trading pair symbol (default: from config)"

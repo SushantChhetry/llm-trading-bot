@@ -661,6 +661,201 @@ python -m src.experiment_runner --config experiments/strategy_optimization.yaml 
 ```
 Tests 3 position sizes × 3 stop-loss levels × 3 take-profit levels × 3 intervals = 81 combinations
 
+## 🔬 Automated Hyperparameter Optimization
+
+The project includes advanced automated hyperparameter optimization for systematic strategy tuning.
+
+### Strategy Optimization
+
+Run automated optimization to find optimal trading parameters:
+
+```bash
+# Grid search with conservative parameters
+python scripts/optimize_strategy.py --method grid --preset conservative --duration 30
+
+# Random search with custom parameters
+python scripts/optimize_strategy.py --method random --trials 50 --duration 45
+
+# LLM provider comparison
+python scripts/optimize_strategy.py --method grid --preset llm_comparison --runs 5
+
+# Custom parameter optimization
+python scripts/optimize_strategy.py --method grid \
+  --max-position-size 0.05,0.10,0.15 \
+  --stop-loss 2.0,5.0,8.0 \
+  --take-profit 8.0,12.0,15.0 \
+  --confidence-threshold 0.6,0.7,0.8
+```
+
+### Optimization Features
+
+#### Parameter Search Methods
+- **Grid Search**: Systematic exploration of all parameter combinations
+- **Random Search**: Efficient sampling of parameter space
+- **Multi-run Averaging**: Statistical significance through multiple runs
+- **Reproducible Results**: Seed-based reproducibility for consistent results
+
+#### Supported Parameters
+- **Position Sizing**: `max_position_size` (0.01 to 0.25)
+- **Risk Management**: `stop_loss_percent`, `take_profit_percent`
+- **Decision Thresholds**: `confidence_threshold` (0.5 to 0.9)
+- **LLM Providers**: `llm_provider` (deepseek, openai, anthropic)
+- **Trading Intervals**: `run_interval` (180 to 900 seconds)
+
+#### Performance Metrics
+- **Risk-Adjusted Returns**: Sharpe ratio, Sortino ratio
+- **Risk Metrics**: Max drawdown, volatility, VaR
+- **Trading Performance**: Win rate, profit factor, average trade duration
+- **LLM Performance**: Confidence patterns, decision consistency
+
+### Visualization and Analysis
+
+Create comprehensive visualizations of optimization results:
+
+```bash
+# Comprehensive analysis report
+python scripts/visualize_optimization.py --comprehensive
+
+# Parameter interaction heatmap
+python scripts/visualize_optimization.py --heatmap max_position_size stop_loss_percent
+
+# Best configurations analysis
+python scripts/visualize_optimization.py --best-configs --top-k 10
+
+# Parameter importance analysis
+python scripts/visualize_optimization.py --importance
+```
+
+#### Visualization Types
+- **Parameter Heatmaps**: Interaction effects between parameters
+- **Scatter Plots**: Parameter vs performance relationships
+- **Distribution Plots**: Performance metric distributions
+- **Best Configs Analysis**: Top performing configurations
+- **Parameter Importance**: Correlation analysis across metrics
+
+### Optimization Workflow
+
+#### 1. Define Search Space
+```bash
+# Use predefined parameter spaces
+python scripts/optimize_strategy.py --preset conservative
+
+# Or define custom parameters
+python scripts/optimize_strategy.py \
+  --max-position-size 0.05,0.10,0.15 \
+  --stop-loss 2.0,5.0 \
+  --take-profit 8.0,12.0
+```
+
+#### 2. Run Optimization
+```bash
+# Grid search (systematic)
+python scripts/optimize_strategy.py --method grid --duration 30 --runs 3
+
+# Random search (efficient)
+python scripts/optimize_strategy.py --method random --trials 100 --duration 45
+```
+
+#### 3. Analyze Results
+```bash
+# Create comprehensive report
+python scripts/visualize_optimization.py --comprehensive --top-k 5
+
+# Export results for further analysis
+python scripts/optimize_strategy.py --export results.csv
+```
+
+#### 4. Validate Best Configurations
+```bash
+# Test best configuration with longer duration
+python -m src.experiment_runner \
+  --max-position-size 0.10 \
+  --stop-loss 3.0 \
+  --take-profit 12.0 \
+  --duration 120
+```
+
+### Best Practices for Optimization
+
+#### Parameter Space Design
+1. **Start Conservative**: Begin with small position sizes and tight risk controls
+2. **Incremental Expansion**: Gradually increase parameter ranges based on results
+3. **Focus on Key Parameters**: Prioritize position size and risk management
+4. **Consider Market Conditions**: Adjust parameters for different market regimes
+
+#### Statistical Significance
+1. **Multiple Runs**: Use at least 3-5 runs per configuration
+2. **Sufficient Duration**: Run experiments for at least 30-60 minutes
+3. **Random Seeds**: Use fixed seeds for reproducible results
+4. **Cross-Validation**: Test best configurations on different time periods
+
+#### Performance Evaluation
+1. **Risk-Adjusted Metrics**: Focus on Sharpe ratio over raw returns
+2. **Drawdown Analysis**: Consider maximum drawdown and recovery time
+3. **Consistency**: Look for stable performance across multiple runs
+4. **Market Regime**: Test across different market conditions
+
+#### Resource Management
+1. **Parallel Execution**: Run multiple experiments simultaneously
+2. **Resource Monitoring**: Monitor CPU and memory usage
+3. **Result Storage**: Regularly backup optimization results
+4. **Incremental Analysis**: Analyze results as they become available
+
+### Example Optimization Scenarios
+
+#### Conservative Strategy Optimization
+```bash
+# Test conservative parameters
+python scripts/optimize_strategy.py \
+  --method grid \
+  --max-position-size 0.01,0.02,0.03,0.05 \
+  --stop-loss 1.0,2.0,3.0 \
+  --take-profit 2.0,3.0,5.0 \
+  --confidence-threshold 0.7,0.8,0.9 \
+  --duration 60 --runs 5
+```
+
+#### Aggressive Strategy Optimization
+```bash
+# Test aggressive parameters
+python scripts/optimize_strategy.py \
+  --method random \
+  --max-position-size 0.10,0.15,0.20,0.25 \
+  --stop-loss 3.0,5.0,8.0 \
+  --take-profit 8.0,12.0,15.0 \
+  --confidence-threshold 0.5,0.6,0.7 \
+  --trials 100 --duration 45
+```
+
+#### LLM Provider Comparison
+```bash
+# Compare different LLM providers
+python scripts/optimize_strategy.py \
+  --method grid \
+  --preset llm_comparison \
+  --duration 60 --runs 3
+```
+
+### Results Interpretation
+
+#### Key Metrics to Monitor
+- **Sharpe Ratio**: Risk-adjusted returns (target: >1.0)
+- **Max Drawdown**: Maximum loss from peak (target: <10%)
+- **Win Rate**: Percentage of profitable trades (target: >50%)
+- **Profit Factor**: Gross profit / gross loss (target: >1.5)
+
+#### Parameter Insights
+- **Position Size**: Larger sizes = higher returns but higher risk
+- **Stop Loss**: Tighter stops = lower drawdown but more false signals
+- **Take Profit**: Higher targets = better risk/reward but lower win rate
+- **Confidence Threshold**: Higher thresholds = fewer trades but better quality
+
+#### Optimization Success Criteria
+1. **Statistical Significance**: Consistent performance across multiple runs
+2. **Risk Management**: Acceptable drawdown levels
+3. **Profitability**: Positive risk-adjusted returns
+4. **Stability**: Performance doesn't degrade over time
+
 ## 💡 Tips for Solo Workflow
 
 ### Development Workflow
