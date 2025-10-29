@@ -178,6 +178,15 @@ class TradingBot:
             self.console.print(f"[bold]📈 Sharpe Ratio:[/bold] [{sharpe_color}]{sharpe_ratio:.3f}[/{sharpe_color}] "
                              f"(Risk-Adjusted Return: {portfolio.get('risk_adjusted_return', 0.0):.3f})")
             
+            # Display behavioral patterns
+            bullish_tilt = portfolio.get('bullish_tilt', 0.5)
+            tilt_color = "green" if bullish_tilt > 0.6 else "red" if bullish_tilt < 0.4 else "yellow"
+            self.console.print(f"[bold]📊 Trading Style:[/bold] "
+                             f"Bullish Tilt: [{tilt_color}]{bullish_tilt:.2f}[/{tilt_color}] | "
+                             f"Avg Hold: {portfolio.get('avg_holding_period_hours', 0):.1f}h | "
+                             f"Freq: {portfolio.get('trade_frequency_per_day', 0):.1f}/day | "
+                             f"Fees: ${portfolio.get('total_trading_fees', 0):.2f}")
+            
             # 3. Get LLM decision with portfolio context
             with self.console.status("[bold blue]🤖 Consulting AI for trading decision...", spinner="dots"):
                 decision = self.llm_client.get_trading_decision(market_data, portfolio)

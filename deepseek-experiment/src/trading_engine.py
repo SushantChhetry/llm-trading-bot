@@ -134,6 +134,11 @@ class TradingEngine:
             logger.warning(f"Insufficient balance for margin. Available: {self.balance}, Required margin: {required_margin}")
             return None
         
+        # Check position limits (Alpha Arena constraint)
+        if len(self.positions) >= config.MAX_ACTIVE_POSITIONS:
+            logger.warning(f"Maximum active positions reached ({config.MAX_ACTIVE_POSITIONS}). Cannot open new position.")
+            return None
+        
         # Apply position size limit based on margin
         max_margin = self.balance * config.MAX_POSITION_SIZE
         required_margin = min(required_margin, max_margin)
@@ -302,6 +307,11 @@ class TradingEngine:
             logger.warning(f"Insufficient balance for short margin. Available: {self.balance}, Required margin: {required_margin}")
             return None
         
+        # Check position limits (Alpha Arena constraint)
+        if len(self.positions) >= config.MAX_ACTIVE_POSITIONS:
+            logger.warning(f"Maximum active positions reached ({config.MAX_ACTIVE_POSITIONS}). Cannot open new position.")
+            return None
+        
         # Apply position size limit based on margin
         max_margin = self.balance * config.MAX_POSITION_SIZE
         required_margin = min(required_margin, max_margin)
@@ -399,7 +409,7 @@ class TradingEngine:
         }
     
     def _calculate_advanced_metrics(self) -> Dict[str, Any]:
-        """Calculate advanced trading metrics including Sharpe ratio for Alpha Arena style feedback."""
+        """Calculate advanced trading metrics including Sharpe ratio and behavioral patterns for Alpha Arena analysis."""
         if not self.trades:
             return {
                 "win_rate": 0.0,
@@ -412,7 +422,17 @@ class TradingEngine:
                 "max_consecutive_wins": 0,
                 "max_consecutive_losses": 0,
                 "excess_return": 0.0,
-                "risk_adjusted_return": 0.0
+                "risk_adjusted_return": 0.0,
+                # Alpha Arena behavioral metrics
+                "bullish_tilt": 0.0,
+                "avg_holding_period_hours": 0.0,
+                "trade_frequency_per_day": 0.0,
+                "avg_position_size_usdt": 0.0,
+                "avg_confidence": 0.0,
+                "exit_plan_tightness": 0.0,
+                "active_positions_count": 0,
+                "total_trading_fees": 0.0,
+                "fee_impact_pct": 0.0
             }
         
         # Basic trade analysis
@@ -491,6 +511,9 @@ class TradingEngine:
         max_consecutive_wins = self._calculate_max_consecutive(profits, lambda x: x > 0)
         max_consecutive_losses = self._calculate_max_consecutive(profits, lambda x: x < 0)
         
+        # Alpha Arena behavioral pattern analysis
+        behavioral_metrics = self._calculate_behavioral_metrics()
+        
         return {
             "win_rate": win_rate,
             "avg_profit_per_trade": avg_profit,
@@ -502,7 +525,8 @@ class TradingEngine:
             "max_consecutive_wins": max_consecutive_wins,
             "max_consecutive_losses": max_consecutive_losses,
             "excess_return": excess_return,
-            "risk_adjusted_return": risk_adjusted_return
+            "risk_adjusted_return": risk_adjusted_return,
+            **behavioral_metrics
         }
     
     def _calculate_max_drawdown(self, profits: List[float]) -> float:
@@ -543,4 +567,102 @@ class TradingEngine:
                 current_consecutive = 0
         
         return max_consecutive
+    
+    def _calculate_behavioral_metrics(self) -> Dict[str, Any]:
+        """Calculate Alpha Arena behavioral pattern metrics."""
+        if not self.trades:
+            return {
+                "bullish_tilt": 0.0,
+                "avg_holding_period_hours": 0.0,
+                "trade_frequency_per_day": 0.0,
+                "avg_position_size_usdt": 0.0,
+                "avg_confidence": 0.0,
+                "exit_plan_tightness": 0.0,
+                "active_positions_count": len(self.positions),
+                "total_trading_fees": 0.0,
+                "fee_impact_pct": 0.0
+            }
+        
+        # Calculate bullish vs bearish tilt
+        long_trades = [t for t in self.trades if t.get("side") == "buy" and t.get("direction") == "long"]
+        short_trades = [t for t in self.trades if t.get("side") == "buy" and t.get("direction") == "short"]
+        total_directional_trades = len(long_trades) + len(short_trades)
+        bullish_tilt = len(long_trades) / total_directional_trades if total_directional_trades > 0 else 0.5
+        
+        # Calculate average holding period
+        holding_periods = []
+        for trade in self.trades:
+            if "timestamp" in trade and trade.get("side") == "sell":
+                try:
+                    sell_time = datetime.fromisoformat(trade["timestamp"].replace('Z', '+00:00'))
+                    # Find corresponding buy trade
+                    buy_trades = [t for t in self.trades 
+                                if t.get("side") == "buy" 
+                                and t.get("symbol") == trade.get("symbol")
+                                and t.get("timestamp") < trade.get("timestamp")]
+                    if buy_trades:
+                        buy_time = datetime.fromisoformat(buy_trades[-1]["timestamp"].replace('Z', '+00:00'))
+                        duration = (sell_time - buy_time).total_seconds() / 3600  # hours
+                        holding_periods.append(duration)
+                except (ValueError, TypeError):
+                    continue
+        
+        avg_holding_period = sum(holding_periods) / len(holding_periods) if holding_periods else 0.0
+        
+        # Calculate trade frequency per day
+        if self.trades:
+            first_trade = min(self.trades, key=lambda x: x.get("timestamp", ""))
+            last_trade = max(self.trades, key=lambda x: x.get("timestamp", ""))
+            try:
+                start_time = datetime.fromisoformat(first_trade["timestamp"].replace('Z', '+00:00'))
+                end_time = datetime.fromisoformat(last_trade["timestamp"].replace('Z', '+00:00'))
+                days_elapsed = (end_time - start_time).total_seconds() / (24 * 3600)
+                trade_frequency = len(self.trades) / max(days_elapsed, 0.001)  # Avoid division by zero
+            except (ValueError, TypeError):
+                trade_frequency = 0.0
+        else:
+            trade_frequency = 0.0
+        
+        # Calculate average position size and confidence
+        position_sizes = [t.get("amount_usdt", 0) for t in self.trades if t.get("side") == "buy"]
+        confidences = [t.get("confidence", 0) for t in self.trades]
+        
+        avg_position_size = sum(position_sizes) / len(position_sizes) if position_sizes else 0.0
+        avg_confidence = sum(confidences) / len(confidences) if confidences else 0.0
+        
+        # Calculate exit plan tightness (average stop loss and profit target distances)
+        exit_plan_distances = []
+        for trade in self.trades:
+            if "exit_plan" in trade and trade.get("side") == "buy":
+                exit_plan = trade["exit_plan"]
+                entry_price = trade.get("price", 0)
+                if entry_price > 0:
+                    profit_target = exit_plan.get("profit_target", 0)
+                    stop_loss = exit_plan.get("stop_loss", 0)
+                    
+                    if profit_target > 0:
+                        profit_pct = abs(profit_target - entry_price) / entry_price * 100
+                        exit_plan_distances.append(profit_pct)
+                    if stop_loss > 0:
+                        stop_pct = abs(stop_loss - entry_price) / entry_price * 100
+                        exit_plan_distances.append(stop_pct)
+        
+        exit_plan_tightness = sum(exit_plan_distances) / len(exit_plan_distances) if exit_plan_distances else 0.0
+        
+        # Calculate total trading fees and impact
+        total_fees = sum(t.get("trading_fee", 0) for t in self.trades)
+        total_pnl = sum(t.get("profit", 0) for t in self.trades if t.get("side") == "sell")
+        fee_impact = (total_fees / abs(total_pnl) * 100) if total_pnl != 0 else 0.0
+        
+        return {
+            "bullish_tilt": bullish_tilt,
+            "avg_holding_period_hours": avg_holding_period,
+            "trade_frequency_per_day": trade_frequency,
+            "avg_position_size_usdt": avg_position_size,
+            "avg_confidence": avg_confidence,
+            "exit_plan_tightness": exit_plan_tightness,
+            "active_positions_count": len(self.positions),
+            "total_trading_fees": total_fees,
+            "fee_impact_pct": fee_impact
+        }
 

@@ -78,3 +78,8 @@ DEFAULT_LEVERAGE = float(os.getenv("DEFAULT_LEVERAGE", "1.0"))  # Default levera
 TRADING_FEE_PERCENT = float(os.getenv("TRADING_FEE_PERCENT", "0.05"))  # 0.05% taker fee
 MAX_RISK_PER_TRADE = float(os.getenv("MAX_RISK_PER_TRADE", "2.0"))  # Max 2% risk per trade
 
+# Alpha Arena behavioral simulation
+MAX_ACTIVE_POSITIONS = int(os.getenv("MAX_ACTIVE_POSITIONS", "6"))  # Max simultaneous positions
+MIN_CONFIDENCE_THRESHOLD = float(os.getenv("MIN_CONFIDENCE_THRESHOLD", "0.6"))  # Min confidence to trade
+FEE_IMPACT_WARNING_THRESHOLD = float(os.getenv("FEE_IMPACT_WARNING_THRESHOLD", "20.0"))  # Warn if fees > 20% of PnL
+
