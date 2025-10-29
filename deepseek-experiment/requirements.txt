@@ -1,0 +1,11 @@
+# DeepSeek Trading Bot Experiment - Dependencies
+
+# Exchange API client
+ccxt>=4.0.0
+
+# HTTP requests for DeepSeek API
+requests>=2.31.0
+
+# Note: All other dependencies use Python standard library
+# (json, logging, pathlib, datetime, time, sys)
+
