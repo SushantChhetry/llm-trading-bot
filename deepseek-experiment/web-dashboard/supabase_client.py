@@ -33,7 +33,7 @@ class SupabaseService:
         
         self.supabase: Client = create_client(self.supabase_url, self.supabase_key)
     
-    async def get_trades(self, limit: int = 100) -> List[Dict[str, Any]]:
+    def get_trades(self, limit: int = 100) -> List[Dict[str, Any]]:
         """Get recent trades from Supabase"""
         try:
             response = self.supabase.table("trades").select("*").order("timestamp", desc=True).limit(limit).execute()
@@ -42,7 +42,7 @@ class SupabaseService:
             print(f"Error fetching trades: {e}")
             return []
     
-    async def add_trade(self, trade_data: Dict[str, Any]) -> bool:
+    def add_trade(self, trade_data: Dict[str, Any]) -> bool:
         """Add a new trade to Supabase"""
         try:
             response = self.supabase.table("trades").insert(trade_data).execute()
@@ -51,7 +51,7 @@ class SupabaseService:
             print(f"Error adding trade: {e}")
             return False
     
-    async def get_portfolio(self) -> Optional[Dict[str, Any]]:
+    def get_portfolio(self) -> Optional[Dict[str, Any]]:
         """Get latest portfolio snapshot from Supabase"""
         try:
             response = self.supabase.table("portfolio_snapshots").select("*").order("timestamp", desc=True).limit(1).execute()
@@ -60,7 +60,7 @@ class SupabaseService:
             print(f"Error fetching portfolio: {e}")
             return None
     
-    async def update_portfolio(self, portfolio_data: Dict[str, Any]) -> bool:
+    def update_portfolio(self, portfolio_data: Dict[str, Any]) -> bool:
         """Update portfolio snapshot in Supabase"""
         try:
             response = self.supabase.table("portfolio_snapshots").insert(portfolio_data).execute()
@@ -69,7 +69,7 @@ class SupabaseService:
             print(f"Error updating portfolio: {e}")
             return False
     
-    async def get_positions(self) -> List[Dict[str, Any]]:
+    def get_positions(self) -> List[Dict[str, Any]]:
         """Get active positions from Supabase"""
         try:
             response = self.supabase.table("positions").select("*").eq("is_active", True).execute()
@@ -78,7 +78,7 @@ class SupabaseService:
             print(f"Error fetching positions: {e}")
             return []
     
-    async def update_position(self, position_data: Dict[str, Any]) -> bool:
+    def update_position(self, position_data: Dict[str, Any]) -> bool:
         """Update or create position in Supabase"""
         try:
             # Check if position exists
@@ -96,7 +96,7 @@ class SupabaseService:
             print(f"Error updating position: {e}")
             return False
     
-    async def close_position(self, symbol: str) -> bool:
+    def close_position(self, symbol: str) -> bool:
         """Close a position by setting is_active to False"""
         try:
             response = self.supabase.table("positions").update({"is_active": False, "closed_at": datetime.now().isoformat()}).eq("symbol", symbol).eq("is_active", True).execute()
@@ -105,7 +105,7 @@ class SupabaseService:
             print(f"Error closing position: {e}")
             return False
     
-    async def get_behavioral_metrics(self, limit: int = 50) -> List[Dict[str, Any]]:
+    def get_behavioral_metrics(self, limit: int = 50) -> List[Dict[str, Any]]:
         """Get behavioral metrics from Supabase"""
         try:
             response = self.supabase.table("behavioral_metrics").select("*").order("timestamp", desc=True).limit(limit).execute()
@@ -114,7 +114,7 @@ class SupabaseService:
             print(f"Error fetching behavioral metrics: {e}")
             return []
     
-    async def add_behavioral_metrics(self, metrics_data: Dict[str, Any]) -> bool:
+    def add_behavioral_metrics(self, metrics_data: Dict[str, Any]) -> bool:
         """Add behavioral metrics to Supabase"""
         try:
             response = self.supabase.table("behavioral_metrics").insert(metrics_data).execute()
@@ -123,7 +123,7 @@ class SupabaseService:
             print(f"Error adding behavioral metrics: {e}")
             return False
     
-    async def get_bot_config(self) -> Dict[str, str]:
+    def get_bot_config(self) -> Dict[str, str]:
         """Get bot configuration from Supabase"""
         try:
             response = self.supabase.table("bot_config").select("*").execute()
@@ -132,7 +132,7 @@ class SupabaseService:
             print(f"Error fetching bot config: {e}")
             return {}
     
-    async def update_bot_config(self, key: str, value: str) -> bool:
+    def update_bot_config(self, key: str, value: str) -> bool:
         """Update bot configuration in Supabase"""
         try:
             response = self.supabase.table("bot_config").upsert({"key": key, "value": value, "updated_at": datetime.now().isoformat()}).execute()

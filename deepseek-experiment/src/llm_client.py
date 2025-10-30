@@ -314,8 +314,33 @@ Provide your trading decision in the exact JSON format above. Include specific e
         
         try:
             response = requests.post(self.api_url, headers=headers, json=payload, timeout=30)
+            
+            # Handle specific HTTP errors
+            if response.status_code == 402:
+                error_msg = (
+                    "💳 DeepSeek API payment required (402). "
+                    "Your DeepSeek account needs payment to use the API. "
+                    "Options: 1) Add payment to DeepSeek account, 2) Switch to LLM_PROVIDER=mock for testing"
+                )
+                logger.error(error_msg)
+                raise ValueError(error_msg)
+            
+            if response.status_code == 401:
+                error_msg = (
+                    "🔑 DeepSeek API authentication failed (401). "
+                    "Check your LLM_API_KEY is correct and has proper permissions."
+                )
+                logger.error(error_msg)
+                raise ValueError(error_msg)
+            
             response.raise_for_status()
             return response.json()
+        except requests.exceptions.HTTPError as e:
+            logger.error(f"DeepSeek API HTTP error: {e}")
+            raise
+        except ValueError as e:
+            # Re-raise our custom error messages
+            raise
         except Exception as e:
             logger.error(f"DeepSeek API request failed: {e}")
             raise
@@ -504,8 +529,24 @@ Provide your trading decision in the exact JSON format above. Include specific e
                 try:
                     response = self._make_api_request(prompt)
                 except Exception as api_error:
-                    logger.error(f"API call failed: {api_error}")
-                    logger.warning("Falling back to mock mode for this cycle")
+                    error_str = str(api_error)
+                    # Check for payment-related errors
+                    if "402" in error_str or "Payment Required" in error_str or "payment required" in error_str.lower():
+                        logger.error(
+                            f"💳 DeepSeek API payment required. "
+                            f"The bot will continue in mock mode until payment is added. "
+                            f"To fix: 1) Add payment to your DeepSeek account at https://platform.deepseek.com, "
+                            f"or 2) Set LLM_PROVIDER=mock in Railway environment variables for testing."
+                        )
+                    elif "401" in error_str or "authentication failed" in error_str.lower():
+                        logger.error(
+                            f"🔑 DeepSeek API authentication failed. "
+                            f"The bot will continue in mock mode. "
+                            f"To fix: Verify your LLM_API_KEY is correct in Railway environment variables."
+                        )
+                    else:
+                        logger.error(f"API call failed: {api_error}")
+                    logger.warning("🔄 Falling back to mock mode for this cycle")
                     response = self._get_mock_response(market_data, portfolio_state)
             
             # Extract content from response based on provider

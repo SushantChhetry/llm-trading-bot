@@ -51,6 +51,8 @@ app.add_middleware(
 )
 
 # Initialize Supabase service
+supabase = None
+USE_SUPABASE = False
 try:
     supabase = get_supabase_service()
     USE_SUPABASE = True
@@ -59,6 +61,7 @@ except Exception as e:
     print(f"⚠️  Supabase connection failed: {e}")
     print("📁 Falling back to JSON file storage")
     USE_SUPABASE = False
+    supabase = None
 
 # Fallback data file paths
 DATA_DIR = config.DATA_DIR
@@ -79,9 +82,9 @@ def load_json_file(file_path: Path, default: Any = None) -> Any:
 
 def get_bot_status() -> Dict[str, Any]:
     """Get current bot status and configuration."""
-    if USE_SUPABASE:
+    if USE_SUPABASE and supabase:
         try:
-            config_data = asyncio.run(supabase.get_bot_config())
+            config_data = supabase.get_bot_config()
             return {
                 "is_running": True,
                 "last_update": datetime.now().isoformat(),
@@ -108,9 +111,9 @@ def get_bot_status() -> Dict[str, Any]:
 
 def get_trades(limit: int = 100) -> List[Dict[str, Any]]:
     """Get recent trades."""
-    if USE_SUPABASE:
+    if USE_SUPABASE and supabase:
         try:
-            return asyncio.run(supabase.get_trades(limit))
+            return supabase.get_trades(limit)
         except Exception as e:
             print(f"Error getting trades from Supabase: {e}")
             return []
@@ -120,9 +123,9 @@ def get_trades(limit: int = 100) -> List[Dict[str, Any]]:
 
 def get_portfolio() -> Dict[str, Any]:
     """Get current portfolio state."""
-    if USE_SUPABASE:
+    if USE_SUPABASE and supabase:
         try:
-            portfolio = asyncio.run(supabase.get_portfolio())
+            portfolio = supabase.get_portfolio()
             if portfolio:
                 return {
                     "balance": float(portfolio.get("balance", 0)),
@@ -143,9 +146,9 @@ def get_portfolio() -> Dict[str, Any]:
 
 def get_positions() -> List[Dict[str, Any]]:
     """Get active positions."""
-    if USE_SUPABASE:
+    if USE_SUPABASE and supabase:
         try:
-            return asyncio.run(supabase.get_positions())
+            return supabase.get_positions()
         except Exception as e:
             print(f"Error getting positions from Supabase: {e}")
             return []
@@ -156,9 +159,9 @@ def get_positions() -> List[Dict[str, Any]]:
 
 def get_behavioral_metrics(limit: int = 50) -> List[Dict[str, Any]]:
     """Get behavioral metrics."""
-    if USE_SUPABASE:
+    if USE_SUPABASE and supabase:
         try:
-            return asyncio.run(supabase.get_behavioral_metrics(limit))
+            return supabase.get_behavioral_metrics(limit)
         except Exception as e:
             print(f"Error getting behavioral metrics from Supabase: {e}")
             return []
@@ -239,13 +242,16 @@ async def health():
     """Health check endpoint for Railway and monitoring."""
     try:
         # Check database connection
-        db_status = "healthy" if USE_SUPABASE else "fallback"
-        if USE_SUPABASE:
+        db_status = "fallback"  # Default to fallback mode
+        if USE_SUPABASE and supabase:
             try:
-                # Quick database ping (use await since we're in async context)
-                await supabase.get_trades(limit=1)
+                # Quick database ping (synchronous call, FastAPI handles it)
+                supabase.get_trades(limit=1)
+                db_status = "healthy"
             except Exception as e:
                 db_status = f"unhealthy: {str(e)}"
+        elif USE_SUPABASE and not supabase:
+            db_status = "not_configured"
         
         return {
             "status": "healthy",
@@ -328,20 +334,40 @@ async def behavioral_metrics(limit: int = 50):
 
 if __name__ == "__main__":
     import threading
+    import sys
     
-    # Start WebSocket server in background thread
-    ws_thread = threading.Thread(target=start_websocket_server, daemon=True)
-    ws_thread.start()
-    
-    # Start FastAPI server
-    # Railway sets PORT environment variable automatically
-    port = int(os.getenv("PORT", "8001"))
-    
-    print("🚀 Starting Trading Bot API Server...")
-    print(f"📊 API available at: http://0.0.0.0:{port}")
-    print("🔌 WebSocket available at: ws://localhost:8002")
-    print("🌐 Dashboard available at: http://localhost:3000")
-    print(f"🗄️  Database: {'Supabase' if USE_SUPABASE else 'JSON Files'}")
-    print(f"🔌 Listening on port: {port}")
-    
-    uvicorn.run(app, host="0.0.0.0", port=port)
+    try:
+        # Start WebSocket server in background thread (optional, only if needed)
+        try:
+            ws_thread = threading.Thread(target=start_websocket_server, daemon=True)
+            ws_thread.start()
+            print("✅ WebSocket server thread started")
+        except Exception as e:
+            print(f"⚠️  WebSocket server failed to start: {e} (continuing without it)")
+        
+        # Start FastAPI server
+        # Railway sets PORT environment variable automatically
+        port = int(os.getenv("PORT", "8001"))
+        
+        print("🚀 Starting Trading Bot API Server...")
+        print(f"📊 API available at: http://0.0.0.0:{port}")
+        print(f"🗄️  Database: {'Supabase' if USE_SUPABASE else 'JSON Files'}")
+        print(f"🔌 Listening on port: {port}")
+        print("✅ Server starting...")
+        
+        # Use uvicorn with proper logging and error handling
+        uvicorn.run(
+            app, 
+            host="0.0.0.0", 
+            port=port,
+            log_level="info",
+            access_log=True
+        )
+    except KeyboardInterrupt:
+        print("\n🛑 Server stopped by user")
+        sys.exit(0)
+    except Exception as e:
+        print(f"❌ Fatal error starting server: {e}", file=sys.stderr)
+        import traceback
+        traceback.print_exc()
+        sys.exit(1)
