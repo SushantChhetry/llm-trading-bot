@@ -5,6 +5,7 @@ Records paper trades, tracks portfolio balance, and can be upgraded to live trad
 by modifying the execution methods (see config.TRADING_MODE).
 """
 
+import asyncio
 import logging
 import json
 from datetime import datetime
@@ -12,6 +13,9 @@ from pathlib import Path
 from typing import Dict, List, Optional, Any
 
 from config import config
+from .database_manager import get_database_manager
+from .security import SecurityManager, validate_trading_inputs
+from .resilience import circuit_breaker, retry, CircuitBreakerConfig, RetryConfig
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +45,12 @@ class TradingEngine:
         self.positions = {}  # symbol -> position dict
         self.trades_file = config.DATA_DIR / "trades.json"
         self.trades = []
+        
+        # Initialize security manager
+        self.security_manager = SecurityManager()
+        
+        # Initialize database manager
+        self.db_manager = None
         
         # Load existing trades if file exists
         self._load_trades()
@@ -108,6 +118,9 @@ class TradingEngine:
         
         return self.balance + position_value
     
+    @validate_trading_inputs
+    @circuit_breaker(CircuitBreakerConfig(failure_threshold=5, recovery_timeout=30))
+    @retry(RetryConfig(max_attempts=3, base_delay=0.5, max_delay=5.0))
     def execute_buy(self, symbol: str, price: float, amount_usdt: float, confidence: float, llm_decision: Dict = None, leverage: float = 1.0) -> Optional[Dict]:
         """
         Execute a buy order (paper trading) with leverage support.
@@ -205,6 +218,9 @@ class TradingEngine:
         logger.info(f"BUY executed: {quantity:.6f} {symbol} @ ${price:.2f} (${amount_usdt:.2f})")
         return trade
     
+    @validate_trading_inputs
+    @circuit_breaker(CircuitBreakerConfig(failure_threshold=5, recovery_timeout=30))
+    @retry(RetryConfig(max_attempts=3, base_delay=0.5, max_delay=5.0))
     def execute_sell(self, symbol: str, price: float, quantity: float = None, confidence: float = 0.0, llm_decision: Dict = None, leverage: float = 1.0) -> Optional[Dict]:
         """
         Execute a sell order (paper trading) with leverage support.
@@ -281,6 +297,9 @@ class TradingEngine:
         logger.info(f"SELL executed: {sell_quantity:.6f} {symbol} @ ${price:.2f} (profit: ${profit:.2f})")
         return trade
     
+    @validate_trading_inputs
+    @circuit_breaker(CircuitBreakerConfig(failure_threshold=5, recovery_timeout=30))
+    @retry(RetryConfig(max_attempts=3, base_delay=0.5, max_delay=5.0))
     def execute_short(self, symbol: str, price: float, amount_usdt: float, confidence: float, llm_decision: Dict = None, leverage: float = 1.0) -> Optional[Dict]:
         """
         Execute a short order (paper trading) with leverage support.

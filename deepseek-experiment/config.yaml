@@ -1,0 +1,181 @@
+# Trading Bot Configuration
+# This file contains all configuration settings for the trading bot
+
+# Database Configuration
+database:
+  host: "localhost"
+  port: 5432
+  database: "trading_bot"
+  username: "trading_user"
+  password: "${DB_PASSWORD}"  # Will be replaced with environment variable
+  url: "${DATABASE_URL}"  # Will be replaced with environment variable
+
+# LLM Configuration
+llm:
+  provider: "mock"  # Options: mock, deepseek, openai, anthropic
+  api_key: "${LLM_API_KEY}"  # Will be replaced with environment variable
+  api_url: ""  # Auto-configured based on provider
+  model: ""  # Auto-configured based on provider
+  temperature: 0.7
+  max_tokens: 500
+  timeout: 30
+
+# Exchange Configuration
+exchange:
+  name: "bybit"  # Options: bybit, binance, coinbase, kraken
+  api_key: "${EXCHANGE_API_KEY}"  # Will be replaced with environment variable
+  api_secret: "${EXCHANGE_API_SECRET}"  # Will be replaced with environment variable
+  testnet_api_key: "${TESTNET_API_KEY}"  # Will be replaced with environment variable
+  testnet_api_secret: "${TESTNET_API_SECRET}"  # Will be replaced with environment variable
+  use_testnet: true
+  symbol: "BTC/USDT"
+
+# Trading Configuration
+trading:
+  mode: "paper"  # Options: paper, live
+  initial_balance: 10000.0
+  max_position_size: 0.1  # Max % of balance per trade
+  max_leverage: 10.0
+  default_leverage: 1.0
+  trading_fee_percent: 0.05  # 0.05% taker fee
+  max_risk_per_trade: 2.0  # Max 2% risk per trade
+  stop_loss_percent: 2.0
+  take_profit_percent: 3.0
+  max_active_positions: 6
+  min_confidence_threshold: 0.6
+  fee_impact_warning_threshold: 20.0
+  run_interval_seconds: 150  # 2.5 minutes (Alpha Arena style)
+
+# Security Configuration
+security:
+  enable_rate_limiting: true
+  max_requests_per_minute: 60
+  enable_input_validation: true
+  enable_api_key_validation: true
+  log_sensitive_data: false
+  allowed_origins:
+    - "http://localhost:3000"
+    - "http://127.0.0.1:3000"
+
+# Logging Configuration
+logging:
+  level: "INFO"  # Options: DEBUG, INFO, WARNING, ERROR, CRITICAL
+  file_path: "data/logs/bot.log"
+  max_file_size: 10485760  # 10MB
+  backup_count: 5
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+
+# Monitoring Configuration
+monitoring:
+  enable_metrics: true
+  enable_health_checks: true
+  enable_alerts: true
+  metrics_retention_days: 30
+  health_check_interval: 30  # seconds
+  alert_cooldown: 300  # seconds
+
+# Alert Rules
+alerts:
+  high_cpu_usage:
+    enabled: true
+    threshold: 80  # CPU usage percentage
+    severity: "warning"
+  
+  high_memory_usage:
+    enabled: true
+    threshold: 85  # Memory usage percentage
+    severity: "warning"
+  
+  low_portfolio_value:
+    enabled: true
+    threshold: 5000  # Minimum portfolio value in USDT
+    severity: "critical"
+  
+  high_error_rate:
+    enabled: true
+    threshold: 0.1  # 10% error rate
+    severity: "warning"
+  
+  api_response_time:
+    enabled: true
+    threshold: 5000  # 5 seconds
+    severity: "warning"
+
+# Risk Management
+risk_management:
+  max_daily_loss: 0.05  # 5% of portfolio
+  max_drawdown: 0.15  # 15% maximum drawdown
+  position_size_kelly: false  # Use Kelly criterion for position sizing
+  volatility_adjustment: true  # Adjust position size based on volatility
+  correlation_limit: 0.7  # Maximum correlation between positions
+
+# Performance Optimization
+performance:
+  enable_caching: true
+  cache_ttl: 300  # 5 minutes
+  enable_async_operations: true
+  max_concurrent_requests: 10
+  connection_pool_size: 20
+  enable_compression: true
+
+# Feature Flags
+features:
+  enable_short_selling: true
+  enable_leverage: true
+  enable_stop_loss: true
+  enable_take_profit: true
+  enable_trailing_stop: false
+  enable_dca: false  # Dollar Cost Averaging
+  enable_grid_trading: false
+  enable_arbitrage: false
+
+# Data Storage
+storage:
+  enable_database: true
+  enable_json_fallback: true
+  enable_redis_cache: false
+  data_retention_days: 365
+  backup_frequency: "daily"
+  compression_enabled: true
+
+# API Configuration
+api:
+  host: "0.0.0.0"
+  port: 8001
+  enable_cors: true
+  enable_rate_limiting: true
+  max_requests_per_minute: 100
+  enable_authentication: false
+  enable_ssl: false
+  ssl_cert_path: ""
+  ssl_key_path: ""
+
+# Web Dashboard
+dashboard:
+  enable_websocket: true
+  websocket_port: 8002
+  enable_real_time_updates: true
+  update_interval: 5  # seconds
+  enable_charts: true
+  chart_data_points: 1000
+  enable_export: true
+  export_formats: ["csv", "json", "xlsx"]
+
+# Development Settings
+development:
+  enable_debug_mode: false
+  enable_profiling: false
+  enable_mock_data: false
+  enable_test_mode: false
+  log_level: "DEBUG"
+  enable_hot_reload: false
+
+# Production Settings
+production:
+  enable_ssl: true
+  enable_authentication: true
+  enable_monitoring: true
+  enable_alerting: true
+  log_level: "INFO"
+  enable_compression: true
+  enable_caching: true

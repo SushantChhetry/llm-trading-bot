@@ -12,6 +12,8 @@ from typing import Dict, Optional, List
 import requests
 
 from config import config
+from .security import SecurityManager, secure_api_key_required, validate_trading_inputs, rate_limit
+from .resilience import circuit_breaker, retry, fallback, CircuitBreakerConfig, RetryConfig
 
 logger = logging.getLogger(__name__)
 
@@ -54,15 +56,23 @@ class LLMClient:
         self.api_url = api_url or config.LLM_API_URL
         self.model = model or config.LLM_MODEL
         
+        # Initialize security manager
+        self.security_manager = SecurityManager()
+        
         # Auto-detect mock mode if not specified
         if mock_mode is None:
             self.mock_mode = (self.provider == "mock" or not self.api_key)
         else:
             self.mock_mode = mock_mode
         
-        if not self.mock_mode and not self.api_key:
-            logger.warning(f"No API key provided for {self.provider}. Will use mock responses.")
-            self.mock_mode = True
+        # Validate API key if not in mock mode
+        if not self.mock_mode:
+            if not self.api_key:
+                logger.warning(f"No API key provided for {self.provider}. Will use mock responses.")
+                self.mock_mode = True
+            elif not self.security_manager.validate_api_key(self.api_key, self.provider):
+                logger.error(f"Invalid API key format for {self.provider}. Will use mock responses.")
+                self.mock_mode = True
         
         logger.info(f"LLM Client initialized: {self.provider.upper()} {'(MOCK)' if self.mock_mode else '(LIVE)'}")
     
@@ -198,6 +208,7 @@ Provide your trading decision in the exact JSON format above. Include specific e
 """
         return prompt.strip()
     
+    @validate_trading_inputs
     def _validate_llm_response(self, response_text: str) -> Optional[Dict]:
         """
         Validate and parse LLM response JSON.
@@ -224,46 +235,9 @@ Provide your trading decision in the exact JSON format above. Include specific e
                 logger.error(f"No JSON found in response: {response_text[:200]}...")
                 return None
         
-        # Validate required fields
-        required_fields = ["action", "confidence", "justification"]
-        for field in required_fields:
-            if field not in response:
-                logger.error(f"Missing required field '{field}' in response")
-                return None
-        
-        # Validate action
-        valid_actions = ["buy", "sell", "hold"]
-        if response["action"].lower() not in valid_actions:
-            logger.error(f"Invalid action '{response['action']}'. Must be one of: {valid_actions}")
-            return None
-        
-        # Validate direction
-        valid_directions = ["long", "short", "none"]
-        direction = response.get("direction", "none")
-        if direction.lower() not in valid_directions:
-            logger.error(f"Invalid direction '{direction}'. Must be one of: {valid_directions}")
-            return None
-        
-        # Validate confidence
-        try:
-            confidence = float(response["confidence"])
-            if not 0.0 <= confidence <= 1.0:
-                logger.error(f"Confidence {confidence} must be between 0.0 and 1.0")
-                return None
-            response["confidence"] = confidence
-        except (ValueError, TypeError):
-            logger.error(f"Invalid confidence value: {response['confidence']}")
-            return None
-        
-        # Validate leverage
-        try:
-            leverage = float(response.get("leverage", 1.0))
-            if not 1.0 <= leverage <= 10.0:
-                logger.error(f"Leverage {leverage} must be between 1.0 and 10.0")
-                return None
-            response["leverage"] = leverage
-        except (ValueError, TypeError):
-            logger.error(f"Invalid leverage value: {response.get('leverage')}")
+        # Use security manager for validation
+        if not self.security_manager.validate_trading_decision(response):
+            logger.error("Trading decision failed security validation")
             return None
         
         # Validate exit plan structure
@@ -287,6 +261,9 @@ Provide your trading decision in the exact JSON format above. Include specific e
         
         return response
     
+    @circuit_breaker(CircuitBreakerConfig(failure_threshold=3, recovery_timeout=30))
+    @retry(RetryConfig(max_attempts=3, base_delay=1.0, max_delay=10.0))
+    @rate_limit(60)  # 60 requests per minute
     def _make_api_request(self, prompt: str) -> Dict:
         """
         Make actual API request to the configured LLM provider.
@@ -492,6 +469,8 @@ Provide your trading decision in the exact JSON format above. Include specific e
             ]
         }
     
+    @validate_trading_inputs
+    @fallback(lambda: {"action": "hold", "direction": "none", "confidence": 0.0, "justification": "Fallback due to error"})
     def get_trading_decision(self, market_data: Dict, portfolio_state: Dict = None) -> Dict:
         """
         Get a trading decision from the LLM based on market data and portfolio state.
