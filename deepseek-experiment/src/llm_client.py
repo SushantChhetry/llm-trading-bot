@@ -246,7 +246,7 @@ Provide your trading decision in the exact JSON format above. Include specific e
             exit_plan = {}
         
         # Set defaults for optional fields
-        response["direction"] = direction.lower()
+        response["direction"] = response.get("direction", "none").lower()
         response["quantity"] = float(response.get("quantity", 0.0))
         response["position_size_usdt"] = float(response.get("position_size_usdt", 0.0))
         response["risk_assessment"] = response.get("risk_assessment", "medium")

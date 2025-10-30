@@ -6,7 +6,7 @@ Supports Bybit and Binance, with testnet option for safe experimentation.
 """
 
 import logging
-from typing import Dict, Optional
+from typing import Dict, Optional, List
 import ccxt
 
 from config import config
@@ -97,23 +97,50 @@ class DataFetcher:
         
         Returns:
             Current last price as float
+            
+        Raises:
+            ValueError: If price data is invalid
+            Exception: If fetching ticker fails
         """
         ticker = self.get_ticker()
-        return float(ticker["last"])
+        try:
+            price = float(ticker["last"])
+            if price <= 0:
+                raise ValueError(f"Invalid price: {price}")
+            return price
+        except (ValueError, TypeError, KeyError) as e:
+            logger.error(f"Error extracting price from ticker: {e}")
+            raise ValueError(f"Invalid price data: {ticker.get('last', 'N/A')}")
     
-    def get_ohlcv(self, timeframe: str = "1m", limit: int = 100) -> list:
+    def get_ohlcv(self, timeframe: str = "1m", limit: int = 100) -> List[List]:
         """
         Fetch OHLCV (Open, High, Low, Close, Volume) candlestick data.
         
         Args:
             timeframe: Candlestick timeframe (e.g., "1m", "5m", "1h")
-            limit: Number of candles to fetch
+            limit: Number of candles to fetch (max 1000)
             
         Returns:
-            List of OHLCV candles
+            List of OHLCV candles [timestamp, open, high, low, close, volume]
+            
+        Raises:
+            ValueError: If parameters are invalid
+            Exception: If fetching fails
         """
+        # Validate inputs
+        if not isinstance(timeframe, str) or not timeframe:
+            raise ValueError("Timeframe must be a non-empty string")
+        
+        if not isinstance(limit, int) or limit <= 0 or limit > 1000:
+            raise ValueError("Limit must be an integer between 1 and 1000")
+        
         try:
             ohlcv = self.exchange.fetch_ohlcv(self.symbol, timeframe, limit=limit)
+            
+            # Validate response
+            if not ohlcv or not isinstance(ohlcv, list):
+                raise ValueError("Invalid OHLCV data received")
+            
             logger.debug(f"Fetched {len(ohlcv)} candles for {self.symbol}")
             return ohlcv
         except Exception as e:
@@ -125,13 +152,29 @@ class DataFetcher:
         Fetch current order book data.
         
         Args:
-            limit: Number of orders on each side to fetch
+            limit: Number of orders on each side to fetch (max 100)
             
         Returns:
             Dictionary with 'bids' and 'asks' arrays
+            
+        Raises:
+            ValueError: If parameters are invalid
+            Exception: If fetching fails
         """
+        # Validate inputs
+        if not isinstance(limit, int) or limit <= 0 or limit > 100:
+            raise ValueError("Limit must be an integer between 1 and 100")
+        
         try:
             orderbook = self.exchange.fetch_order_book(self.symbol, limit)
+            
+            # Validate response structure
+            if not isinstance(orderbook, dict):
+                raise ValueError("Invalid orderbook data received")
+            
+            if 'bids' not in orderbook or 'asks' not in orderbook:
+                raise ValueError("Orderbook missing required 'bids' or 'asks' fields")
+            
             return orderbook
         except Exception as e:
             logger.error(f"Error fetching orderbook: {e}")

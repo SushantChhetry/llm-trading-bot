@@ -164,6 +164,12 @@ class TradingBot:
             with self.console.status("[bold green]Fetching market data...", spinner="dots"):
                 ticker = self.data_fetcher.get_ticker()
                 current_price = float(ticker["last"])
+                
+                # Validate market data
+                if current_price <= 0:
+                    logger.error("Invalid market price received")
+                    self.console.print("[bold red]❌ Invalid market data - skipping cycle[/bold red]")
+                    return
             
             market_data = {
                 "symbol": config.SYMBOL,
@@ -309,9 +315,15 @@ class TradingBot:
             
             self.console.print("[bold green]✅ Trading cycle completed successfully[/bold green]")
             
+        except ValueError as e:
+            self.console.print(f"[bold red]❌ Data validation error: {e}[/bold red]")
+            logger.error(f"Data validation error in trading cycle: {e}")
+        except ConnectionError as e:
+            self.console.print(f"[bold red]❌ Network error: {e}[/bold red]")
+            logger.error(f"Network error in trading cycle: {e}")
         except Exception as e:
-            self.console.print(f"[bold red]❌ Error in trading cycle: {e}[/bold red]")
-            logger.error(f"Error in trading cycle: {e}", exc_info=True)
+            self.console.print(f"[bold red]❌ Unexpected error in trading cycle: {e}[/bold red]")
+            logger.error(f"Unexpected error in trading cycle: {e}", exc_info=True)
             # Continue running despite errors
     
     def run(self):
