@@ -1,4 +1,3 @@
-import React from 'react';
 import { PnLChart } from './components/PnLChart';
 import { PortfolioOverview } from './components/PortfolioOverview';
 import { RecentTrades } from './components/RecentTrades';
