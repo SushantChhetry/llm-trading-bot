@@ -334,10 +334,14 @@ if __name__ == "__main__":
     ws_thread.start()
     
     # Start FastAPI server
+    # Railway sets PORT environment variable automatically
+    port = int(os.getenv("PORT", "8001"))
+    
     print("🚀 Starting Trading Bot API Server...")
-    print("📊 API available at: http://localhost:8001")
+    print(f"📊 API available at: http://0.0.0.0:{port}")
     print("🔌 WebSocket available at: ws://localhost:8002")
     print("🌐 Dashboard available at: http://localhost:3000")
     print(f"🗄️  Database: {'Supabase' if USE_SUPABASE else 'JSON Files'}")
+    print(f"🔌 Listening on port: {port}")
     
-    uvicorn.run(app, host="0.0.0.0", port=8001)
+    uvicorn.run(app, host="0.0.0.0", port=port)

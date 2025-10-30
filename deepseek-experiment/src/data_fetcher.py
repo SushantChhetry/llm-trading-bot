@@ -134,7 +134,7 @@ class DataFetcher:
         try:
             # Use circuit breaker and retry handler
             ticker = exchange_circuit_breaker.call(
-                lambda: self.retry_handler.execute(_fetch)
+                lambda: self.retry_handler.call(_fetch)
             )
             mode_indicator = "🧪" if config.USE_TESTNET else "🌐"
             logger.debug(f"{mode_indicator} Fetched ticker for {self.symbol}: ${ticker['last']:,.2f}")
@@ -213,7 +213,7 @@ class DataFetcher:
         
         try:
             ohlcv = exchange_circuit_breaker.call(
-                lambda: self.retry_handler.execute(_fetch)
+                lambda: self.retry_handler.call(_fetch)
             )
             
             # Validate response
@@ -255,7 +255,7 @@ class DataFetcher:
         
         try:
             orderbook = exchange_circuit_breaker.call(
-                lambda: self.retry_handler.execute(_fetch)
+                lambda: self.retry_handler.call(_fetch)
             )
             
             # Validate response structure
