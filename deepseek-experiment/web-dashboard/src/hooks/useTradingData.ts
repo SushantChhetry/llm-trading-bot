@@ -17,6 +17,22 @@ const INITIAL_POLL_INTERVAL = 5000; // 5 seconds
 const ERROR_RETRY_INTERVAL = 30000; // 30 seconds when error
 const MAX_ERROR_RETRY_INTERVAL = 300000; // 5 minutes max delay
 
+// Get API base URL from environment variable or use relative path
+// Vercel rewrites will handle /api/* requests, or use VITE_API_URL if set
+const API_BASE_URL = import.meta.env.VITE_API_URL || '';
+
+// Helper function to build API URL
+const getApiUrl = (endpoint: string): string => {
+  if (API_BASE_URL) {
+    // If VITE_API_URL is set, use it (with or without trailing slash)
+    const base = API_BASE_URL.endsWith('/') ? API_BASE_URL.slice(0, -1) : API_BASE_URL;
+    const path = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+    return `${base}${path}`;
+  }
+  // Otherwise use relative path (works with Vercel rewrites and local dev proxy)
+  return endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+};
+
 export function useTradingData() {
   const [data, setData] = useState<TradingData>({
     trades: [],
@@ -65,13 +81,13 @@ export function useTradingData() {
       });
 
       const [tradesRes, portfolioRes, statusRes] = await Promise.all([
-        fetch('/api/trades').catch(err => {
+        fetch(getApiUrl('/api/trades')).catch(err => {
           throw new Error(`Failed to fetch trades: ${err.message}`);
         }),
-        fetch('/api/portfolio').catch(err => {
+        fetch(getApiUrl('/api/portfolio')).catch(err => {
           throw new Error(`Failed to fetch portfolio: ${err.message}`);
         }),
-        fetch('/api/status').catch(err => {
+        fetch(getApiUrl('/api/status')).catch(err => {
           throw new Error(`Failed to fetch status: ${err.message}`);
         }),
       ]);

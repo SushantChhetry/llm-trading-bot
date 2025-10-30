@@ -187,7 +187,11 @@ RISK MANAGEMENT:
 - Optimize for risk-adjusted returns, not just raw profits
 - Be consistent with your exit plans - don't contradict yourself
 
-REQUIRED RESPONSE FORMAT (JSON only):
+REQUIRED RESPONSE FORMAT (Valid JSON only - no markdown, no code blocks):
+
+You MUST respond with ONLY valid JSON. Do NOT wrap it in markdown code blocks (no ```json or ```). Do NOT add any explanatory text before or after the JSON. All keys MUST be in double quotes.
+
+Format:
 {{
     "action": "buy|sell|hold",
     "direction": "long|short|none",
@@ -204,14 +208,106 @@ REQUIRED RESPONSE FORMAT (JSON only):
     "risk_assessment": "low|medium|high"
 }}
 
-Provide your trading decision in the exact JSON format above. Include specific exit conditions and risk parameters.
+CRITICAL: Respond with ONLY the raw JSON object above. Start with {{ and end with }}. All property names must be in double quotes (e.g., "action" not action). No markdown formatting, no code blocks, no extra text.
 """
         return prompt.strip()
+    
+    def _extract_json_from_text(self, text: str) -> Optional[str]:
+        """
+        Extract JSON object from text, handling markdown code blocks and nested braces.
+        
+        Args:
+            text: Text that may contain JSON
+            
+        Returns:
+            Extracted JSON string, or None if not found
+        """
+        # Clean up the text
+        cleaned = text.strip()
+        
+        # Remove markdown code blocks if present
+        # Match ```json ... ``` or ``` ... ```
+        code_block_pattern = r'```(?:json)?\s*\n?(.*?)\n?```'
+        code_block_match = re.search(code_block_pattern, cleaned, re.DOTALL)
+        if code_block_match:
+            cleaned = code_block_match.group(1).strip()
+        
+        # Find the first { and then find the matching }
+        start_idx = cleaned.find('{')
+        if start_idx == -1:
+            return None
+        
+        # Count braces to find the matching closing brace
+        brace_count = 0
+        in_string = False
+        escape_next = False
+        
+        for i in range(start_idx, len(cleaned)):
+            char = cleaned[i]
+            
+            if escape_next:
+                escape_next = False
+                continue
+            
+            if char == '\\':
+                escape_next = True
+                continue
+            
+            if char == '"' and not escape_next:
+                in_string = not in_string
+                continue
+            
+            if not in_string:
+                if char == '{':
+                    brace_count += 1
+                elif char == '}':
+                    brace_count -= 1
+                    if brace_count == 0:
+                        # Found the matching closing brace
+                        json_str = cleaned[start_idx:i+1]
+                        return json_str
+        
+        return None
+    
+    def _fix_json_keys(self, json_str: str) -> str:
+        """
+        Fix unquoted keys in JSON (JavaScript-style to JSON).
+        
+        Args:
+            json_str: JSON string with potential unquoted keys
+            
+        Returns:
+            JSON string with quoted keys
+        """
+        # Use regex to find and quote unquoted keys
+        # Pattern matches: ({ or ,) whitespace? identifier whitespace? :
+        # This handles the common case of unquoted keys
+        def quote_key(match):
+            prefix = match.group(1)  # { or ,
+            whitespace1 = match.group(2) or ''  # optional whitespace
+            key = match.group(3)      # the key name (identifier)
+            whitespace2 = match.group(4) or ''  # optional whitespace before :
+            return f'{prefix}{whitespace1}"{key}"{whitespace2}:'
+        
+        # Match unquoted keys that appear after { or ,
+        # Pattern breakdown:
+        # ([{,]) - matches { or ,
+        # (\s*) - optional whitespace
+        # ([a-zA-Z_][a-zA-Z0-9_]*) - identifier (word starting with letter/underscore)
+        # (\s*) - optional whitespace before colon
+        # : - colon
+        json_str = re.sub(r'([{,])(\s*)([a-zA-Z_][a-zA-Z0-9_]*)(\s*):', quote_key, json_str)
+        return json_str
     
     @validate_trading_inputs
     def _validate_llm_response(self, response_text: str) -> Optional[Dict]:
         """
         Validate and parse LLM response JSON.
+        
+        Handles:
+        - Markdown code blocks (```json ... ```)
+        - Multiline JSON
+        - Unquoted keys (JavaScript-style JSON)
         
         Args:
             response_text: Raw response text from LLM
@@ -219,21 +315,40 @@ Provide your trading decision in the exact JSON format above. Include specific e
         Returns:
             Parsed and validated response dict, or None if invalid
         """
+        # First, try parsing directly
         try:
-            # Try to parse as JSON directly
-            response = json.loads(response_text)
+            response = json.loads(response_text.strip())
+            return self._validate_response_structure(response)
         except json.JSONDecodeError:
-            # Try to extract JSON from text using regex
-            json_match = re.search(r'\{[^{}]*"action"[^{}]*\}', response_text, re.DOTALL)
-            if json_match:
-                try:
-                    response = json.loads(json_match.group())
-                except json.JSONDecodeError:
-                    logger.error(f"Could not parse JSON from response: {response_text[:200]}...")
-                    return None
-            else:
-                logger.error(f"No JSON found in response: {response_text[:200]}...")
-                return None
+            pass
+        
+        # Extract JSON from text
+        json_str = self._extract_json_from_text(response_text)
+        
+        if json_str:
+            # Try to fix unquoted keys
+            json_str = self._fix_json_keys(json_str)
+            
+            try:
+                response = json.loads(json_str)
+                return self._validate_response_structure(response)
+            except json.JSONDecodeError as e:
+                logger.error(f"Could not parse JSON after extraction and fixes: {e}")
+                logger.debug(f"Extracted JSON string: {json_str[:300]}...")
+        
+        logger.error(f"No valid JSON found in response: {response_text[:200]}...")
+        return None
+    
+    def _validate_response_structure(self, response: Dict) -> Optional[Dict]:
+        """
+        Validate and normalize the response structure.
+        
+        Args:
+            response: Parsed JSON response
+            
+        Returns:
+            Validated and normalized response dict, or None if invalid
+        """
         
         # Use security manager for validation
         if not self.security_manager.validate_trading_decision(response):

@@ -31,24 +31,37 @@ app = FastAPI(title="Trading Bot API", version="1.0.0")
 # Enable CORS for React frontend
 # Get allowed origins from environment variable for production
 cors_origins_str = os.getenv("CORS_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000")
-cors_origins = [origin.strip() for origin in cors_origins_str.split(",")]
+cors_origins = [origin.strip() for origin in cors_origins_str.split(",") if origin.strip()]
 
-# Allow all Vercel deployments if in production
-if os.getenv("ENVIRONMENT") == "production":
-    cors_origins.extend([
-        "https://*.vercel.app",  # All Vercel preview deployments
-        "https://*.railway.app",  # All Railway deployments
-    ])
+# CORS configuration for production (Vercel + Railway)
+is_production = os.getenv("ENVIRONMENT") == "production"
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=cors_origins,
-    allow_credentials=True,
-    allow_methods=["GET", "POST", "OPTIONS"],
-    allow_headers=["*"],
-    expose_headers=["*"],
-    max_age=3600,
-)
+if is_production:
+    # In production, use regex to allow all Vercel deployments
+    # This includes production, preview, and branch deployments
+    cors_origin_regex = r"https://.*\.vercel\.app"
+    
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=cors_origins,  # Any explicitly listed origins
+        allow_origin_regex=cors_origin_regex,  # All Vercel deployments via regex
+        allow_credentials=True,
+        allow_methods=["GET", "POST", "OPTIONS"],
+        allow_headers=["*"],
+        expose_headers=["*"],
+        max_age=3600,
+    )
+else:
+    # Development: only allow specific localhost origins
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=cors_origins,
+        allow_credentials=True,
+        allow_methods=["GET", "POST", "OPTIONS"],
+        allow_headers=["*"],
+        expose_headers=["*"],
+        max_age=3600,
+    )
 
 # Initialize Supabase service
 supabase = None
