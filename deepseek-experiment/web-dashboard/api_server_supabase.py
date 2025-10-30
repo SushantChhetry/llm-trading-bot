@@ -29,17 +29,25 @@ from supabase_client import get_supabase_service
 app = FastAPI(title="Trading Bot API", version="1.0.0")
 
 # Enable CORS for React frontend
+# Get allowed origins from environment variable for production
+cors_origins_str = os.getenv("CORS_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000")
+cors_origins = [origin.strip() for origin in cors_origins_str.split(",")]
+
+# Allow all Vercel deployments if in production
+if os.getenv("ENVIRONMENT") == "production":
+    cors_origins.extend([
+        "https://*.vercel.app",  # All Vercel preview deployments
+        "https://*.railway.app",  # All Railway deployments
+    ])
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-        "https://your-app.vercel.app",  # Add your Vercel domain
-        "https://*.vercel.app"  # Allow all Vercel preview deployments
-    ],
+    allow_origins=cors_origins,
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["*"],
+    expose_headers=["*"],
+    max_age=3600,
 )
 
 # Initialize Supabase service
@@ -225,6 +233,38 @@ def start_websocket_server():
 async def root():
     """Root endpoint."""
     return {"message": "Trading Bot API Server", "version": "1.0.0", "database": "Supabase" if USE_SUPABASE else "JSON"}
+
+@app.get("/health")
+async def health():
+    """Health check endpoint for Railway and monitoring."""
+    try:
+        # Check database connection
+        db_status = "healthy" if USE_SUPABASE else "fallback"
+        if USE_SUPABASE:
+            try:
+                # Quick database ping (use await since we're in async context)
+                await supabase.get_trades(limit=1)
+            except Exception as e:
+                db_status = f"unhealthy: {str(e)}"
+        
+        return {
+            "status": "healthy",
+            "timestamp": datetime.now().isoformat(),
+            "database": db_status,
+            "version": "1.0.0",
+            "environment": os.getenv("ENVIRONMENT", "development")
+        }
+    except Exception as e:
+        from fastapi import Response
+        return Response(
+            content=json.dumps({
+                "status": "unhealthy",
+                "error": str(e),
+                "timestamp": datetime.now().isoformat()
+            }),
+            status_code=503,
+            media_type="application/json"
+        )
 
 @app.get("/api/status")
 async def status():

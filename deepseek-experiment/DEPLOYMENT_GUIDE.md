@@ -1,10 +1,10 @@
-# DigitalOcean + Supabase Deployment Guide
+# Railway + Supabase Deployment Guide
 
 ## Quick Start
 
 ### Prerequisites
 1. **Supabase Setup**: Your project is at https://uedfxgpduaramoagiatz.supabase.co
-2. **DigitalOcean Account**: Create account and add SSH key
+2. **Railway Account**: Sign up at https://railway.app and connect your GitHub account
 3. **API Keys**: Get DeepSeek API key and Supabase anon key
 
 ### Step 1: Supabase Database Setup
@@ -14,37 +14,58 @@
 4. Run the SQL to create tables
 5. Get your anon key from Settings > API
 
-### Step 2: DigitalOcean Droplet Setup
-1. Create a new droplet:
-   - OS: Ubuntu 22.04 LTS
-   - Size: Basic ($6/month - 1GB RAM, 25GB SSD, 1 vCPU)
-   - Region: Choose closest to you
-   - Authentication: SSH key
-   - Hostname: trading-bot
+### Step 2: Railway Project Setup
+1. Create a new Railway project:
+   - Go to https://railway.app
+   - Click "New Project"
+   - Select "Deploy from GitHub repo"
+   - Choose your repository
 
-### Step 3: Deploy to DigitalOcean
-```bash
-# SSH into your droplet
-ssh root@YOUR_DROPLET_IP
+### Step 3: Deploy Backend to Railway
+1. **Add Backend Service**:
+   - Click "+ New" → "GitHub Repo" → Select your repo
+   - Railway will auto-detect the Python project
+   - Set root directory to `deepseek-experiment`
+   - **Add Environment Variables** (see `RAILWAY_ENV_VARS.md` for complete list):
+     
+     **Minimum Required:**
+     ```
+     ENVIRONMENT=production
+     LLM_PROVIDER=deepseek
+     LLM_API_KEY=your_deepseek_api_key
+     LLM_MODEL=deepseek-chat
+     TRADING_MODE=paper
+     USE_TESTNET=true
+     EXCHANGE=bybit
+     SYMBOL=BTC/USDT
+     LOG_LEVEL=INFO
+     ```
+     
+     **📋 See `RAILWAY_ENV_VARS.md` for the complete list of all environment variables.**
 
-# Clone repository
-git clone YOUR_REPO_URL /opt/trading-bot
-cd /opt/trading-bot
+2. **Configure Service**:
+   - Set the root directory to `deepseek-experiment`
+   - Railway will automatically:
+     - Detect Python
+     - Install dependencies from `requirements.txt`
+     - Use the start command from `railway.json` or `Procfile`: `python -m src.main`
+     - Run the application
+   
+   **Note**: The `railway.json` file is already configured with the correct start command, so Railway will automatically use it.
 
-# Copy and edit environment file
-cp env.production.template .env
-nano .env  # Update with your actual API keys
-
-# Run deployment
-bash scripts/deploy.sh
-bash scripts/setup_systemd.sh
-bash scripts/setup_nginx.sh
-bash scripts/configure_logrotate.sh
-
-# Start services
-sudo systemctl start trading-bot
-sudo systemctl start trading-api
-```
+3. **Add API Server Service** (Optional):
+   - Create another service for the API
+   - Root directory: `deepseek-experiment/web-dashboard`
+   - Install command: `pip install -r requirements.txt`
+   - Start command: `python api_server_supabase.py`
+   - Expose port: 8001
+   - **Add Environment Variables:**
+     ```
+     ENVIRONMENT=production
+     SUPABASE_URL=https://uedfxgpduaramoagiatz.supabase.co
+     SUPABASE_KEY=your_supabase_anon_key
+     CORS_ORIGINS=https://your-app.vercel.app
+     ```
 
 ### Step 4: Deploy Frontend to Vercel
 ```bash
@@ -66,79 +87,96 @@ vercel --prod
 
 ### Check Services
 ```bash
-# Check bot status
-sudo systemctl status trading-bot
+# Via Railway dashboard:
+# - Go to https://railway.app
+# - Open your project
+# - Check service status (should show "Active")
+# - View deployment history
 
-# Check API status
-sudo systemctl status trading-api
-
-# View logs
-sudo journalctl -u trading-bot -f
+# Or via Railway CLI:
+railway status
+railway logs
 ```
 
 ### Test API Endpoints
 ```bash
-# Test API
-curl http://YOUR_DROPLET_IP/api/status
+# Test API (using Railway-provided URL)
+curl https://your-service.railway.app/api/status
 
 # Check portfolio
-curl http://YOUR_DROPLET_IP/api/portfolio
+curl https://your-service.railway.app/api/portfolio
 
 # View trades
-curl http://YOUR_DROPLET_IP/api/trades
+curl https://your-service.railway.app/api/trades
 ```
 
 ### Access Web Dashboard
 - Vercel URL: `https://your-app.vercel.app`
-- Direct API: `http://YOUR_DROPLET_IP/api/`
+- Railway API: `https://your-service.railway.app/api/`
 
 ## Monitoring
 
 ### Quick Status Check
 ```bash
-bash scripts/monitor.sh
+# Via Railway dashboard:
+# - Go to your project at https://railway.app
+# - Click on your service
+# - View logs, metrics, and deployment status
+
+# Or via Railway CLI:
+railway logs
+railway status
 ```
 
 ### Log Files
-- Application logs: `/opt/trading-bot/data/logs/trading-bot.log`
-- Error logs: `/opt/trading-bot/data/logs/trading-bot.error.log`
-- JSON logs: `/opt/trading-bot/data/logs/trading-bot.json.log`
+Railway automatically collects and displays logs in the dashboard:
+- Application logs: Available in Railway dashboard → Service → Logs
+- Error logs: Filtered automatically in Railway dashboard
+- JSON logs: Parsed and displayed in structured format
 
-### System Logs
+### Viewing Logs
 ```bash
-# Bot logs
-sudo journalctl -u trading-bot -f
+# Via Railway CLI (install: npm i -g @railway/cli)
+railway logs --tail 100
 
-# API logs
-sudo journalctl -u trading-api -f
-
-# Nginx logs
-sudo tail -f /var/log/nginx/access.log
-sudo tail -f /var/log/nginx/error.log
+# In Railway Dashboard:
+# - Go to your service
+# - Click "Deployments" tab
+# - Click on a deployment to view logs
+# - Use filters to search for errors or specific events
 ```
 
 ## Maintenance
 
 ### Update Application
 ```bash
-cd /opt/trading-bot
-git pull origin main
-sudo systemctl restart trading-bot
-sudo systemctl restart trading-api
+# With Railway, deployments are automatic via GitHub
+# Just push to your main branch:
+git push origin main
+
+# Railway will automatically:
+# - Build the new version
+# - Run tests if configured
+# - Deploy the update
+# - Switch traffic to new deployment
 ```
 
 ### Backup Data
 ```bash
-# Daily backup (already configured in crontab)
-cd /opt/trading-bot
-tar -czf /opt/backups/trading-bot-$(date +%Y%m%d).tar.gz data/
+# Railway provides automatic backups for PostgreSQL databases
+# For application data, use Railway's volume persistence feature
+# Configure backups in Railway dashboard → Project → Settings → Backups
 ```
 
 ### Restart Services
 ```bash
-sudo systemctl restart trading-bot
-sudo systemctl restart trading-api
-sudo systemctl restart nginx
+# In Railway dashboard:
+# - Go to your service
+# - Click "Deployments" tab
+# - Click "Redeploy" on the latest deployment
+
+# Or via Railway CLI:
+railway redeploy
 ```
 
 ## Troubleshooting
@@ -147,32 +185,55 @@ sudo systemctl restart nginx
 
 1. **Service won't start**
    ```bash
-   sudo journalctl -u trading-bot -n 50
+   # Check logs in Railway dashboard
+   # Or via CLI:
+   railway logs --tail 100
+   
+   # Check deployment status
+   railway status
    ```
 
 2. **API not responding**
    ```bash
-   curl -v http://localhost:8001/api/status
-   sudo systemctl status trading-api
+   # Check Railway service URL
+   curl -v https://your-service.railway.app/api/status
+   
+   # View service logs
+   railway logs api
    ```
 
 3. **Database connection issues**
    ```bash
    # Check Supabase connection
    python -c "from web_dashboard.supabase_client import get_supabase_service; print(get_supabase_service())"
+   
+   # Verify environment variables in Railway dashboard
+   # Settings → Variables → Check SUPABASE_URL and SUPABASE_ANON_KEY
    ```
 
-4. **Permission issues**
+4. **Environment variable issues**
    ```bash
-   sudo chown -R $USER:$USER /opt/trading-bot
-   chmod -R 755 /opt/trading-bot
+   # View environment variables (via CLI)
+   railway variables
+   
+   # Or check in Railway dashboard:
+   # Settings → Variables
+   ```
+
+5. **Deployment failures**
+   ```bash
+   # View build logs
+   railway logs --build
+   
+   # Check requirements.txt is valid
+   pip install -r requirements.txt --dry-run
    ```
 
 ## Cost Breakdown
-- DigitalOcean Basic Droplet: $6/month
+- Railway Starter Plan: $5/month (includes $5 usage credit, pay-as-you-go after)
 - Supabase Free Tier: $0 (500MB database, 2GB bandwidth)
 - Vercel Free Tier: $0 (unlimited static sites)
-- **Total: $6/month**
+- **Total: ~$5-10/month** (depending on usage)
 
 ## Security Notes
 - API keys are stored in environment variables
