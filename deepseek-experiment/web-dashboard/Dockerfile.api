@@ -15,17 +15,17 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements first for better caching
-COPY requirements.txt .
+COPY web-dashboard/requirements.txt .
 
 # Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy the API server code
-COPY api_server.py .
+COPY web-dashboard/api_server.py .
 
-# Copy the parent directory structure for imports
-COPY ../config ./config
-COPY ../src ./src
+# Copy the directory structure for imports
+COPY config ./config
+COPY src ./src
 
 # Create data directory
 RUN mkdir -p data/logs

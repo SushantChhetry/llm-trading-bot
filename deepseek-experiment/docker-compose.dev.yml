@@ -1,9 +1,32 @@
 services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: trading-bot-postgres-dev
+    environment:
+      - POSTGRES_DB=trading_bot
+      - POSTGRES_USER=trading_user
+      - POSTGRES_PASSWORD=trading_password
+      - POSTGRES_INITDB_ARGS=--encoding=UTF-8 --lc-collate=C --lc-ctype=C
+    ports:
+      - "5434:5432"
+    volumes:
+      - postgres_data_dev:/var/lib/postgresql/data
+      - ./scripts/init_db.sql:/docker-entrypoint-initdb.d/init_db.sql:ro
+    networks:
+      - trading-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U trading_user -d trading_bot"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   # API Server (Backend) - Development mode
   api:
     build:
-      context: ./web-dashboard
-      dockerfile: Dockerfile.api
+      context: .
+      dockerfile: web-dashboard/Dockerfile.api
     container_name: trading-bot-api-dev
     ports:
       - "8001:8001"
@@ -21,6 +44,7 @@ services:
       - TAKE_PROFIT_PERCENT=${TAKE_PROFIT_PERCENT:-3.0}
       - RUN_INTERVAL_SECONDS=${RUN_INTERVAL_SECONDS:-300}
       - LOG_LEVEL=${LOG_LEVEL:-DEBUG}
+      - DATABASE_URL=postgresql://trading_user:trading_password@postgres:5432/trading_bot
     volumes:
       - ./data:/app/data
       - ./logs:/app/logs
@@ -28,6 +52,9 @@ services:
     networks:
       - trading-network
     restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
 
   # React Frontend - Development mode with hot reload
   frontend:
@@ -50,3 +77,6 @@ services:
 networks:
   trading-network:
     driver: bridge
+
+volumes:
+  postgres_data_dev:

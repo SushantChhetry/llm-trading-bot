@@ -3,7 +3,7 @@
 API Server for Trading Bot Dashboard
 
 Serves trading data to the React frontend via REST API endpoints.
-Reads data from the trading bot's JSON files and provides real-time updates.
+Uses Supabase as the database backend for reliable data storage.
 """
 
 import json
@@ -24,6 +24,7 @@ project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 from config import config
+from supabase_client import get_supabase_service
 
 app = FastAPI(title="Trading Bot API", version="1.0.0")
 
@@ -183,11 +184,13 @@ async def websocket_endpoint(websocket, path):
 
 def start_websocket_server():
     """Start WebSocket server in a separate thread."""
+    async def run_websocket():
+        async with websockets.serve(websocket_endpoint, "localhost", 8002):
+            await asyncio.Future()  # Run forever
+    
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
-    start_server = websockets.serve(websocket_endpoint, "localhost", 8002)
-    loop.run_until_complete(start_server)
-    loop.run_forever()
+    loop.run_until_complete(run_websocket())
 
 if __name__ == "__main__":
     import threading
