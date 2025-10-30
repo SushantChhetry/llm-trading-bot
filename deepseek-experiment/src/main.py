@@ -10,6 +10,7 @@ import time
 import sys
 import argparse
 import json
+import os
 from pathlib import Path
 from datetime import datetime
 from typing import Dict
@@ -34,18 +35,29 @@ from config import config
 from src.data_fetcher import DataFetcher
 from src.llm_client import LLMClient
 from src.trading_engine import TradingEngine
+from src.logger import configure_production_logging, get_logger
 
-# Configure logging
-logging.basicConfig(
-    level=getattr(logging, config.LOG_LEVEL),
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler(config.LOG_FILE),
-        logging.StreamHandler(sys.stdout)
-    ]
-)
+# Configure logging based on environment
+environment = os.getenv("ENVIRONMENT", "development")
+if environment == "production":
+    configure_production_logging(
+        log_level=os.getenv("LOG_LEVEL", "INFO"),
+        log_directory="data/logs",
+        app_name="trading-bot"
+    )
+else:
+    # Development logging
+    logging.basicConfig(
+        level=getattr(logging, config.LOG_LEVEL),
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        handlers=[
+            logging.FileHandler(config.LOG_FILE),
+            logging.StreamHandler(sys.stdout)
+        ]
+    )
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
+logger.info(f"Starting trading bot in {environment} mode")
 
 
 class TradingBot:

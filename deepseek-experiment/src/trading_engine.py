@@ -16,8 +16,9 @@ from config import config
 from .database_manager import get_database_manager
 from .security import SecurityManager, validate_trading_inputs
 from .resilience import circuit_breaker, retry, CircuitBreakerConfig, RetryConfig
+from .logger import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class TradingEngine:
@@ -51,6 +52,15 @@ class TradingEngine:
         
         # Initialize database manager
         self.db_manager = None
+        
+        # Initialize Supabase client for production
+        self.supabase_client = None
+        try:
+            from .supabase_client import get_supabase_service
+            self.supabase_client = get_supabase_service()
+            logger.info("Supabase client initialized successfully")
+        except Exception as e:
+            logger.warning(f"Failed to initialize Supabase client: {e}")
         
         # Load existing trades if file exists
         self._load_trades()
@@ -89,6 +99,13 @@ class TradingEngine:
                 json.dump(state, f, indent=2)
         except Exception as e:
             logger.error(f"Error saving portfolio state: {e}")
+        
+        # Save to Supabase if available
+        if self.supabase_client:
+            try:
+                asyncio.create_task(self.supabase_client.update_portfolio(state))
+            except Exception as e:
+                logger.warning(f"Failed to save portfolio to Supabase: {e}")
     
     def get_portfolio_value(self, current_price: float) -> float:
         """
@@ -215,6 +232,13 @@ class TradingEngine:
         self._save_trades()
         self._save_portfolio_state()
         
+        # Save to Supabase if available
+        if self.supabase_client:
+            try:
+                asyncio.create_task(self.supabase_client.add_trade(trade))
+            except Exception as e:
+                logger.warning(f"Failed to save trade to Supabase: {e}")
+        
         logger.info(f"BUY executed: {quantity:.6f} {symbol} @ ${price:.2f} (${amount_usdt:.2f})")
         return trade
     
@@ -293,6 +317,13 @@ class TradingEngine:
         self.trades.append(trade)
         self._save_trades()
         self._save_portfolio_state()
+        
+        # Save to Supabase if available
+        if self.supabase_client:
+            try:
+                asyncio.create_task(self.supabase_client.add_trade(trade))
+            except Exception as e:
+                logger.warning(f"Failed to save trade to Supabase: {e}")
         
         logger.info(f"SELL executed: {sell_quantity:.6f} {symbol} @ ${price:.2f} (profit: ${profit:.2f})")
         return trade
@@ -393,6 +424,13 @@ class TradingEngine:
         self.trades.append(trade)
         self._save_trades()
         self._save_portfolio_state()
+        
+        # Save to Supabase if available
+        if self.supabase_client:
+            try:
+                asyncio.create_task(self.supabase_client.add_trade(trade))
+            except Exception as e:
+                logger.warning(f"Failed to save trade to Supabase: {e}")
         
         logger.info(f"SHORT executed: {quantity:.6f} {symbol} @ ${price:.2f} (${amount_usdt:.2f})")
         return trade

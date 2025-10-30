@@ -1,16 +1,10 @@
 # Quick Installation Guide
 
-## Option 1: Use the Simple Package (Recommended)
+## Option 1: Standard Installation (Recommended)
 
-If you're getting dependency errors, use the simplified package.json:
+Install all dependencies using npm:
 
 ```bash
-# Backup the current package.json
-mv package.json package-full.json
-
-# Use the simplified version
-mv package-simple.json package.json
-
 # Install dependencies
 npm install
 ```
@@ -68,7 +62,7 @@ chmod +x setup.sh
 ## Troubleshooting
 
 ### If you get Radix UI errors:
-- Use the simplified package.json (Option 1 above)
+- Try installing dependencies one by one using Option 2 above
 - The dashboard will work without all Radix components
 
 ### If you get TypeScript errors:
@@ -81,12 +75,13 @@ chmod +x setup.sh
 
 ## What's Included
 
-The simplified version includes:
+The dashboard includes:
 - ✅ React + Vite
 - ✅ Recharts for graphs
 - ✅ Tailwind CSS for styling
 - ✅ Lucide React for icons
-- ✅ Basic UI components (Card, Badge, Separator)
+- ✅ Radix UI components for advanced UI elements
 - ✅ TypeScript support
+- ✅ WebSocket support for real-time updates
 
-The dashboard will work perfectly with these core dependencies!
+The dashboard provides a comprehensive trading bot monitoring interface!
