@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Badge } from './ui/badge';
 import { formatCurrency, formatTimestamp, getProfitColor } from '@/lib/utils';
@@ -9,7 +10,7 @@ interface RecentTradesProps {
   className?: string;
 }
 
-export function RecentTrades({ trades, className }: RecentTradesProps) {
+export const RecentTrades = memo(function RecentTrades({ trades, className }: RecentTradesProps) {
   const recentTrades = trades.slice(-10).reverse(); // Show last 10 trades, most recent first
 
   return (
@@ -86,4 +87,4 @@ export function RecentTrades({ trades, className }: RecentTradesProps) {
       </CardContent>
     </Card>
   );
-}
+});

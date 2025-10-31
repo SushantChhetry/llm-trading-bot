@@ -3,6 +3,8 @@ Market data fetcher module.
 
 Fetches live market data from cryptocurrency exchanges using ccxt library.
 Supports Bybit and Binance, with testnet option for safe experimentation.
+
+Includes technical indicator calculations for Alpha Arena-style trading signals.
 """
 
 import logging
@@ -10,6 +12,14 @@ import time
 from typing import Dict, Optional, List
 import ccxt
 from ccxt.base.errors import NetworkError, ExchangeError, RateLimitExceeded
+import pandas as pd
+
+try:
+    import pandas_ta as ta
+    PANDAS_TA_AVAILABLE = True
+except ImportError:
+    PANDAS_TA_AVAILABLE = False
+    logging.warning("pandas-ta not available. Technical indicators will return mock data. Install with: pip install pandas-ta")
 
 from config import config
 from .resilience import RetryHandler, RetryConfig, exchange_circuit_breaker
@@ -271,4 +281,114 @@ class DataFetcher:
                 logger.warning(f"⚠️ Geo-blocked from fetching orderbook. Consider using alternative exchange.")
             logger.error(f"Error fetching orderbook: {e}")
             raise
+
+    def get_technical_indicators(self, timeframe: str = "3m", limit: int = 100) -> Dict[str, float]:
+        """
+        Calculate technical indicators for Alpha Arena-style trading signals.
+
+        Calculates indicators matching Alpha Arena methodology:
+        - EMA 20, EMA 50 (Exponential Moving Averages)
+        - MACD (Moving Average Convergence Divergence)
+        - RSI 7, RSI 14 (Relative Strength Index)
+        - ATR (Average True Range)
+
+        Args:
+            timeframe: Candlestick timeframe (default "3m" for Alpha Arena)
+            limit: Number of candles to fetch for calculation (min 100)
+
+        Returns:
+            Dictionary containing all calculated indicators
+
+        Note:
+            Returns mock/fallback values if pandas-ta is not available or fetching fails.
+        """
+        try:
+            if not PANDAS_TA_AVAILABLE:
+                logger.warning("pandas-ta not available, returning mock indicators")
+                return self._get_mock_indicators()
+
+            # Fetch OHLCV data
+            try:
+                ohlcv = self.get_ohlcv(timeframe=timeframe, limit=limit)
+            except Exception as e:
+                logger.warning(f"Failed to fetch OHLCV for indicators: {e}. Using mock data.")
+                return self._get_mock_indicators()
+
+            # Convert to DataFrame
+            df = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
+            df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
+            df.set_index('timestamp', inplace=True)
+
+            # Calculate indicators using pandas-ta
+            try:
+                # EMA (Exponential Moving Average)
+                df['ema_20'] = ta.ema(df['close'], length=20)
+                df['ema_50'] = ta.ema(df['close'], length=50)
+
+                # MACD (Moving Average Convergence Divergence)
+                macd = ta.macd(df['close'], fast=12, slow=26, signal=9)
+                df['macd'] = macd['MACD_12_26_9']
+                df['macd_signal'] = macd['MACDs_12_26_9']
+                df['macd_histogram'] = macd['MACDh_12_26_9']
+
+                # RSI (Relative Strength Index)
+                df['rsi_7'] = ta.rsi(df['close'], length=7)
+                df['rsi_14'] = ta.rsi(df['close'], length=14)
+
+                # ATR (Average True Range)
+                df['atr'] = ta.atr(df['high'], df['low'], df['close'], length=14)
+
+                # Get the latest (most recent) values
+                latest = df.iloc[-1]
+
+                indicators = {
+                    'ema_20': float(latest['ema_20']) if not pd.isna(latest['ema_20']) else float(latest['close']),
+                    'ema_50': float(latest['ema_50']) if not pd.isna(latest['ema_50']) else float(latest['close']),
+                    'macd': float(latest['macd']) if not pd.isna(latest['macd']) else 0.0,
+                    'macd_signal': float(latest['macd_signal']) if not pd.isna(latest['macd_signal']) else 0.0,
+                    'macd_histogram': float(latest['macd_histogram']) if not pd.isna(latest['macd_histogram']) else 0.0,
+                    'rsi_7': float(latest['rsi_7']) if not pd.isna(latest['rsi_7']) else 50.0,
+                    'rsi_14': float(latest['rsi_14']) if not pd.isna(latest['rsi_14']) else 50.0,
+                    'atr': float(latest['atr']) if not pd.isna(latest['atr']) else 100.0,
+                    'current_price': float(latest['close']),
+                }
+
+                logger.debug(
+                    f"📊 Technical Indicators for {self.symbol}: "
+                    f"EMA20=${indicators['ema_20']:.2f}, RSI14={indicators['rsi_14']:.1f}, "
+                    f"MACD={indicators['macd']:.4f}"
+                )
+
+                return indicators
+
+            except Exception as e:
+                logger.error(f"Error calculating indicators: {e}")
+                return self._get_mock_indicators()
+
+        except Exception as e:
+            logger.error(f"Unexpected error in get_technical_indicators: {e}")
+            return self._get_mock_indicators()
+
+    def _get_mock_indicators(self) -> Dict[str, float]:
+        """
+        Generate mock technical indicators as fallback.
+
+        Returns reasonable default values that won't crash the LLM prompt.
+        """
+        try:
+            current_price = self.get_price()
+        except:
+            current_price = 50000.0  # Default BTC price
+
+        return {
+            'ema_20': current_price * 0.99,  # Slightly below current price
+            'ema_50': current_price * 0.98,  # Further below
+            'macd': 50.0,  # Neutral positive
+            'macd_signal': 45.0,
+            'macd_histogram': 5.0,  # Small bullish divergence
+            'rsi_7': 55.0,  # Slightly bullish
+            'rsi_14': 52.0,
+            'atr': current_price * 0.02,  # 2% of price
+            'current_price': current_price,
+        }
 

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { Trade, Portfolio, PnLDataPoint, BotStatus } from '@/types/trading';
 
 interface TradingData {
@@ -13,7 +13,7 @@ interface TradingData {
 }
 
 const MAX_RETRY_COUNT = 3;
-const INITIAL_POLL_INTERVAL = 5000; // 5 seconds
+const INITIAL_POLL_INTERVAL = 30000; // 30 seconds (optimized for Alpha Arena - bot updates every 2.5 min)
 const ERROR_RETRY_INTERVAL = 30000; // 30 seconds when error
 const MAX_ERROR_RETRY_INTERVAL = 300000; // 5 minutes max delay
 
@@ -115,58 +115,82 @@ export function useTradingData() {
         statusRes.json(),
       ]);
 
-      // Generate PnL data points from trades
-      const pnlData: PnLDataPoint[] = [];
-      let runningValue = portfolio?.initial_balance || 10000;
-      let runningReturn = 0;
-      let tradeCount = 0;
+      // Check if data has actually changed before updating state (prevents unnecessary re-renders)
+      setData(prev => {
+        const hasChanges = (
+          JSON.stringify(prev.trades) !== JSON.stringify(trades) ||
+          JSON.stringify(prev.portfolio) !== JSON.stringify(portfolio) ||
+          JSON.stringify(prev.botStatus) !== JSON.stringify(botStatus)
+        );
 
-      // Add initial point
-      pnlData.push({
-        timestamp: new Date().toISOString(),
-        total_value: runningValue,
-        total_return: 0,
-        total_return_pct: 0,
-        trade_count: 0,
-      });
-
-      // Process trades chronologically
-      const sortedTrades = [...trades].sort((a, b) => 
-        new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
-      );
-
-      for (const trade of sortedTrades) {
-        tradeCount++;
-        
-        if (trade.side === 'buy') {
-          runningValue -= trade.amount_usdt;
-        } else if (trade.side === 'sell') {
-          const sellValue = trade.quantity * trade.price;
-          runningValue += sellValue;
-          if (trade.profit !== undefined) {
-            runningReturn += trade.profit;
-          }
+        // If no changes and already connected, skip the expensive update
+        if (!hasChanges && prev.isConnected && !prev.error) {
+          return prev;
         }
 
-        pnlData.push({
-          timestamp: trade.timestamp,
-          total_value: runningValue + (portfolio?.positions_value || 0),
-          total_return: runningReturn,
-          total_return_pct: (runningReturn / (portfolio?.initial_balance || 10000)) * 100,
-          trade_count: tradeCount,
-        });
-      }
+        // Generate PnL data points from trades (only if data changed)
+        const pnlData: PnLDataPoint[] = [];
+        const initialBalance = portfolio?.initial_balance && !isNaN(portfolio.initial_balance) ? portfolio.initial_balance : 10000;
+        const positionsValue = portfolio?.positions_value && !isNaN(portfolio.positions_value) ? portfolio.positions_value : 0;
+        let runningValue = initialBalance;
+        let runningReturn = 0;
+        let tradeCount = 0;
 
-      // Success - reset error state
-      setData({
-        trades,
-        portfolio,
-        pnlData,
-        botStatus,
-        isLoading: false,
-        error: null,
-        isConnected: true,
-        retryCount: 0,
+        // Add initial point
+        pnlData.push({
+          timestamp: new Date().toISOString(),
+          total_value: runningValue,
+          total_return: 0,
+          total_return_pct: 0,
+          trade_count: 0,
+        });
+
+        // Process trades chronologically
+        const sortedTrades = [...trades].sort((a, b) =>
+          new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+        );
+
+        for (const trade of sortedTrades) {
+          tradeCount++;
+
+          if (trade.side === 'buy') {
+            const amount = trade.amount_usdt && !isNaN(trade.amount_usdt) ? trade.amount_usdt : 0;
+            runningValue -= amount;
+          } else if (trade.side === 'sell') {
+            const quantity = trade.quantity && !isNaN(trade.quantity) ? trade.quantity : 0;
+            const price = trade.price && !isNaN(trade.price) ? trade.price : 0;
+            const sellValue = quantity * price;
+            runningValue += sellValue;
+            if (trade.profit !== undefined && !isNaN(trade.profit)) {
+              runningReturn += trade.profit;
+            }
+          }
+
+          // Ensure all values are valid numbers
+          const totalValue = (runningValue + positionsValue) || 0;
+          const totalReturn = runningReturn || 0;
+          const totalReturnPct = initialBalance > 0 ? (totalReturn / initialBalance) * 100 : 0;
+
+          pnlData.push({
+            timestamp: trade.timestamp,
+            total_value: totalValue,
+            total_return: totalReturn,
+            total_return_pct: totalReturnPct,
+            trade_count: tradeCount,
+          });
+        }
+
+        // Success - reset error state
+        return {
+          trades,
+          portfolio,
+          pnlData,
+          botStatus,
+          isLoading: false,
+          error: null,
+          isConnected: true,
+          retryCount: 0,
+        };
       });
       
     } catch (error) {

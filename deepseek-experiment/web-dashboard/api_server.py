@@ -83,6 +83,8 @@ async def get_trades():
 async def get_portfolio():
     """Get current portfolio state."""
     portfolio = load_json_file(PORTFOLIO_FILE)
+    trades = load_json_file(TRADES_FILE, [])
+    
     if not portfolio:
         # Return default portfolio if no data
         return {
@@ -92,10 +94,38 @@ async def get_portfolio():
             "total_return": 0,
             "total_return_pct": 0,
             "open_positions": 0,
-            "total_trades": 0,
+            "total_trades": len(trades),
             "initial_balance": config.INITIAL_BALANCE,
         }
-    return portfolio
+    
+    # Ensure all required fields are present
+    balance = float(portfolio.get("balance", config.INITIAL_BALANCE))
+    positions = portfolio.get("positions", {})
+    positions_value = sum(pos.get("value", 0) for pos in positions.values())
+    total_value = balance + positions_value
+    open_positions = len(positions)
+    
+    # Calculate total_return from trades
+    total_return = sum(trade.get("profit", 0) for trade in trades if trade.get("profit") is not None)
+    
+    # Get initial_balance from portfolio or config
+    initial_balance = float(portfolio.get("initial_balance", config.INITIAL_BALANCE))
+    
+    # Calculate total_return_pct
+    total_return_pct = (total_return / initial_balance * 100) if initial_balance > 0 else 0
+    
+    # Return complete portfolio with all required fields
+    return {
+        "balance": balance,
+        "total_value": total_value,
+        "positions_value": positions_value,
+        "total_return": total_return,
+        "total_return_pct": total_return_pct,
+        "open_positions": open_positions,
+        "total_trades": len(trades),
+        "initial_balance": initial_balance,
+        **{k: v for k, v in portfolio.items() if k not in ["balance", "total_value", "positions_value", "total_return", "total_return_pct", "open_positions", "total_trades", "initial_balance"]}
+    }
 
 @app.get("/api/status")
 async def get_status():

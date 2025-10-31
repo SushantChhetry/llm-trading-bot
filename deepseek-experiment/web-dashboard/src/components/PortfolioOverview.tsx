@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Badge } from './ui/badge';
 import { formatCurrency, formatPercentage, getProfitColor } from '@/lib/utils';
@@ -5,14 +6,30 @@ import { Portfolio, BotStatus } from '@/types/trading';
 import { TrendingUp, TrendingDown, DollarSign, Activity, Target, Zap } from 'lucide-react';
 
 interface PortfolioOverviewProps {
-  portfolio: Portfolio;
-  botStatus: BotStatus;
+  portfolio: Portfolio | null;
+  botStatus: BotStatus | null;
   className?: string;
 }
 
-export function PortfolioOverview({ portfolio, botStatus, className }: PortfolioOverviewProps) {
-  const isPositive = portfolio.total_return_pct >= 0;
+export const PortfolioOverview = memo(function PortfolioOverview({ portfolio, botStatus, className }: PortfolioOverviewProps) {
+  // Safely extract values with defaults to prevent NaN
+  const totalValue = portfolio?.total_value ?? 0;
+  const balance = portfolio?.balance ?? 0;
+  const totalReturn = portfolio?.total_return ?? 0;
+  const totalReturnPct = portfolio?.total_return_pct ?? 0;
+  const openPositions = portfolio?.open_positions ?? 0;
+  const positionsValue = portfolio?.positions_value ?? 0;
+  const totalTrades = portfolio?.total_trades ?? 0;
+  
+  const isPositive = totalReturnPct >= 0;
   const TrendIcon = isPositive ? TrendingUp : TrendingDown;
+  
+  // Default bot status values
+  const tradingMode = botStatus?.trading_mode ?? 'paper';
+  const llmProvider = botStatus?.llm_provider ?? 'unknown';
+  const exchange = botStatus?.exchange ?? 'unknown';
+  const runInterval = botStatus?.run_interval_seconds ?? 0;
+  const lastUpdate = botStatus?.last_update ?? new Date().toISOString();
 
   return (
     <div className={`grid gap-4 md:grid-cols-2 lg:grid-cols-4 ${className}`}>
@@ -23,9 +40,9 @@ export function PortfolioOverview({ portfolio, botStatus, className }: Portfolio
           <DollarSign className="h-4 w-4 text-muted-foreground" />
         </CardHeader>
         <CardContent>
-          <div className="text-2xl font-bold">{formatCurrency(portfolio.total_value)}</div>
+          <div className="text-2xl font-bold">{formatCurrency(totalValue)}</div>
           <p className="text-xs text-muted-foreground">
-            Balance: {formatCurrency(portfolio.balance)}
+            Balance: {formatCurrency(balance)}
           </p>
         </CardContent>
       </Card>
@@ -34,14 +51,14 @@ export function PortfolioOverview({ portfolio, botStatus, className }: Portfolio
       <Card>
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
           <CardTitle className="text-sm font-medium">Total Return</CardTitle>
-          <TrendIcon className={`h-4 w-4 ${getProfitColor(portfolio.total_return_pct)}`} />
+          <TrendIcon className={`h-4 w-4 ${getProfitColor(totalReturnPct)}`} />
         </CardHeader>
         <CardContent>
-          <div className={`text-2xl font-bold ${getProfitColor(portfolio.total_return_pct)}`}>
-            {formatCurrency(portfolio.total_return)}
+          <div className={`text-2xl font-bold ${getProfitColor(totalReturnPct)}`}>
+            {formatCurrency(totalReturn)}
           </div>
-          <p className={`text-xs ${getProfitColor(portfolio.total_return_pct)}`}>
-            {formatPercentage(portfolio.total_return_pct)}
+          <p className={`text-xs ${getProfitColor(totalReturnPct)}`}>
+            {formatPercentage(totalReturnPct)}
           </p>
         </CardContent>
       </Card>
@@ -53,9 +70,9 @@ export function PortfolioOverview({ portfolio, botStatus, className }: Portfolio
           <Target className="h-4 w-4 text-muted-foreground" />
         </CardHeader>
         <CardContent>
-          <div className="text-2xl font-bold">{portfolio.open_positions}</div>
+          <div className="text-2xl font-bold">{openPositions}</div>
           <p className="text-xs text-muted-foreground">
-            Value: {formatCurrency(portfolio.positions_value)}
+            Value: {formatCurrency(positionsValue)}
           </p>
         </CardContent>
       </Card>
@@ -67,7 +84,7 @@ export function PortfolioOverview({ portfolio, botStatus, className }: Portfolio
           <Activity className="h-4 w-4 text-muted-foreground" />
         </CardHeader>
         <CardContent>
-          <div className="text-2xl font-bold">{portfolio.total_trades}</div>
+          <div className="text-2xl font-bold">{totalTrades}</div>
           <p className="text-xs text-muted-foreground">
             Since start
           </p>
@@ -89,28 +106,36 @@ export function PortfolioOverview({ portfolio, botStatus, className }: Portfolio
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
             <div className="space-y-2">
               <p className="text-sm font-medium">Trading Mode</p>
-              <Badge variant={botStatus.trading_mode === 'live' ? 'destructive' : 'secondary'}>
-                {botStatus.trading_mode.toUpperCase()}
+              <Badge variant={tradingMode === 'live' ? 'destructive' : 'secondary'}>
+                {tradingMode.toUpperCase()}
               </Badge>
             </div>
             <div className="space-y-2">
               <p className="text-sm font-medium">LLM Provider</p>
-              <Badge variant="outline">{botStatus.llm_provider.toUpperCase()}</Badge>
+              <Badge variant="outline">{llmProvider.toUpperCase()}</Badge>
             </div>
             <div className="space-y-2">
               <p className="text-sm font-medium">Exchange</p>
-              <Badge variant="outline">{botStatus.exchange.toUpperCase()}</Badge>
+              <Badge variant="outline">{exchange.toUpperCase()}</Badge>
             </div>
             <div className="space-y-2">
               <p className="text-sm font-medium">Run Interval</p>
-              <Badge variant="outline">{botStatus.run_interval_seconds}s</Badge>
+              <Badge variant="outline">{runInterval}s</Badge>
             </div>
           </div>
           <div className="mt-4 text-sm text-muted-foreground">
-            Last update: {new Date(botStatus.last_update).toLocaleString()}
+            Last update: {new Date(lastUpdate).toLocaleString('en-US', {
+              timeZone: 'America/New_York', // EST/EDT
+              month: 'short',
+              day: 'numeric',
+              year: 'numeric',
+              hour: '2-digit',
+              minute: '2-digit',
+              second: '2-digit',
+            })}
           </div>
         </CardContent>
       </Card>
     </div>
   );
-}
+});

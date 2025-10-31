@@ -12,6 +12,9 @@ matplotlib>=3.7.0
 seaborn>=0.12.0
 numpy>=1.24.0
 
+# Technical indicators for Alpha Arena (required for enhanced trading signals)
+pandas-ta>=0.3.14b0
+
 # Experimentation and configuration
 pyyaml>=6.0
 

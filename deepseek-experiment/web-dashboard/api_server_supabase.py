@@ -145,26 +145,118 @@ def get_trades(limit: int = 100) -> List[Dict[str, Any]]:
 
 def get_portfolio() -> Dict[str, Any]:
     """Get current portfolio state."""
+    # Get trades for calculations
+    trades = get_trades(10000)  # Get all trades for calculations
+    
     if USE_SUPABASE and supabase:
         try:
             portfolio = supabase.get_portfolio()
             if portfolio:
+                balance = float(portfolio.get("balance", 0))
+                total_value = float(portfolio.get("total_value", 0))
+                unrealized_pnl = float(portfolio.get("unrealized_pnl", 0))
+                realized_pnl = float(portfolio.get("realized_pnl", 0))
+                active_positions = int(portfolio.get("active_positions", 0))
+                
+                # Calculate positions_value (total value of open positions)
+                positions_value = total_value - balance
+                
+                # Calculate total_return from realized_pnl
+                total_return = realized_pnl
+                
+                # Calculate initial_balance (balance + realized_pnl + unrealized_pnl - positions_value)
+                # Or get from first trade or config
+                initial_balance = balance + realized_pnl + unrealized_pnl - positions_value
+                if initial_balance <= 0:
+                    initial_balance = config.INITIAL_BALANCE
+                
+                # Calculate total_return_pct
+                total_return_pct = (total_return / initial_balance * 100) if initial_balance > 0 else 0
+                
                 return {
-                    "balance": float(portfolio.get("balance", 0)),
-                    "total_value": float(portfolio.get("total_value", 0)),
-                    "unrealized_pnl": float(portfolio.get("unrealized_pnl", 0)),
-                    "realized_pnl": float(portfolio.get("realized_pnl", 0)),
+                    "balance": balance,
+                    "total_value": total_value,
+                    "positions_value": max(0, positions_value),
+                    "total_return": total_return,
+                    "total_return_pct": total_return_pct,
+                    "open_positions": active_positions,
+                    "total_trades": len(trades),
+                    "initial_balance": initial_balance,
+                    "unrealized_pnl": unrealized_pnl,
+                    "realized_pnl": realized_pnl,
                     "total_fees": float(portfolio.get("total_fees", 0)),
-                    "active_positions": int(portfolio.get("active_positions", 0)),
                     "timestamp": portfolio.get("timestamp", datetime.now().isoformat())
                 }
-            return {"balance": 0, "total_value": 0, "timestamp": datetime.now().isoformat()}
+            # Return default portfolio if no data
+            initial_balance = config.INITIAL_BALANCE
+            return {
+                "balance": initial_balance,
+                "total_value": initial_balance,
+                "positions_value": 0,
+                "total_return": 0,
+                "total_return_pct": 0,
+                "open_positions": 0,
+                "total_trades": len(trades),
+                "initial_balance": initial_balance,
+                "timestamp": datetime.now().isoformat()
+            }
         except Exception as e:
             logger.error(f"Error getting portfolio from Supabase: {e}")
-            return {"balance": 0, "total_value": 0, "timestamp": datetime.now().isoformat()}
+            initial_balance = config.INITIAL_BALANCE
+            return {
+                "balance": initial_balance,
+                "total_value": initial_balance,
+                "positions_value": 0,
+                "total_return": 0,
+                "total_return_pct": 0,
+                "open_positions": 0,
+                "total_trades": len(trades),
+                "initial_balance": initial_balance,
+                "timestamp": datetime.now().isoformat()
+            }
     else:
         portfolio = load_json_file(PORTFOLIO_FILE, {})
-        return portfolio if portfolio else {"balance": 0, "total_value": 0, "timestamp": datetime.now().isoformat()}
+        if not portfolio:
+            initial_balance = config.INITIAL_BALANCE
+            return {
+                "balance": initial_balance,
+                "total_value": initial_balance,
+                "positions_value": 0,
+                "total_return": 0,
+                "total_return_pct": 0,
+                "open_positions": 0,
+                "total_trades": len(trades),
+                "initial_balance": initial_balance,
+                "timestamp": datetime.now().isoformat()
+            }
+        
+        # Calculate missing fields from portfolio.json
+        balance = float(portfolio.get("balance", config.INITIAL_BALANCE))
+        positions = portfolio.get("positions", {})
+        positions_value = sum(pos.get("value", 0) for pos in positions.values())
+        total_value = balance + positions_value
+        open_positions = len(positions)
+        
+        # Calculate total_return from trades
+        total_return = sum(trade.get("profit", 0) for trade in trades if trade.get("profit") is not None)
+        
+        # Get initial_balance from portfolio or config
+        initial_balance = float(portfolio.get("initial_balance", config.INITIAL_BALANCE))
+        
+        # Calculate total_return_pct
+        total_return_pct = (total_return / initial_balance * 100) if initial_balance > 0 else 0
+        
+        return {
+            "balance": balance,
+            "total_value": total_value,
+            "positions_value": positions_value,
+            "total_return": total_return,
+            "total_return_pct": total_return_pct,
+            "open_positions": open_positions,
+            "total_trades": len(trades),
+            "initial_balance": initial_balance,
+            "timestamp": portfolio.get("timestamp", datetime.now().isoformat())
+        }
 
 def get_positions() -> List[Dict[str, Any]]:
     """Get active positions."""

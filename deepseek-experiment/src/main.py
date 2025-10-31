@@ -160,22 +160,41 @@ class TradingBot:
             # Colorful cycle header
             self.console.print(f"\n[bold cyan]🔄 Starting trading cycle at {datetime.now().strftime('%H:%M:%S')}[/bold cyan]")
             
-            # 1. Fetch market data
-            with self.console.status("[bold green]Fetching market data...", spinner="dots"):
+            # 1. Fetch market data and technical indicators (Alpha Arena enhancement)
+            with self.console.status("[bold green]Fetching market data & technical indicators...", spinner="dots"):
                 ticker = self.data_fetcher.get_ticker()
                 current_price = float(ticker["last"])
-                
+
                 # Validate market data
                 if current_price <= 0:
                     logger.error("Invalid market price received")
                     self.console.print("[bold red]❌ Invalid market data - skipping cycle[/bold red]")
                     return
-            
+
+                # Fetch technical indicators for Alpha Arena-style trading
+                try:
+                    indicators = self.data_fetcher.get_technical_indicators(timeframe="3m", limit=100)
+                except Exception as e:
+                    logger.warning(f"Failed to fetch technical indicators: {e}. Using fallback values.")
+                    indicators = {
+                        'ema_20': current_price * 0.99,
+                        'ema_50': current_price * 0.98,
+                        'macd': 0.0,
+                        'macd_signal': 0.0,
+                        'macd_histogram': 0.0,
+                        'rsi_7': 50.0,
+                        'rsi_14': 50.0,
+                        'atr': current_price * 0.02,
+                        'current_price': current_price,
+                    }
+
             market_data = {
                 "symbol": config.SYMBOL,
                 "price": current_price,
                 "volume": ticker.get("quoteVolume", 0),
-                "change_24h": ticker.get("percentage", 0)
+                "change_24h": ticker.get("percentage", 0),
+                # Add technical indicators for Alpha Arena
+                "indicators": indicators
             }
             
             # Display market data
