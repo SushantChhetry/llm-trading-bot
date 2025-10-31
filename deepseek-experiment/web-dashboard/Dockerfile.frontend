@@ -1,5 +1,6 @@
 # Multi-stage build for React frontend
-FROM node:18-alpine AS builder
+# Vite 7 requires Node.js 20.19+ or 22.12+
+FROM node:20-alpine AS builder
 
 # Set working directory
 WORKDIR /app
@@ -7,8 +8,8 @@ WORKDIR /app
 # Copy package files
 COPY package*.json ./
 
-# Install dependencies
-RUN npm ci --only=production
+# Install all dependencies (needed for build)
+RUN npm ci
 
 # Copy source code
 COPY . .

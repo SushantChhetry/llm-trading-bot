@@ -9,6 +9,7 @@ Uses Supabase as the database backend for reliable data storage.
 import json
 import os
 import sys
+import logging
 from pathlib import Path
 from datetime import datetime
 from typing import Dict, List, Any, Optional
@@ -25,6 +26,14 @@ sys.path.insert(0, str(project_root))
 
 from config import config
 from supabase_client import get_supabase_service
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s | %(levelname)-8s | %(name)-20s | %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
+logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Trading Bot API", version="1.0.0")
 
@@ -69,10 +78,10 @@ USE_SUPABASE = False
 try:
     supabase = get_supabase_service()
     USE_SUPABASE = True
-    print("✅ Connected to Supabase database")
+    logger.info("Connected to Supabase database")
 except Exception as e:
-    print(f"⚠️  Supabase connection failed: {e}")
-    print("📁 Falling back to JSON file storage")
+    logger.warning(f"Supabase connection failed: {e}")
+    logger.info("Falling back to JSON file storage")
     USE_SUPABASE = False
     supabase = None
 
@@ -90,7 +99,7 @@ def load_json_file(file_path: Path, default: Any = None) -> Any:
                 return json.load(f)
         return default
     except (json.JSONDecodeError, IOError) as e:
-        print(f"Error loading {file_path}: {e}")
+        logger.error(f"Error loading {file_path}: {e}")
         return default
 
 def get_bot_status() -> Dict[str, Any]:
@@ -107,7 +116,7 @@ def get_bot_status() -> Dict[str, Any]:
                 "run_interval_seconds": int(config_data.get("run_interval_seconds", "300"))
             }
         except Exception as e:
-            print(f"Error getting bot status from Supabase: {e}")
+            logger.error(f"Error getting bot status from Supabase: {e}")
             return {"is_running": True, "last_update": datetime.now().isoformat()}
     else:
         hyperparams = load_json_file(HYPERPARAMS_FILE, {})
@@ -128,7 +137,7 @@ def get_trades(limit: int = 100) -> List[Dict[str, Any]]:
         try:
             return supabase.get_trades(limit)
         except Exception as e:
-            print(f"Error getting trades from Supabase: {e}")
+            logger.error(f"Error getting trades from Supabase: {e}")
             return []
     else:
         trades = load_json_file(TRADES_FILE, [])
@@ -151,7 +160,7 @@ def get_portfolio() -> Dict[str, Any]:
                 }
             return {"balance": 0, "total_value": 0, "timestamp": datetime.now().isoformat()}
         except Exception as e:
-            print(f"Error getting portfolio from Supabase: {e}")
+            logger.error(f"Error getting portfolio from Supabase: {e}")
             return {"balance": 0, "total_value": 0, "timestamp": datetime.now().isoformat()}
     else:
         portfolio = load_json_file(PORTFOLIO_FILE, {})
@@ -163,7 +172,7 @@ def get_positions() -> List[Dict[str, Any]]:
         try:
             return supabase.get_positions()
         except Exception as e:
-            print(f"Error getting positions from Supabase: {e}")
+            logger.error(f"Error getting positions from Supabase: {e}")
             return []
     else:
         portfolio = load_json_file(PORTFOLIO_FILE, {})
@@ -176,7 +185,7 @@ def get_behavioral_metrics(limit: int = 50) -> List[Dict[str, Any]]:
         try:
             return supabase.get_behavioral_metrics(limit)
         except Exception as e:
-            print(f"Error getting behavioral metrics from Supabase: {e}")
+            logger.error(f"Error getting behavioral metrics from Supabase: {e}")
             return []
     else:
         # Fallback to mock data
@@ -198,24 +207,24 @@ connected_clients = set()
 async def websocket_endpoint(websocket, path):
     """Handle WebSocket connections for real-time updates."""
     connected_clients.add(websocket)
-    print(f"Client connected. Total clients: {len(connected_clients)}")
-    
+    logger.info(f"WebSocket client connected. Total clients: {len(connected_clients)}")
+
     try:
         while True:
             # Send periodic updates
             await asyncio.sleep(5)
-            
+
             # Get latest data
             portfolio = get_portfolio()
             trades = get_trades(10)
-            
+
             update_data = {
                 "type": "update",
                 "portfolio": portfolio,
                 "recent_trades": trades,
                 "timestamp": datetime.now().isoformat()
             }
-            
+
             # Send to all connected clients
             if connected_clients:
                 await asyncio.gather(
@@ -223,23 +232,26 @@ async def websocket_endpoint(websocket, path):
                     return_exceptions=True
                 )
     except websockets.exceptions.ConnectionClosed:
-        pass
+        logger.debug("WebSocket connection closed normally")
+    except Exception as e:
+        logger.error(f"WebSocket error: {e}")
     finally:
         connected_clients.discard(websocket)
-        print(f"Client disconnected. Total clients: {len(connected_clients)}")
+        logger.info(f"WebSocket client disconnected. Total clients: {len(connected_clients)}")
 
 def start_websocket_server():
     """Start WebSocket server in a separate thread."""
     async def run_websocket():
         try:
             async with websockets.serve(websocket_endpoint, "localhost", 8002):
+                logger.info("WebSocket server started on port 8002")
                 await asyncio.Future()  # Run forever
         except OSError as e:
             if e.errno == 48:  # Address already in use
-                print(f"⚠️  WebSocket port 8002 already in use, skipping WebSocket server")
+                logger.warning("WebSocket port 8002 already in use, skipping WebSocket server")
             else:
-                print(f"❌ WebSocket error: {e}")
-    
+                logger.error(f"WebSocket server error: {e}")
+
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     loop.run_until_complete(run_websocket())
@@ -348,39 +360,39 @@ async def behavioral_metrics(limit: int = 50):
 if __name__ == "__main__":
     import threading
     import sys
-    
+
     try:
         # Start WebSocket server in background thread (optional, only if needed)
         try:
             ws_thread = threading.Thread(target=start_websocket_server, daemon=True)
             ws_thread.start()
-            print("✅ WebSocket server thread started")
+            logger.info("WebSocket server thread started")
         except Exception as e:
-            print(f"⚠️  WebSocket server failed to start: {e} (continuing without it)")
-        
+            logger.warning(f"WebSocket server failed to start: {e} (continuing without it)")
+
         # Start FastAPI server
         # Railway sets PORT environment variable automatically
         port = int(os.getenv("PORT", "8001"))
-        
-        print("🚀 Starting Trading Bot API Server...")
-        print(f"📊 API available at: http://0.0.0.0:{port}")
-        print(f"🗄️  Database: {'Supabase' if USE_SUPABASE else 'JSON Files'}")
-        print(f"🔌 Listening on port: {port}")
-        print("✅ Server starting...")
-        
+
+        logger.info("="*80)
+        logger.info("Starting Trading Bot API Server")
+        logger.info(f"API available at: http://0.0.0.0:{port}")
+        logger.info(f"Database: {'Supabase' if USE_SUPABASE else 'JSON Files'}")
+        logger.info(f"Environment: {os.getenv('ENVIRONMENT', 'development')}")
+        logger.info(f"Port: {port}")
+        logger.info("="*80)
+
         # Use uvicorn with proper logging and error handling
         uvicorn.run(
-            app, 
-            host="0.0.0.0", 
+            app,
+            host="0.0.0.0",
             port=port,
             log_level="info",
             access_log=True
         )
     except KeyboardInterrupt:
-        print("\n🛑 Server stopped by user")
+        logger.info("Server stopped by user")
         sys.exit(0)
     except Exception as e:
-        print(f"❌ Fatal error starting server: {e}", file=sys.stderr)
-        import traceback
-        traceback.print_exc()
+        logger.critical(f"Fatal error starting server: {e}", exc_info=True)
         sys.exit(1)

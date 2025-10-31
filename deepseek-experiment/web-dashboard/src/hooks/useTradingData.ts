@@ -168,42 +168,12 @@ export function useTradingData() {
         isConnected: true,
         retryCount: 0,
       });
-
-      // Restart polling on success
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-      }
-      intervalRef.current = setInterval(() => fetchData(false), INITIAL_POLL_INTERVAL);
       
     } catch (error) {
       const errorMessage = getErrorMessage(error);
       
       setData(prev => {
         const newRetryCount = isManualRetry ? 0 : prev.retryCount + 1;
-        
-        // Stop polling if we've exceeded retry limit
-        if (newRetryCount >= MAX_RETRY_COUNT && !isManualRetry) {
-          // Clear existing intervals
-          if (intervalRef.current) {
-            clearInterval(intervalRef.current);
-            intervalRef.current = null;
-          }
-          
-          // Set up longer retry interval for error recovery
-          const retryDelay = Math.min(
-            ERROR_RETRY_INTERVAL * Math.pow(2, newRetryCount - MAX_RETRY_COUNT), 
-            MAX_ERROR_RETRY_INTERVAL
-          );
-          
-          if (retryTimeoutRef.current) {
-            clearTimeout(retryTimeoutRef.current);
-          }
-          
-          retryTimeoutRef.current = setTimeout(() => {
-            setData(current => ({ ...current, retryCount: 0 }));
-            fetchData(false);
-          }, retryDelay);
-        }
         
         return {
           ...prev,
@@ -226,17 +196,21 @@ export function useTradingData() {
     // Initial fetch
     fetchData(false);
 
-    // Set up initial polling interval (will be managed by fetchData)
-    intervalRef.current = setInterval(() => {
+    // Set up polling interval - fetchData will handle skipping if retry limit exceeded
+    const pollInterval = setInterval(() => {
       fetchData(false);
     }, INITIAL_POLL_INTERVAL);
+    
+    intervalRef.current = pollInterval;
     
     return () => {
       if (intervalRef.current) {
         clearInterval(intervalRef.current);
+        intervalRef.current = null;
       }
       if (retryTimeoutRef.current) {
         clearTimeout(retryTimeoutRef.current);
+        retryTimeoutRef.current = null;
       }
     };
   }, [fetchData]);

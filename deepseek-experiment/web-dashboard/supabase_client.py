@@ -25,12 +25,14 @@ load_env_file()
 
 class SupabaseService:
     def __init__(self):
-        self.supabase_url = "https://uedfxgpduaramoagiatz.supabase.co"
+        self.supabase_url = os.getenv("SUPABASE_URL")
         self.supabase_key = os.getenv("SUPABASE_KEY")
-        
+
+        if not self.supabase_url:
+            raise ValueError("SUPABASE_URL environment variable is required")
         if not self.supabase_key:
             raise ValueError("SUPABASE_KEY environment variable is required")
-        
+
         self.supabase: Client = create_client(self.supabase_url, self.supabase_key)
     
     def get_trades(self, limit: int = 100) -> List[Dict[str, Any]]:

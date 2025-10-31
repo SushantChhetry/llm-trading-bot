@@ -12,6 +12,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
     gcc \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements first for better caching
@@ -20,8 +21,9 @@ COPY web-dashboard/requirements.txt .
 # Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy the API server code
-COPY web-dashboard/api_server.py .
+# Copy the API server code (use supabase version with CORS fixes)
+COPY web-dashboard/api_server_supabase.py .
+COPY web-dashboard/supabase_client.py .
 
 # Copy the directory structure for imports
 COPY config ./config
@@ -35,7 +37,7 @@ EXPOSE 8001
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:8001/api/status || exit 1
+    CMD curl -f http://localhost:8001/health || exit 1
 
 # Run the API server
-CMD ["python", "api_server.py"]
+CMD ["python", "api_server_supabase.py"]

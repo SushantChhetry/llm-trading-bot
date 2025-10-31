@@ -45,10 +45,18 @@ services:
       - RUN_INTERVAL_SECONDS=${RUN_INTERVAL_SECONDS:-300}
       - LOG_LEVEL=${LOG_LEVEL:-DEBUG}
       - DATABASE_URL=postgresql://trading_user:trading_password@postgres:5432/trading_bot
+      # CORS and API configuration for local debugging
+      - ENVIRONMENT=development
+      - PORT=8001
+      - CORS_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
+      # Supabase configuration (optional - will fallback to JSON if not set)
+      - SUPABASE_URL=${SUPABASE_URL:-}
+      - SUPABASE_KEY=${SUPABASE_KEY:-}
     volumes:
       - ./data:/app/data
       - ./logs:/app/logs
-      - ./web-dashboard/api_server.py:/app/api_server.py:ro
+      - ./web-dashboard/api_server_supabase.py:/app/api_server_supabase.py:ro
+      - ./web-dashboard/supabase_client.py:/app/supabase_client.py:ro
     networks:
       - trading-network
     restart: unless-stopped
@@ -65,14 +73,57 @@ services:
     ports:
       - "3000:3000"
     environment:
-      - VITE_API_URL=http://localhost:8001
+      # Use relative paths for local dev (Vite proxy will handle it)
+      # Or set to http://localhost:8001 if you want direct API calls
+      - VITE_API_URL=${VITE_API_URL:-}
+      # Tell Vite to use Docker service names for proxy
+      - DOCKER_ENV=true
+      - VITE_API_PROXY_TARGET=http://api:8001
+      - VITE_WS_PROXY_TARGET=ws://api:8002
     volumes:
       - ./web-dashboard/src:/app/src
       - ./web-dashboard/public:/app/public
       - ./web-dashboard/index.html:/app/index.html
+      - ./web-dashboard/vite.config.ts:/app/vite.config.ts:ro
     networks:
       - trading-network
     restart: unless-stopped
+    depends_on:
+      - api
+
+  # Trading Bot (Optional - for running the actual bot)
+  # To start: docker-compose -f docker-compose.dev.yml --profile bot up -d trading-bot
+  # Or start all: docker-compose -f docker-compose.dev.yml --profile bot up -d
+  trading-bot:
+    build:
+      context: .
+      dockerfile: Dockerfile.bot
+    container_name: trading-bot-main-dev
+    environment:
+      - TRADING_MODE=${TRADING_MODE:-paper}
+      - USE_TESTNET=${USE_TESTNET:-true}
+      - LLM_PROVIDER=${LLM_PROVIDER:-mock}
+      - LLM_API_KEY=${LLM_API_KEY:-}
+      - LLM_MODEL=${LLM_MODEL:-}
+      - EXCHANGE=${EXCHANGE:-bybit}
+      - SYMBOL=${SYMBOL:-BTC/USDT}
+      - INITIAL_BALANCE=${INITIAL_BALANCE:-10000.0}
+      - MAX_POSITION_SIZE=${MAX_POSITION_SIZE:-0.1}
+      - STOP_LOSS_PERCENT=${STOP_LOSS_PERCENT:-2.0}
+      - TAKE_PROFIT_PERCENT=${TAKE_PROFIT_PERCENT:-3.0}
+      - RUN_INTERVAL_SECONDS=${RUN_INTERVAL_SECONDS:-300}
+      - LOG_LEVEL=${LOG_LEVEL:-DEBUG}
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+      - ./src:/app/src:ro  # Mount source for easier debugging
+    networks:
+      - trading-network
+    restart: unless-stopped
+    profiles:
+      - bot  # Start with: docker-compose -f docker-compose.dev.yml --profile bot up -d trading-bot
+    depends_on:
+      - api
 
 networks:
   trading-network:
