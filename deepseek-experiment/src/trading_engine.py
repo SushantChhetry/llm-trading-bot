@@ -5,7 +5,6 @@ Records paper trades, tracks portfolio balance, and can be upgraded to live trad
 by modifying the execution methods (see config.TRADING_MODE).
 """
 
-import asyncio
 import logging
 import json
 from datetime import datetime
@@ -102,15 +101,16 @@ class TradingEngine:
         except Exception as e:
             logger.error(f"Error saving portfolio state: {e}")
         
-        # Save to Supabase if available
+        # Save to Supabase if available (synchronous call)
         if self.supabase_client:
             try:
-                # Create task but don't await to avoid blocking
-                task = asyncio.create_task(self.supabase_client.update_portfolio(state))
-                # Add error callback
-                task.add_done_callback(lambda t: logger.warning(f"Supabase portfolio save failed: {t.exception()}") if t.exception() else None)
+                success = self.supabase_client.update_portfolio(state)
+                if success:
+                    logger.debug("Portfolio state saved to Supabase successfully")
+                else:
+                    logger.warning("Failed to save portfolio state to Supabase (returned False)")
             except Exception as e:
-                logger.warning(f"Failed to create Supabase portfolio task: {e}")
+                logger.error(f"Failed to save portfolio to Supabase: {e}", exc_info=True)
     
     def get_portfolio_value(self, current_price: float) -> float:
         """
@@ -237,16 +237,19 @@ class TradingEngine:
         self._save_trades()
         self._save_portfolio_state()
         
-        # Save to Supabase if available
+        # Save to Supabase if available (synchronous call - CRITICAL FIX)
         if self.supabase_client:
             try:
-                # Create task but don't await to avoid blocking
-                task = asyncio.create_task(self.supabase_client.add_trade(trade))
-                # Add error callback
-                task.add_done_callback(lambda t: logger.warning(f"Supabase trade save failed: {t.exception()}") if t.exception() else None)
+                success = self.supabase_client.add_trade(trade)
+                if success:
+                    logger.info(f"✅ Trade saved to Supabase: BUY {symbol}")
+                else:
+                    logger.error(f"❌ Failed to save trade to Supabase (returned False): BUY {symbol}")
             except Exception as e:
-                logger.warning(f"Failed to create Supabase task: {e}")
-        
+                logger.error(f"❌ Failed to save trade to Supabase: {e}", exc_info=True)
+        else:
+            logger.warning("⚠️  Supabase client not available - trade only saved to JSON")
+
         logger.info(f"BUY executed: {quantity:.6f} {symbol} @ ${price:.2f} (${amount_usdt:.2f})")
         return trade
     
@@ -326,16 +329,19 @@ class TradingEngine:
         self._save_trades()
         self._save_portfolio_state()
         
-        # Save to Supabase if available
+        # Save to Supabase if available (synchronous call - CRITICAL FIX)
         if self.supabase_client:
             try:
-                # Create task but don't await to avoid blocking
-                task = asyncio.create_task(self.supabase_client.add_trade(trade))
-                # Add error callback
-                task.add_done_callback(lambda t: logger.warning(f"Supabase trade save failed: {t.exception()}") if t.exception() else None)
+                success = self.supabase_client.add_trade(trade)
+                if success:
+                    logger.info(f"✅ Trade saved to Supabase: SELL {symbol}")
+                else:
+                    logger.error(f"❌ Failed to save trade to Supabase (returned False): SELL {symbol}")
             except Exception as e:
-                logger.warning(f"Failed to create Supabase task: {e}")
-        
+                logger.error(f"❌ Failed to save trade to Supabase: {e}", exc_info=True)
+        else:
+            logger.warning("⚠️  Supabase client not available - trade only saved to JSON")
+
         logger.info(f"SELL executed: {sell_quantity:.6f} {symbol} @ ${price:.2f} (profit: ${profit:.2f})")
         return trade
     
@@ -436,16 +442,19 @@ class TradingEngine:
         self._save_trades()
         self._save_portfolio_state()
         
-        # Save to Supabase if available
+        # Save to Supabase if available (synchronous call - CRITICAL FIX)
         if self.supabase_client:
             try:
-                # Create task but don't await to avoid blocking
-                task = asyncio.create_task(self.supabase_client.add_trade(trade))
-                # Add error callback
-                task.add_done_callback(lambda t: logger.warning(f"Supabase trade save failed: {t.exception()}") if t.exception() else None)
+                success = self.supabase_client.add_trade(trade)
+                if success:
+                    logger.info(f"✅ Trade saved to Supabase: SHORT {symbol}")
+                else:
+                    logger.error(f"❌ Failed to save trade to Supabase (returned False): SHORT {symbol}")
             except Exception as e:
-                logger.warning(f"Failed to create Supabase task: {e}")
-        
+                logger.error(f"❌ Failed to save trade to Supabase: {e}", exc_info=True)
+        else:
+            logger.warning("⚠️  Supabase client not available - trade only saved to JSON")
+
         logger.info(f"SHORT executed: {quantity:.6f} {symbol} @ ${price:.2f} (${amount_usdt:.2f})")
         return trade
     
