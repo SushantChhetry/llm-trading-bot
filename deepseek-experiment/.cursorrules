@@ -111,11 +111,166 @@
   - Business logic separate from I/O operations
   - Configuration separate from implementation
 
-### Testing Requirements
-- **Unit Tests**: Test all trading logic, calculations, validations
-- **Integration Tests**: Test LLM client, database operations, API integrations
-- **Performance Tests**: Benchmark critical paths (trade execution, portfolio calculation)
-- **Mock External Services**: Always mock LLM APIs, exchange APIs in tests
+## Project Directory Structure & Organization
+
+### Directory Layout
+The project follows this structure at `/deepseek-experiment/`:
+
+```
+deepseek-experiment/
+├── src/                    # Main application source code
+│   ├── main.py            # Entry point (TradingBot orchestrator)
+│   ├── trading_engine.py  # Core trading logic & portfolio management
+│   ├── data_fetcher.py    # Market data & technical indicators
+│   ├── llm_client.py      # LLM API integration
+│   ├── logger.py          # Logging configuration
+│   ├── security.py        # Security & validation
+│   ├── resilience.py      # Retry logic & circuit breakers
+│   ├── monitoring.py      # Performance monitoring
+│   ├── database_manager.py # Database operations
+│   ├── supabase_client.py # Supabase integration
+│   └── ...                # Other core modules
+├── config/                 # Configuration module
+│   └── config.py          # Centralized config settings
+├── scripts/                # Utility scripts (not imported by main app)
+│   ├── deploy.sh          # Deployment scripts
+│   ├── monitor_dashboard.py # Monitoring utilities
+│   ├── optimize_strategy.py # Optimization tools
+│   └── ...                # Other utility scripts
+├── tests/                  # Test files
+│   └── test_*.py          # Unit & integration tests
+├── docs/                   # Documentation (markdown files)
+│   ├── getting-started/   # Quick start guides
+│   ├── guides/            # How-to guides
+│   └── reference/         # API references
+├── data/                   # Data storage (logs, portfolio, trades)
+│   ├── logs/              # Application logs
+│   └── *.json             # State files (portfolio, trades)
+├── experiments/            # Experiment configuration files
+│   └── *.yaml             # Experiment configs
+├── alembic/                # Database migrations
+├── web-dashboard/          # Frontend & API server
+│   ├── src/               # React TypeScript frontend
+│   ├── api_server.py      # FastAPI backend
+│   └── ...
+└── [root config files]     # config.yaml, docker-compose.yml, etc.
+```
+
+### File Placement Rules
+
+**When creating new files, follow these rules:**
+
+1. **Core Application Modules** → `src/`
+   - New trading logic, data processing, or core features
+   - Examples: `src/risk_manager.py`, `src/backtest_engine.py`
+   - These are imported by `main.py` or other core modules
+
+2. **Utility Scripts** → `scripts/`
+   - One-off scripts, deployment tools, analysis scripts
+   - Examples: `scripts/analyze_results.py`, `scripts/backup_data.py`
+   - These are standalone and NOT imported by the main application
+
+3. **Configuration** → `config/config.py`
+   - Add new settings to existing `config.py` file
+   - Use environment variables with `os.getenv()` defaults
+   - Never create separate config files unless absolutely necessary
+
+4. **Tests** → `tests/`
+   - Mirror the `src/` structure: `tests/test_trading_engine.py` for `src/trading_engine.py`
+   - Use descriptive names: `test_<module>_<feature>.py`
+
+5. **Documentation** → `docs/`
+   - Only create when explicitly requested
+   - Follow existing structure: `guides/`, `reference/`, `getting-started/`
+
+### Import Patterns
+
+**ALWAYS follow these import conventions:**
+
+1. **From config module:**
+   ```python
+   from config import config
+   # Access: config.INITIAL_BALANCE, config.LLM_PROVIDER
+   ```
+
+2. **From src modules (within src/):**
+   ```python
+   # Use relative imports for same package
+   from .logger import get_logger
+   from .resilience import retry, circuit_breaker
+   from .security import validate_trading_inputs
+   ```
+
+3. **From src modules (from main.py or scripts):**
+   ```python
+   # Use absolute imports with 'src.' prefix
+   from src.trading_engine import TradingEngine
+   from src.llm_client import LLMClient
+   ```
+
+4. **Import grouping (isort style):**
+   ```python
+   # 1. Standard library
+   import json
+   import logging
+   from datetime import datetime
+   from typing import Dict, Optional
+
+   # 2. Third-party
+   import httpx
+   import pandas as pd
+
+   # 3. Local imports (blank line before)
+   from config import config
+   from .logger import get_logger
+   ```
+
+### File Naming Conventions
+
+- **Modules**: Use snake_case: `trading_engine.py`, `data_fetcher.py`
+- **Classes**: Use PascalCase: `TradingEngine`, `DataFetcher`
+- **Functions/Variables**: Use snake_case: `execute_buy()`, `portfolio_value`
+- **Constants**: Use UPPER_SNAKE_CASE: `MAX_LEVERAGE`, `DEFAULT_INTERVAL`
+
+### Module Responsibilities
+
+**Core modules in `src/` should have clear boundaries:**
+
+- `trading_engine.py`: Trade execution, portfolio management, position tracking
+- `data_fetcher.py`: Market data fetching, technical indicators
+- `llm_client.py`: LLM API communication, prompt formatting
+- `security.py`: Input validation, rate limiting, security checks
+- `resilience.py`: Retry logic, circuit breakers, error recovery
+- `monitoring.py`: Performance metrics, health checks
+- `database_manager.py`: Database operations (Supabase/PostgreSQL)
+- `logger.py`: Logging configuration and utilities
+
+**When adding new functionality:**
+- If it fits an existing module's responsibility → add to that module
+- If it's a new responsibility → create a new module in `src/`
+- If it's a one-time utility → add to `scripts/`
+
+### Path Handling
+
+**ALWAYS use `pathlib.Path` for file paths:**
+```python
+from pathlib import Path
+
+# In config/config.py
+PROJECT_ROOT = Path(__file__).parent.parent
+DATA_DIR = PROJECT_ROOT / "data"
+LOG_DIR = DATA_DIR / "logs"
+
+# In src modules
+trades_file = config.DATA_DIR / "trades.json"
+```
+
+### Entry Point Pattern
+
+**Main entry point is `src/main.py`:**
+- Always add project root to `sys.path` at the top
+- Import from both `config` and `src` modules
+- Keep orchestration logic minimal (delegate to components)
 
 ## Security & Safety
 
