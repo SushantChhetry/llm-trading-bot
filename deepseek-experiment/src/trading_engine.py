@@ -128,7 +128,7 @@ class TradingEngine:
 
     def _save_portfolio_state(self, current_price: float = None):
         """Save current portfolio state to file and database."""
-        portfolio_file = config.DATA_DIR / "portfolio.json"
+        logger.debug(f"PORTFOLIO_STATE_SAVE_START current_price={current_price}")
 
         # Get full portfolio summary with all metrics
         if current_price is not None:
@@ -145,6 +145,13 @@ class TradingEngine:
                 "open_positions": len(self.positions),
                 "total_trades": len(self.trades),
             }
+
+        logger.debug(f"PORTFOLIO_STATE_SUMMARY balance={portfolio_summary.get('balance', 0):.2f} "
+                    f"open_positions={portfolio_summary.get('open_positions', 0)} "
+                    f"total_value={portfolio_summary.get('total_value', 0):.2f} "
+                    f"total_trades={portfolio_summary.get('total_trades', 0)}")
+
+        portfolio_file = config.DATA_DIR / "portfolio.json"
 
         # Prepare state for file storage
         state = {
@@ -293,35 +300,63 @@ class TradingEngine:
         Returns:
             Trade dictionary if successful, None otherwise
         """
+        logger.info(f"TRADE_EXECUTION_START action=buy symbol={symbol} price={price:.2f} amount_usdt={amount_usdt:.2f} "
+                   f"confidence={confidence:.2f} leverage={leverage:.1f}")
+        logger.info(f"TRADE_EXECUTION_CONTEXT symbol={symbol} balance={self.balance:.2f} "
+                   f"active_positions={len(self.positions)} existing_position={symbol in self.positions}")
+        if symbol in self.positions:
+            pos = self.positions[symbol]
+            logger.info(f"EXISTING_POSITION symbol={symbol} quantity={pos.get('quantity', 0):.6f} "
+                       f"avg_price={pos.get('avg_price', 0):.2f} margin_used={pos.get('margin_used', 0):.2f}")
+
         # Validate leverage
+        original_leverage = leverage
         leverage = max(1.0, min(leverage, config.MAX_LEVERAGE))  # Clamp between 1.0 and MAX_LEVERAGE
+        if leverage != original_leverage:
+            logger.warning(f"LEVERAGE_ADJUSTED symbol={symbol} original={original_leverage:.1f} "
+                          f"adjusted={leverage:.1f} max_leverage={config.MAX_LEVERAGE}")
 
         # Calculate required margin (amount_usdt / leverage)
         required_margin = amount_usdt / leverage
+        logger.debug(f"MARGIN_CALCULATION symbol={symbol} amount_usdt={amount_usdt:.2f} leverage={leverage:.1f} "
+                    f"required_margin={required_margin:.2f}")
 
         # Check if we have enough balance for margin
         if required_margin > self.balance:
-            logger.warning(
-                f"Insufficient balance for margin. Available: {self.balance}, Required margin: {required_margin}"
-            )
+            logger.error(f"TRADE_REJECTED reason=insufficient_balance symbol={symbol} "
+                        f"available_balance={self.balance:.2f} required_margin={required_margin:.2f} "
+                        f"shortfall={required_margin - self.balance:.2f}")
             return None
 
         # Check position limits (Alpha Arena constraint)
         if len(self.positions) >= config.MAX_ACTIVE_POSITIONS:
-            logger.warning(
-                f"Maximum active positions reached ({config.MAX_ACTIVE_POSITIONS}). Cannot open new position."
-            )
+            logger.error(f"TRADE_REJECTED reason=max_positions_reached symbol={symbol} "
+                        f"current_positions={len(self.positions)} max_allowed={config.MAX_ACTIVE_POSITIONS} "
+                        f"position_symbols={list(self.positions.keys())}")
             return None
 
         # Apply position size limit based on margin
         max_margin = self.balance * config.MAX_POSITION_SIZE
+        logger.debug(f"POSITION_SIZE_LIMIT symbol={symbol} max_margin_allowed={max_margin:.2f} "
+                    f"max_position_size_pct={config.MAX_POSITION_SIZE * 100:.1f}")
+        original_required_margin = required_margin
         required_margin = min(required_margin, max_margin)
+        if required_margin != original_required_margin:
+            logger.warning(f"MARGIN_CAPPED symbol={symbol} original={original_required_margin:.2f} "
+                          f"capped={required_margin:.2f} reason=position_size_limit")
         amount_usdt = required_margin * leverage
+        logger.debug(f"POSITION_SIZE_FINAL symbol={symbol} amount_usdt={amount_usdt:.2f} "
+                    f"margin={required_margin:.2f} leverage={leverage:.1f}")
 
         quantity = amount_usdt / price
+        logger.debug(f"QUANTITY_CALCULATED symbol={symbol} quantity={quantity:.6f} "
+                    f"amount_usdt={amount_usdt:.2f} price={price:.2f}")
 
         # Calculate trading fees
         trading_fee = amount_usdt * (config.TRADING_FEE_PERCENT / 100)
+        total_cost = required_margin + trading_fee
+        logger.debug(f"FEE_CALCULATION symbol={symbol} trading_fee={trading_fee:.2f} "
+                    f"fee_percent={config.TRADING_FEE_PERCENT} total_cost={total_cost:.2f}")
 
         # Extract LLM context for storage
         # Note: llm_decision may be None if not provided, or may be sanitized by @validate_trading_inputs decorator
@@ -363,23 +398,44 @@ class TradingEngine:
         }
 
         # Update balance and positions (deduct margin + fees)
+        balance_before = self.balance
         self.balance -= required_margin + trading_fee
+        balance_after = self.balance
+        logger.debug(f"BALANCE_UPDATE symbol={symbol} balance_before={balance_before:.2f} "
+                    f"balance_after={balance_after:.2f} deduction={required_margin + trading_fee:.2f}")
+
         if symbol in self.positions:
             # Average in if position exists
             pos = self.positions[symbol]
+            old_quantity = pos["quantity"]
+            old_avg_price = pos["avg_price"]
+            old_margin = pos.get("margin_used", 0)
+
             total_cost = (pos["quantity"] * pos["avg_price"]) + amount_usdt
             total_quantity = pos["quantity"] + quantity
             total_margin = pos.get("margin_used", 0) + required_margin
+            new_avg_price = total_cost / total_quantity
+
+            logger.info(f"POSITION_AVERAGING symbol={symbol} operation=add_to_existing "
+                       f"old_quantity={old_quantity:.6f} old_avg_price={old_avg_price:.2f} "
+                       f"old_margin={old_margin:.2f} add_quantity={quantity:.6f} add_price={price:.2f} "
+                       f"new_quantity={total_quantity:.6f} new_avg_price={new_avg_price:.2f} "
+                       f"new_margin={total_margin:.2f}")
+
             self.positions[symbol] = {
                 "side": "long",
                 "quantity": total_quantity,
-                "avg_price": total_cost / total_quantity,
+                "avg_price": new_avg_price,
                 "value": amount_usdt,
                 "leverage": leverage,
                 "margin_used": total_margin,
                 "notional_value": total_quantity * price,
             }
         else:
+            logger.info(f"POSITION_CREATED symbol={symbol} operation=new_position quantity={quantity:.6f} "
+                       f"entry_price={price:.2f} margin_used={required_margin:.2f} "
+                       f"notional_value={quantity * price:.2f}")
+
             self.positions[symbol] = {
                 "side": "long",
                 "quantity": quantity,
@@ -390,24 +446,37 @@ class TradingEngine:
                 "notional_value": quantity * price,
             }
 
+        logger.debug(f"TRADE_PERSISTENCE_START symbol={symbol} trade_id={trade['id']}")
         self.trades.append(trade)
         self._save_trades()
+        logger.debug(f"TRADE_PERSISTENCE_COMPLETE symbol={symbol} trade_id={trade['id']} "
+                    f"total_trades={len(self.trades)} storage=local_file")
+
         self._save_portfolio_state()
+        logger.debug(f"PORTFOLIO_STATE_SAVED symbol={symbol} balance={self.balance:.2f} "
+                    f"positions={len(self.positions)}")
 
         # Save to Supabase if available (synchronous call - CRITICAL FIX)
         if self.supabase_client:
             try:
                 success = self.supabase_client.add_trade(trade)
                 if success:
-                    logger.info(f"✅ Trade saved to Supabase: BUY {symbol}")
+                    logger.info(f"TRADE_PERSISTENCE_COMPLETE symbol={symbol} trade_id={trade['id']} "
+                               f"storage=supabase status=success")
                 else:
-                    logger.error(f"❌ Failed to save trade to Supabase (returned False): BUY {symbol}")
+                    logger.error(f"TRADE_PERSISTENCE_FAILED symbol={symbol} trade_id={trade['id']} "
+                               f"storage=supabase status=false_received reason=unknown")
             except Exception as e:
-                logger.error(f"❌ Failed to save trade to Supabase: {e}", exc_info=True)
+                logger.error(f"TRADE_PERSISTENCE_FAILED symbol={symbol} trade_id={trade['id']} "
+                           f"storage=supabase exception_type={type(e).__name__} error={str(e)}", exc_info=True)
         else:
-            logger.warning("⚠️  Supabase client not available - trade only saved to JSON")
+            logger.debug(f"TRADE_PERSISTENCE_SKIPPED symbol={symbol} trade_id={trade['id']} "
+                        f"storage=supabase reason=client_not_available")
 
-        logger.info(f"BUY executed: {quantity:.6f} {symbol} @ ${price:.2f} (${amount_usdt:.2f})")
+        logger.info(f"TRADE_EXECUTION_COMPLETE action=buy symbol={symbol} trade_id={trade['id']} "
+                   f"quantity={quantity:.6f} price={price:.2f} amount_usdt={amount_usdt:.2f} "
+                   f"leverage={leverage:.1f} margin_used={required_margin:.2f} fee={trading_fee:.2f} "
+                   f"balance_remaining={self.balance:.2f} total_positions={len(self.positions)}")
         return trade
 
     @validate_trading_inputs
@@ -436,25 +505,58 @@ class TradingEngine:
         Returns:
             Trade dictionary if successful, None otherwise
         """
+        logger.info(f"TRADE_EXECUTION_START action=sell symbol={symbol} price={price:.2f} "
+                   f"requested_quantity={quantity if quantity else 'ALL'} confidence={confidence:.2f} "
+                   f"leverage={leverage:.1f}")
+        logger.info(f"TRADE_EXECUTION_CONTEXT symbol={symbol} balance={self.balance:.2f} "
+                   f"active_positions={len(self.positions)} position_exists={symbol in self.positions}")
+
         # Check if we have a position
         if symbol not in self.positions or self.positions[symbol]["quantity"] <= 0:
-            logger.warning(f"No position to sell for {symbol}")
+            logger.error(f"TRADE_REJECTED reason=no_position_to_sell symbol={symbol} "
+                        f"position_exists={symbol in self.positions} "
+                        f"available_positions={list(self.positions.keys())}")
+            if symbol in self.positions:
+                pos = self.positions[symbol]
+                logger.error(f"TRADE_REJECTED_DETAIL symbol={symbol} position_quantity={pos.get('quantity', 0):.6f}")
             return None
 
         position = self.positions[symbol]
-        sell_quantity = quantity if quantity else position["quantity"]
+        position_quantity = position["quantity"]
+        position_avg_price = position["avg_price"]
+        position_margin = position.get("margin_used", 0)
 
-        if sell_quantity > position["quantity"]:
-            sell_quantity = position["quantity"]
+        logger.info(f"EXISTING_POSITION symbol={symbol} quantity={position_quantity:.6f} "
+                   f"avg_price={position_avg_price:.2f} margin_used={position_margin:.2f} "
+                   f"leverage={position.get('leverage', 1.0):.1f}")
+
+        sell_quantity = quantity if quantity else position_quantity
+        logger.debug(f"SELL_QUANTITY_DETERMINED symbol={symbol} requested={quantity if quantity else 'ALL'} "
+                    f"final={sell_quantity:.6f}")
+
+        if sell_quantity > position_quantity:
+            logger.warning(f"QUANTITY_CAPPED symbol={symbol} requested={sell_quantity:.6f} "
+                          f"available={position_quantity:.6f} reason=insufficient_quantity")
+            sell_quantity = position_quantity
 
         amount_usdt = sell_quantity * price
-        profit = (price - position["avg_price"]) * sell_quantity
+        profit = (price - position_avg_price) * sell_quantity
+        profit_pct = ((price - position_avg_price) / position_avg_price) * 100 if position_avg_price > 0 else 0
+
+        logger.debug(f"SELL_CALCULATION symbol={symbol} sell_quantity={sell_quantity:.6f} "
+                    f"sell_price={price:.2f} amount_usdt={amount_usdt:.2f} entry_price={position_avg_price:.2f} "
+                    f"profit={profit:.2f} profit_pct={profit_pct:.2f}")
 
         # Calculate trading fees
         trading_fee = amount_usdt * (config.TRADING_FEE_PERCENT / 100)
+        logger.debug(f"FEE_CALCULATION symbol={symbol} trading_fee={trading_fee:.2f} "
+                    f"fee_percent={config.TRADING_FEE_PERCENT} amount_usdt={amount_usdt:.2f}")
 
         # Calculate margin to return (proportional to quantity sold)
-        margin_returned = (position.get("margin_used", 0) * sell_quantity) / position["quantity"]
+        margin_returned = (position_margin * sell_quantity) / position_quantity
+        net_gain = profit - trading_fee
+        logger.debug(f"MARGIN_CALCULATION symbol={symbol} margin_returned={margin_returned:.2f} "
+                    f"profit={profit:.2f} fee={trading_fee:.2f} net_gain={net_gain:.2f}")
 
         # Extract LLM context for storage
         # Note: llm_decision may be None if not provided, or may be sanitized by @validate_trading_inputs decorator
@@ -498,34 +600,65 @@ class TradingEngine:
         }
 
         # Update balance and positions (add margin returned + profit - fees)
-        self.balance += margin_returned + profit - trading_fee
+        balance_before = self.balance
+        balance_update = margin_returned + profit - trading_fee
+        self.balance += balance_update
+        balance_after = self.balance
+
+        logger.debug(f"BALANCE_UPDATE symbol={symbol} balance_before={balance_before:.2f} "
+                    f"balance_after={balance_after:.2f} margin_returned={margin_returned:.2f} "
+                    f"profit={profit:.2f} fee={trading_fee:.2f} net_addition={balance_update:.2f}")
+
         position["quantity"] -= sell_quantity
-        position["value"] -= position["avg_price"] * sell_quantity
+        position["value"] -= position_avg_price * sell_quantity
         position["margin_used"] -= margin_returned
 
+        remaining_quantity = position["quantity"]
+        logger.debug(f"POSITION_UPDATE symbol={symbol} quantity_before={position_quantity:.6f} "
+                    f"quantity_sold={sell_quantity:.6f} quantity_remaining={remaining_quantity:.6f}")
+
         if position["quantity"] <= 0:
+            logger.info(f"POSITION_CLOSED symbol={symbol} operation=full_close "
+                       f"remaining_positions={len(self.positions) - 1}")
             del self.positions[symbol]
         else:
+            logger.info(f"POSITION_PARTIAL_CLOSE symbol={symbol} operation=partial_close "
+                       f"remaining_quantity={position['quantity']:.6f} "
+                       f"remaining_margin={position['margin_used']:.2f}")
             self.positions[symbol] = position
 
+        logger.debug(f"TRADE_PERSISTENCE_START symbol={symbol} trade_id={trade['id']}")
         self.trades.append(trade)
         self._save_trades()
+        logger.debug(f"TRADE_PERSISTENCE_COMPLETE symbol={symbol} trade_id={trade['id']} "
+                    f"total_trades={len(self.trades)} storage=local_file")
+
         self._save_portfolio_state()
+        logger.debug(f"PORTFOLIO_STATE_SAVED symbol={symbol} balance={self.balance:.2f} "
+                    f"positions={len(self.positions)}")
 
         # Save to Supabase if available (synchronous call - CRITICAL FIX)
         if self.supabase_client:
             try:
                 success = self.supabase_client.add_trade(trade)
                 if success:
-                    logger.info(f"✅ Trade saved to Supabase: SELL {symbol}")
+                    logger.info(f"TRADE_PERSISTENCE_COMPLETE symbol={symbol} trade_id={trade['id']} "
+                               f"storage=supabase status=success")
                 else:
-                    logger.error(f"❌ Failed to save trade to Supabase (returned False): SELL {symbol}")
+                    logger.error(f"TRADE_PERSISTENCE_FAILED symbol={symbol} trade_id={trade['id']} "
+                               f"storage=supabase status=false_received reason=unknown")
             except Exception as e:
-                logger.error(f"❌ Failed to save trade to Supabase: {e}", exc_info=True)
+                logger.error(f"TRADE_PERSISTENCE_FAILED symbol={symbol} trade_id={trade['id']} "
+                           f"storage=supabase exception_type={type(e).__name__} error={str(e)}", exc_info=True)
         else:
-            logger.warning("⚠️  Supabase client not available - trade only saved to JSON")
+            logger.debug(f"TRADE_PERSISTENCE_SKIPPED symbol={symbol} trade_id={trade['id']} "
+                        f"storage=supabase reason=client_not_available")
 
-        logger.info(f"SELL executed: {sell_quantity:.6f} {symbol} @ ${price:.2f} (profit: ${profit:.2f})")
+        logger.info(f"TRADE_EXECUTION_COMPLETE action=sell symbol={symbol} trade_id={trade['id']} "
+                   f"quantity={sell_quantity:.6f} price={price:.2f} amount_usdt={amount_usdt:.2f} "
+                   f"profit={profit:.2f} profit_pct={profit_pct:.2f} fee={trading_fee:.2f} "
+                   f"margin_returned={margin_returned:.2f} balance_remaining={self.balance:.2f} "
+                   f"total_positions={len(self.positions)}")
         return trade
 
     @validate_trading_inputs
@@ -554,35 +687,64 @@ class TradingEngine:
         Returns:
             Trade dictionary if successful, None otherwise
         """
+        logger.info(f"TRADE_EXECUTION_START action=short symbol={symbol} price={price:.2f} amount_usdt={amount_usdt:.2f} "
+                   f"confidence={confidence:.2f} leverage={leverage:.1f}")
+        logger.info(f"TRADE_EXECUTION_CONTEXT symbol={symbol} balance={self.balance:.2f} "
+                   f"active_positions={len(self.positions)} existing_position={symbol in self.positions}")
+        if symbol in self.positions:
+            pos = self.positions[symbol]
+            logger.info(f"EXISTING_POSITION symbol={symbol} quantity={pos.get('quantity', 0):.6f} "
+                       f"avg_price={pos.get('avg_price', 0):.2f} margin_used={pos.get('margin_used', 0):.2f} "
+                       f"side={pos.get('side', 'unknown')}")
+
         # Validate leverage
+        original_leverage = leverage
         leverage = max(1.0, min(leverage, config.MAX_LEVERAGE))
+        if leverage != original_leverage:
+            logger.warning(f"LEVERAGE_ADJUSTED symbol={symbol} original={original_leverage:.1f} "
+                          f"adjusted={leverage:.1f} max_leverage={config.MAX_LEVERAGE}")
 
         # Calculate required margin (amount_usdt / leverage)
         required_margin = amount_usdt / leverage
+        logger.debug(f"MARGIN_CALCULATION symbol={symbol} amount_usdt={amount_usdt:.2f} leverage={leverage:.1f} "
+                    f"required_margin={required_margin:.2f}")
 
         # Check if we have enough balance for margin
         if required_margin > self.balance:
-            logger.warning(
-                f"Insufficient balance for short margin. Available: {self.balance}, Required margin: {required_margin}"
-            )
+            logger.error(f"TRADE_REJECTED reason=insufficient_balance symbol={symbol} "
+                        f"available_balance={self.balance:.2f} required_margin={required_margin:.2f} "
+                        f"shortfall={required_margin - self.balance:.2f}")
             return None
 
         # Check position limits (Alpha Arena constraint)
         if len(self.positions) >= config.MAX_ACTIVE_POSITIONS:
-            logger.warning(
-                f"Maximum active positions reached ({config.MAX_ACTIVE_POSITIONS}). Cannot open new position."
-            )
+            logger.error(f"TRADE_REJECTED reason=max_positions_reached symbol={symbol} "
+                        f"current_positions={len(self.positions)} max_allowed={config.MAX_ACTIVE_POSITIONS} "
+                        f"position_symbols={list(self.positions.keys())}")
             return None
 
         # Apply position size limit based on margin
         max_margin = self.balance * config.MAX_POSITION_SIZE
+        logger.debug(f"POSITION_SIZE_LIMIT symbol={symbol} max_margin_allowed={max_margin:.2f} "
+                    f"max_position_size_pct={config.MAX_POSITION_SIZE * 100:.1f}")
+        original_required_margin = required_margin
         required_margin = min(required_margin, max_margin)
+        if required_margin != original_required_margin:
+            logger.warning(f"MARGIN_CAPPED symbol={symbol} original={original_required_margin:.2f} "
+                          f"capped={required_margin:.2f} reason=position_size_limit")
         amount_usdt = required_margin * leverage
+        logger.debug(f"POSITION_SIZE_FINAL symbol={symbol} amount_usdt={amount_usdt:.2f} "
+                    f"margin={required_margin:.2f} leverage={leverage:.1f}")
 
         quantity = amount_usdt / price
+        logger.debug(f"QUANTITY_CALCULATED symbol={symbol} quantity={quantity:.6f} "
+                    f"amount_usdt={amount_usdt:.2f} price={price:.2f}")
 
         # Calculate trading fees
         trading_fee = amount_usdt * (config.TRADING_FEE_PERCENT / 100)
+        total_cost = required_margin + trading_fee
+        logger.debug(f"FEE_CALCULATION symbol={symbol} trading_fee={trading_fee:.2f} "
+                    f"fee_percent={config.TRADING_FEE_PERCENT} total_cost={total_cost:.2f}")
 
         # Extract LLM context for storage
         llm_prompt = llm_decision.get("_prompt", "") if llm_decision else ""
@@ -615,23 +777,44 @@ class TradingEngine:
         }
 
         # Update balance and positions (deduct margin + fees)
+        balance_before = self.balance
         self.balance -= required_margin + trading_fee
+        balance_after = self.balance
+        logger.debug(f"BALANCE_UPDATE symbol={symbol} balance_before={balance_before:.2f} "
+                    f"balance_after={balance_after:.2f} deduction={required_margin + trading_fee:.2f}")
+
         if symbol in self.positions:
             # Average in if position exists
             pos = self.positions[symbol]
+            old_quantity = pos["quantity"]
+            old_avg_price = pos["avg_price"]
+            old_margin = pos.get("margin_used", 0)
+
             total_cost = (pos["quantity"] * pos["avg_price"]) + amount_usdt
             total_quantity = pos["quantity"] + quantity
             total_margin = pos.get("margin_used", 0) + required_margin
+            new_avg_price = total_cost / total_quantity
+
+            logger.info(f"POSITION_AVERAGING symbol={symbol} operation=add_to_existing direction=short "
+                       f"old_quantity={old_quantity:.6f} old_avg_price={old_avg_price:.2f} "
+                       f"old_margin={old_margin:.2f} add_quantity={quantity:.6f} add_price={price:.2f} "
+                       f"new_quantity={total_quantity:.6f} new_avg_price={new_avg_price:.2f} "
+                       f"new_margin={total_margin:.2f}")
+
             self.positions[symbol] = {
                 "side": "short",
                 "quantity": total_quantity,
-                "avg_price": total_cost / total_quantity,
+                "avg_price": new_avg_price,
                 "value": amount_usdt,
                 "leverage": leverage,
                 "margin_used": total_margin,
                 "notional_value": total_quantity * price,
             }
         else:
+            logger.info(f"POSITION_CREATED symbol={symbol} operation=new_position direction=short "
+                       f"quantity={quantity:.6f} entry_price={price:.2f} margin_used={required_margin:.2f} "
+                       f"notional_value={quantity * price:.2f}")
+
             self.positions[symbol] = {
                 "side": "short",
                 "quantity": quantity,
@@ -642,24 +825,37 @@ class TradingEngine:
                 "notional_value": quantity * price,
             }
 
+        logger.debug(f"TRADE_PERSISTENCE_START symbol={symbol} trade_id={trade['id']}")
         self.trades.append(trade)
         self._save_trades()
+        logger.debug(f"TRADE_PERSISTENCE_COMPLETE symbol={symbol} trade_id={trade['id']} "
+                    f"total_trades={len(self.trades)} storage=local_file")
+
         self._save_portfolio_state()
+        logger.debug(f"PORTFOLIO_STATE_SAVED symbol={symbol} balance={self.balance:.2f} "
+                    f"positions={len(self.positions)}")
 
         # Save to Supabase if available (synchronous call - CRITICAL FIX)
         if self.supabase_client:
             try:
                 success = self.supabase_client.add_trade(trade)
                 if success:
-                    logger.info(f"✅ Trade saved to Supabase: SHORT {symbol}")
+                    logger.info(f"TRADE_PERSISTENCE_COMPLETE symbol={symbol} trade_id={trade['id']} "
+                               f"storage=supabase status=success")
                 else:
-                    logger.error(f"❌ Failed to save trade to Supabase (returned False): SHORT {symbol}")
+                    logger.error(f"TRADE_PERSISTENCE_FAILED symbol={symbol} trade_id={trade['id']} "
+                               f"storage=supabase status=false_received reason=unknown")
             except Exception as e:
-                logger.error(f"❌ Failed to save trade to Supabase: {e}", exc_info=True)
+                logger.error(f"TRADE_PERSISTENCE_FAILED symbol={symbol} trade_id={trade['id']} "
+                           f"storage=supabase exception_type={type(e).__name__} error={str(e)}", exc_info=True)
         else:
-            logger.warning("⚠️  Supabase client not available - trade only saved to JSON")
+            logger.debug(f"TRADE_PERSISTENCE_SKIPPED symbol={symbol} trade_id={trade['id']} "
+                        f"storage=supabase reason=client_not_available")
 
-        logger.info(f"SHORT executed: {quantity:.6f} {symbol} @ ${price:.2f} (${amount_usdt:.2f})")
+        logger.info(f"TRADE_EXECUTION_COMPLETE action=short symbol={symbol} trade_id={trade['id']} "
+                   f"quantity={quantity:.6f} price={price:.2f} amount_usdt={amount_usdt:.2f} "
+                   f"leverage={leverage:.1f} margin_used={required_margin:.2f} fee={trading_fee:.2f} "
+                   f"balance_remaining={self.balance:.2f} total_positions={len(self.positions)}")
         return trade
 
     def get_portfolio_summary(self, current_price: float) -> Dict:

@@ -268,13 +268,30 @@ class TradingBot:
             )
 
             # 4. Execute trade based on decision
+            logger.info(f"TRADE_DECISION_EVALUATION action={action} direction={direction} "
+                       f"confidence={confidence:.2f} position_size_usdt={position_size_usdt:.2f} "
+                       f"leverage={leverage:.1f} current_price={current_price:.2f}")
+            logger.info(f"TRADE_DECISION_CONTEXT balance={portfolio['balance']:.2f} "
+                       f"open_positions={portfolio.get('open_positions', 0)} "
+                       f"max_positions={config.MAX_ACTIVE_POSITIONS} "
+                       f"max_position_size_pct={config.MAX_POSITION_SIZE * 100:.1f}")
+
             trade_executed = False
             if action == "buy" and confidence > 0.6 and direction == "long":
+                logger.info(f"TRADE_CONDITION_CHECK action=buy status=passed "
+                           f"confidence={confidence:.2f} direction={direction}")
+
                 # Use LLM's position size and leverage directly
                 available_balance = portfolio["balance"]
+                logger.debug(f"POSITION_SIZE_VALIDATION balance={available_balance:.2f} "
+                            f"requested_size={position_size_usdt:.2f} "
+                            f"max_allowed={available_balance * config.MAX_POSITION_SIZE:.2f}")
+
                 if available_balance > 0 and position_size_usdt > 0:
                     # Use LLM's calculated position size
                     trade_amount = min(position_size_usdt, available_balance * config.MAX_POSITION_SIZE)
+                    logger.info(f"TRADE_EXECUTION_START action=buy symbol={config.SYMBOL} "
+                               f"amount={trade_amount:.2f} leverage={leverage:.1f}")
 
                     self.console.print(
                         f"[bold green]🟢 Executing BUY: ${trade_amount:.2f} with {leverage:.1f}x leverage[/bold green]"
@@ -284,19 +301,36 @@ class TradingBot:
                     )
                     if trade:
                         trade_executed = True
+                        logger.info(f"TRADE_EXECUTION_SUCCESS action=buy trade_id={trade['id']} "
+                                   f"symbol={config.SYMBOL}")
                         self.console.print(
                             f"[bold green]✅ BUY trade executed successfully (ID: {trade['id']})[/bold green]"
                         )
                     else:
+                        logger.error(f"TRADE_EXECUTION_FAILED action=buy symbol={config.SYMBOL} "
+                                   f"reason=returned_none possible_causes=insufficient_balance_or_max_positions")
                         self.console.print(
                             "[bold red]❌ BUY trade failed (insufficient balance or other error)[/bold red]"
                         )
-
+                else:
+                    logger.warning(f"TRADE_SKIPPED action=buy reason=position_size_validation_failed "
+                                 f"balance_positive={available_balance > 0} "
+                                 f"position_size_positive={position_size_usdt > 0} "
+                                 f"balance={available_balance:.2f} position_size={position_size_usdt:.2f}")
             elif action == "buy" and confidence > 0.6 and direction == "short":
+                logger.info(f"TRADE_CONDITION_CHECK action=short status=passed "
+                           f"confidence={confidence:.2f} direction={direction}")
+
                 # Execute short position
                 available_balance = portfolio["balance"]
+                logger.debug(f"POSITION_SIZE_VALIDATION balance={available_balance:.2f} "
+                            f"requested_size={position_size_usdt:.2f} "
+                            f"max_allowed={available_balance * config.MAX_POSITION_SIZE:.2f}")
+
                 if available_balance > 0 and position_size_usdt > 0:
                     trade_amount = min(position_size_usdt, available_balance * config.MAX_POSITION_SIZE)
+                    logger.info(f"TRADE_EXECUTION_START action=short symbol={config.SYMBOL} "
+                               f"amount={trade_amount:.2f} leverage={leverage:.1f}")
 
                     self.console.print(
                         f"[bold red]🔴 Executing SHORT: ${trade_amount:.2f} with {leverage:.1f}x leverage[/bold red]"
@@ -306,17 +340,37 @@ class TradingBot:
                     )
                     if trade:
                         trade_executed = True
+                        logger.info(f"TRADE_EXECUTION_SUCCESS action=short trade_id={trade['id']} "
+                                   f"symbol={config.SYMBOL}")
                         self.console.print(
                             f"[bold red]✅ SHORT trade executed successfully (ID: {trade['id']})[/bold red]"
                         )
                     else:
+                        logger.error(f"TRADE_EXECUTION_FAILED action=short symbol={config.SYMBOL} "
+                                   f"reason=returned_none possible_causes=insufficient_balance_or_max_positions")
                         self.console.print(
                             "[bold red]❌ SHORT trade failed (insufficient balance or other error)[/bold red]"
                         )
+                else:
+                    logger.warning(f"TRADE_SKIPPED action=short reason=position_size_validation_failed "
+                                 f"balance_positive={available_balance > 0} "
+                                 f"position_size_positive={position_size_usdt > 0}")
 
             elif action == "sell" and confidence > 0.6:
+                logger.info(f"TRADE_CONDITION_CHECK action=sell status=passed "
+                           f"confidence={confidence:.2f}")
+
                 # Sell all or partial position
-                if config.SYMBOL in self.trading_engine.positions:
+                symbol = config.SYMBOL
+                has_position = symbol in self.trading_engine.positions
+                logger.debug(f"POSITION_CHECK symbol={symbol} position_exists={has_position}")
+
+                if has_position:
+                    position = self.trading_engine.positions[symbol]
+                    position_qty = position.get("quantity", 0)
+                    logger.info(f"TRADE_EXECUTION_START action=sell symbol={symbol} "
+                               f"position_quantity={position_qty:.6f}")
+
                     self.console.print(f"[bold red]🔴 Executing SELL with {leverage:.1f}x leverage[/bold red]")
                     trade = self.trading_engine.execute_sell(
                         config.SYMBOL, current_price, confidence=confidence, llm_decision=decision, leverage=leverage
@@ -324,20 +378,33 @@ class TradingBot:
                     if trade:
                         trade_executed = True
                         profit = trade.get("profit", 0)
+                        profit_pct = trade.get("profit_pct", 0)
+                        logger.info(f"TRADE_EXECUTION_SUCCESS action=sell trade_id={trade['id']} "
+                                   f"symbol={symbol} profit={profit:.2f} profit_pct={profit_pct:.2f}")
                         profit_color = "green" if profit >= 0 else "red"
                         self.console.print(
                             f"[bold green]✅ SELL trade executed successfully[/bold green] "
                             f"(ID: {trade['id']}, Profit: [{profit_color}]${profit:.2f}[/{profit_color}])"
                         )
                     else:
+                        logger.error(f"TRADE_EXECUTION_FAILED action=sell symbol={symbol} "
+                                   f"reason=returned_none possible_causes=position_quantity_invalid_or_validation_error")
                         self.console.print("[bold red]❌ SELL trade failed (no position or other error)[/bold red]")
                 else:
+                    logger.warning(f"TRADE_SKIPPED action=sell reason=no_position symbol={symbol} "
+                                 f"available_positions={list(self.trading_engine.positions.keys())}")
                     self.console.print("[yellow]No position to sell[/yellow]")
             else:
+                logger.debug(f"TRADE_CONDITION_CHECK action=sell status=failed "
+                           f"action_match={action == 'sell'} confidence_sufficient={confidence > 0.6}")
                 self.console.print("[yellow]🟡 Decision is to HOLD or confidence too low. No action taken.[/yellow]")
 
             if not trade_executed:
+                logger.info(f"TRADE_EXECUTION_SUMMARY status=no_trade_executed action={action} "
+                           f"confidence={confidence:.2f} direction={direction}")
                 self.console.print("[dim]No trade executed this cycle[/dim]")
+            else:
+                logger.info(f"TRADE_EXECUTION_SUMMARY status=trade_executed_successfully")
 
             # Save portfolio state with full metrics
             self.trading_engine._save_portfolio_state(current_price)

@@ -652,30 +652,38 @@ No markdown formatting, no code blocks, no extra text.
         Returns:
             Parsed and validated response dict, or None if invalid
         """
+        logger.debug(f"JSON_PARSE_START response_length={len(response_text)}")
+
         # First, try parsing directly
         try:
             response = json.loads(response_text.strip())
+            logger.debug(f"JSON_PARSE_SUCCESS method=direct")
             return self._validate_response_structure(response)
-        except json.JSONDecodeError:
-            pass
+        except json.JSONDecodeError as e:
+            logger.debug(f"JSON_PARSE_FAILED method=direct error={str(e)}")
 
         # Extract JSON from text
         json_str = self._extract_json_from_text(response_text)
 
         if json_str:
+            logger.debug(f"JSON_EXTRACTION_SUCCESS extracted_length={len(json_str)}")
             # Try to fix unquoted keys first
             json_str = self._fix_json_keys(json_str)
             # Then fix unquoted string values
             json_str = self._fix_json_string_values(json_str)
+            logger.debug(f"JSON_FIXES_APPLIED")
 
             try:
                 response = json.loads(json_str)
+                logger.debug(f"JSON_PARSE_SUCCESS method=extracted_and_fixed")
                 return self._validate_response_structure(response)
             except json.JSONDecodeError as e:
-                logger.error(f"Could not parse JSON after extraction and fixes: {e}")
-                logger.debug(f"Extracted JSON string: {json_str[:300]}...")
+                logger.error(f"JSON_PARSE_FAILED method=extracted_and_fixed "
+                           f"error_type={type(e).__name__} error={str(e)} "
+                           f"extracted_preview={json_str[:200]}")
 
-        logger.error(f"No valid JSON found in response: {response_text[:200]}...")
+        logger.error(f"JSON_PARSE_FAILED reason=no_valid_json_found "
+                    f"response_length={len(response_text)} response_preview={response_text[:200]}")
         return None
 
     def _validate_response_structure(self, response: Dict) -> Optional[Dict]:
@@ -688,11 +696,14 @@ No markdown formatting, no code blocks, no extra text.
         Returns:
             Validated and normalized response dict, or None if invalid
         """
+        logger.debug(f"RESPONSE_STRUCTURE_VALIDATION_START response_keys={list(response.keys())}")
 
         # Use security manager for validation
         if not self.security_manager.validate_trading_decision(response):
-            logger.error("Trading decision failed security validation")
+            logger.error(f"SECURITY_VALIDATION_FAILED response={response} "
+                       f"possible_causes=invalid_action_or_confidence_or_leverage_or_position_size")
             return None
+        logger.debug(f"SECURITY_VALIDATION_SUCCESS")
 
         # Validate exit plan structure
         exit_plan = response.get("exit_plan", {})
@@ -1003,10 +1014,14 @@ No markdown formatting, no code blocks, no extra text.
             logger.debug(f"Raw LLM response: {raw_response_content}")
 
             # Validate and parse response
+            logger.debug(f"LLM_RESPONSE_VALIDATION_START response_length={len(raw_response_content)}")
             decision = self._validate_llm_response(raw_response_content)
 
             if decision is None:
-                logger.error("Invalid LLM response, falling back to hold")
+                logger.error(f"LLM_RESPONSE_VALIDATION_FAILED reason=invalid_response "
+                           f"response_length={len(raw_response_content)} "
+                           f"response_preview={raw_response_content[:200]} "
+                           f"fallback_action=hold")
                 fallback_decision = {
                     "action": "hold",
                     "direction": "none",
@@ -1022,12 +1037,16 @@ No markdown formatting, no code blocks, no extra text.
                 }
                 return fallback_decision
 
-            logger.info(
-                f"LLM decision: {decision['action'].upper()} "
-                f"(confidence: {decision['confidence']:.2f}, "
-                f"risk: {decision['risk_assessment']})"
-            )
-            logger.info(f"LLM justification: {decision['justification']}")
+            logger.info(f"LLM_DECISION_VALIDATED action={decision['action']} "
+                       f"direction={decision.get('direction', 'none')} "
+                       f"confidence={decision['confidence']:.2f} "
+                       f"position_size_usdt={decision.get('position_size_usdt', 0.0):.2f} "
+                       f"leverage={decision.get('leverage', 1.0):.1f} "
+                       f"risk_assessment={decision.get('risk_assessment', 'medium')}")
+            exit_plan = decision.get('exit_plan', {})
+            if exit_plan:
+                logger.debug(f"LLM_EXIT_PLAN profit_target={exit_plan.get('profit_target', 0.0):.2f} "
+                           f"stop_loss={exit_plan.get('stop_loss', 0.0):.2f}")
 
             # Attach prompt and raw response for storage
             decision["_prompt"] = prompt
