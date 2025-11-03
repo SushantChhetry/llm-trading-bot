@@ -13,6 +13,7 @@ import sys
 import time
 from datetime import datetime
 from pathlib import Path
+
 import colorama
 from colorama import init as colorama_init
 from rich.console import Console
