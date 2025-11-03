@@ -16,7 +16,8 @@ These are **ESSENTIAL** - the bot won't work without them:
 | `LLM_MODEL` | LLM model name | `deepseek-chat` |
 | `TRADING_MODE` | Trading mode | `paper` (or `live` for real trading) |
 | `USE_TESTNET` | Use testnet exchange | `true` (recommended) |
-| `EXCHANGE` | Exchange name | `bybit` |
+| | | **Note:** Kraken does not provide testnet - this flag has limited effect with Kraken |
+| `EXCHANGE` | Exchange name | `kraken` (options: `kraken`, `bybit`, `binance`, `coinbase`) |
 | `SYMBOL` | Trading pair | `BTC/USDT` |
 | `LOG_LEVEL` | Logging level | `INFO` |
 
@@ -48,10 +49,15 @@ These have sensible defaults but should be reviewed:
 
 | Variable | Description | When Needed |
 |----------|-------------|-------------|
-| `EXCHANGE_API_KEY` | Exchange API key | If `TRADING_MODE=live` |
-| `EXCHANGE_API_SECRET` | Exchange API secret | If `TRADING_MODE=live` |
-| `TESTNET_API_KEY` | Testnet API key | If `USE_TESTNET=true` |
-| `TESTNET_API_SECRET` | Testnet API secret | If `USE_TESTNET=true` |
+| `EXCHANGE_API_KEY` | Exchange API key | If `TRADING_MODE=live` or for fetching market data |
+| `EXCHANGE_API_SECRET` | Exchange API secret | If `TRADING_MODE=live` or for fetching market data |
+| `TESTNET_API_KEY` | Testnet API key | If `USE_TESTNET=true` (only for Bybit/Binance) |
+| `TESTNET_API_SECRET` | Testnet API secret | If `USE_TESTNET=true` (only for Bybit/Binance) |
+
+**Kraken-specific notes:**
+- Kraken does **NOT** provide a testnet/sandbox environment
+- Only `EXCHANGE_API_KEY` and `EXCHANGE_API_SECRET` are used (ignore `TESTNET_*` keys)
+- For paper trading with Kraken, API keys are optional but may be needed for real market data
 
 ---
 
@@ -81,8 +87,10 @@ LLM_TIMEOUT=30                            # Optional: Default 30 seconds
 # ============================================
 TRADING_MODE=paper                         # Required: paper or live
 USE_TESTNET=true                           # Required: true or false
-EXCHANGE=bybit                             # Required: bybit, binance, etc.
+# Note: With Kraken, USE_TESTNET has limited effect (Kraken has no testnet)
+EXCHANGE=kraken                            # Required: kraken, bybit, binance, coinbase
 SYMBOL=BTC/USDT                           # Required: Trading pair
+# Note: Kraken may use BTC/USD format instead of BTC/USDT
 INITIAL_BALANCE=10000.0                   # Recommended: Starting balance
 RUN_INTERVAL_SECONDS=150                  # Recommended: Bot cycle interval (2.5 min)
 
@@ -105,12 +113,15 @@ MIN_CONFIDENCE_THRESHOLD=0.6              # Recommended: Min confidence to trade
 FEE_IMPACT_WARNING_THRESHOLD=20.0         # Optional: Warn if fees > X% of PnL
 
 # ============================================
-# EXCHANGE API KEYS (Only if TRADING_MODE=live)
+# EXCHANGE API KEYS
 # ============================================
-EXCHANGE_API_KEY=                         # Required if live trading
-EXCHANGE_API_SECRET=                      # Required if live trading
-TESTNET_API_KEY=                          # Required if USE_TESTNET=true
-TESTNET_API_SECRET=                       # Required if USE_TESTNET=true
+# For paper trading: Optional - may be needed for fetching real market data
+# For live trading: Required - must have valid exchange API credentials
+# Note: Kraken does NOT provide separate testnet keys (no testnet available)
+EXCHANGE_API_KEY=                         # Required if live trading or for market data
+EXCHANGE_API_SECRET=                      # Required if live trading or for market data
+TESTNET_API_KEY=                          # Only for Bybit/Binance testnet (not used with Kraken)
+TESTNET_API_SECRET=                       # Only for Bybit/Binance testnet (not used with Kraken)
 
 # ============================================
 # SUPABASE CONFIGURATION (For API Server)
@@ -194,9 +205,11 @@ LLM_API_KEY=sk-your-deepseek-key
 LLM_MODEL=deepseek-chat
 TRADING_MODE=paper
 USE_TESTNET=true
-EXCHANGE=bybit
-SYMBOL=BTC/USDT
+# Note: USE_TESTNET has limited effect with Kraken (no testnet available)
+EXCHANGE=kraken  # US-friendly exchange, safe for paper trading
+SYMBOL=BTC/USDT  # Note: May need BTC/USD for Kraken
 LOG_LEVEL=INFO
+# API keys optional for paper trading but may be needed for market data
 ```
 
 ### Full Production Setup (Live Trading)
@@ -208,10 +221,11 @@ LLM_API_KEY=sk-your-deepseek-key
 LLM_MODEL=deepseek-chat
 TRADING_MODE=live
 USE_TESTNET=false
-EXCHANGE=bybit
+EXCHANGE=kraken
 SYMBOL=BTC/USDT
-EXCHANGE_API_KEY=your-exchange-key
-EXCHANGE_API_SECRET=your-exchange-secret
+EXCHANGE_API_KEY=your-kraken-api-key
+EXCHANGE_API_SECRET=your-kraken-api-secret
+# Note: TESTNET_API_KEY and TESTNET_API_SECRET are not used with Kraken
 INITIAL_BALANCE=10000.0
 MAX_POSITION_SIZE=0.1
 MAX_LEVERAGE=10.0
@@ -248,11 +262,12 @@ After setting up variables, verify they're loaded correctly:
 ## ⚠️ Important Notes
 
 1. **Never use `TRADING_MODE=live` with real money until thoroughly tested**
-2. **Always start with `USE_TESTNET=true` for safety**
-3. **Monitor your LLM API usage to avoid unexpected costs**
-4. **Set appropriate `MAX_POSITION_SIZE` based on your risk tolerance**
-5. **Use strong, unique API keys for production**
-6. **Enable Railway's usage alerts to monitor costs**
+2. **Always start with `USE_TESTNET=true` for safety** (note: has limited effect with Kraken)
+3. **Kraken-specific**: Kraken does not provide testnet - use `TRADING_MODE=paper` for safe paper trading
+4. **Monitor your LLM API usage to avoid unexpected costs**
+5. **Set appropriate `MAX_POSITION_SIZE` based on your risk tolerance**
+6. **Use strong, unique API keys for production**
+7. **Enable Railway's usage alerts to monitor costs**
 
 ---
 

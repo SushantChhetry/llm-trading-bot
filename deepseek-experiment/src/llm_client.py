@@ -317,7 +317,325 @@ No markdown formatting, no code blocks, no extra text.
         json_str = re.sub(r"([{,])(\s*)([a-zA-Z_][a-zA-Z0-9_]*)(\s*):", quote_key, json_str)
         return json_str
 
-    @validate_trading_inputs
+    def _fix_json_string_values(self, json_str: str) -> str:
+        """
+        Fix unquoted string values in JSON.
+
+        Args:
+            json_str: JSON string with potential unquoted string values
+
+        Returns:
+            JSON string with quoted string values
+        """
+        # Use a regex-based approach to find and quote unquoted string values
+        # Pattern: : whitespace? value whitespace? (, or } or \n)
+        # We'll match values that are likely strings (not numbers, booleans, null, objects, arrays)
+
+        def quote_string_value(match):
+            colon_ws = match.group(1)  # colon and optional whitespace
+            value = match.group(2)     # the value (may contain spaces/newlines)
+            ws_comma = match.group(3)  # whitespace and comma/brace/newline
+
+            value = value.strip()
+
+            # Don't quote if it's already quoted, numeric, boolean, null, or starts with { or [
+            if self._is_numeric_or_constant(value) or value.startswith(('{', '[')):
+                return f'{colon_ws}{value}{ws_comma}'
+
+            # Quote the string value
+            # Escape any quotes in the value
+            escaped_value = value.replace('\\', '\\\\').replace('"', '\\"')
+            return f'{colon_ws}"{escaped_value}"{ws_comma}'
+
+        # Pattern explanation:
+        # (:\s*) - colon followed by optional whitespace
+        # ([^,}\n\[\{]+?) - non-greedy match of value (anything except comma, closing brace, newline, [ or {)
+        # (\s*[,}\n]) - whitespace followed by comma, closing brace, or newline
+        #
+        # This will match simple unquoted values but skip over nested objects/arrays
+        # For multi-line values, we need a more sophisticated approach
+
+        # First pass: handle simple single-line values
+        # Match: : whitespace? unquoted-value whitespace? (comma|brace|newline)
+        pattern = r'(:\s*)([^,}\n\[\{]+?)(\s*[,}\n])'
+
+        # But we need to be careful - this might match parts of nested structures
+        # So we'll use a more careful state-based replacement
+
+        result = []
+        i = 0
+        in_string = False
+        escape_next = False
+        brace_depth = 0
+
+        while i < len(json_str):
+            char = json_str[i]
+
+            if escape_next:
+                result.append(char)
+                escape_next = False
+                i += 1
+                continue
+
+            if char == '\\':
+                result.append(char)
+                escape_next = True
+                i += 1
+                continue
+
+            if char == '"':
+                in_string = not in_string
+                result.append(char)
+                i += 1
+                continue
+
+            if in_string:
+                result.append(char)
+                i += 1
+                continue
+
+            if char == '{':
+                brace_depth += 1
+                result.append(char)
+                i += 1
+                continue
+            elif char == '}':
+                brace_depth -= 1
+                result.append(char)
+                i += 1
+                continue
+
+            # Look for : followed by an unquoted value
+            if char == ':' and brace_depth > 0:
+                result.append(char)
+                i += 1
+
+                # Skip whitespace
+                while i < len(json_str) and json_str[i] in ' \t':
+                    result.append(json_str[i])
+                    i += 1
+
+                if i >= len(json_str):
+                    break
+
+                # Check if value is already quoted
+                if json_str[i] == '"':
+                    # Already quoted - just copy until closing quote
+                    result.append('"')
+                    i += 1
+                    escape_next_quote = False
+                    while i < len(json_str):
+                        ch = json_str[i]
+                        if escape_next_quote:
+                            escape_next_quote = False
+                            result.append(ch)
+                            i += 1
+                            continue
+                        if ch == '\\':
+                            escape_next_quote = True
+                            result.append(ch)
+                            i += 1
+                            continue
+                        result.append(ch)
+                        if ch == '"':
+                            i += 1
+                            break
+                        i += 1
+                    continue
+
+                # Check if it's a nested object/array
+                if json_str[i] in '{[':
+                    # Skip nested structure
+                    start = i
+                    i = self._skip_nested(json_str, i)
+                    result.append(json_str[start:i])
+                    continue
+
+                # Extract the value - need to be smarter about where it ends
+                # Values end at: comma before next key, closing brace, or newline before next key
+                value_start = i
+                value_end = i
+
+                # Look ahead to find the end of the value
+                # For simple values (numbers, booleans, null), they end at comma, brace, or newline
+                # For string-like values, they may contain commas, so we need to look for the pattern:
+                # value, whitespace? newline? whitespace? key:
+                # or value} (end of object)
+
+                # First, check if it's a nested structure
+                if json_str[i] in '{[':
+                    start = i
+                    i = self._skip_nested(json_str, i)
+                    result.append(json_str[start:i])
+                    continue
+
+                # For other values, scan forward looking for the end
+                # Stop at: comma followed by key-like pattern, closing brace, or newline followed by key
+                while value_end < len(json_str):
+                    ch = json_str[value_end]
+
+                    # If we hit a closing brace, that's definitely the end
+                    if ch == '}':
+                        break
+
+                    # If we hit a comma, check if it's followed by a key (indicating next key-value pair)
+                    if ch == ',':
+                        # Look ahead past whitespace to see if there's a key
+                        lookahead = value_end + 1
+                        while lookahead < len(json_str) and json_str[lookahead] in ' \t\n\r':
+                            lookahead += 1
+                        if lookahead < len(json_str):
+                            next_char = json_str[lookahead]
+                            # Keys may be quoted (") or unquoted (letter/underscore)
+                            # If next char is a quote, letter/underscore (start of key), or closing brace, this comma ends the value
+                            if next_char == '"' or next_char.isalpha() or next_char == '_' or next_char == '}':
+                                # value_end points to comma, value is everything before it
+                                break
+
+                    # If we hit a newline, check if next non-whitespace looks like a key
+                    if ch == '\n':
+                        # Look ahead past whitespace to see if there's a key
+                        lookahead = value_end + 1
+                        while lookahead < len(json_str) and json_str[lookahead] in ' \t':
+                            lookahead += 1
+                        if lookahead < len(json_str):
+                            next_char = json_str[lookahead]
+                            # Keys may be quoted (") or unquoted (letter/underscore)
+                            # If next char is a quote, letter/underscore (start of key), or closing brace, newline ends the value
+                            if next_char == '"' or next_char.isalpha() or next_char == '_' or next_char == '}':
+                                break
+
+                    # If we hit a nested structure, handle it separately
+                    if ch in '{[':
+                        # Include the nested structure as part of the value
+                        value_end = self._skip_nested(json_str, value_end)
+                        break
+
+                    value_end += 1
+
+                # value_end now points to the character that ends the value (comma, brace, newline, or end of nested)
+                # The value itself is everything from value_start to value_end (not including the ending character)
+
+                value = json_str[value_start:value_end].rstrip()
+
+                # Check if there's a comma after the value (separator before next key-value pair)
+                has_comma = value_end < len(json_str) and json_str[value_end] == ','
+
+                # Check if this needs quoting
+                if value and not self._is_numeric_or_constant(value) and not value.startswith(('{', '[')):
+                    # Quote it and escape special characters
+                    escaped_value = (
+                        value.replace('\\', '\\\\')  # Escape backslashes first
+                        .replace('"', '\\"')         # Escape quotes
+                        .replace('\n', '\\n')         # Escape newlines
+                        .replace('\r', '\\r')         # Escape carriage returns
+                        .replace('\t', '\\t')        # Escape tabs
+                    )
+                    result.append('"')
+                    result.append(escaped_value)
+                    result.append('"')
+                else:
+                    # Keep as-is (number, boolean, null, or nested structure)
+                    result.append(value)
+
+                # Add comma if it was there (separator between key-value pairs)
+                if has_comma:
+                    result.append(',')
+                    value_end += 1
+
+                i = value_end
+                continue
+
+            result.append(char)
+            i += 1
+
+        return ''.join(result)
+
+    def _skip_nested(self, json_str: str, start_pos: int) -> int:
+        """Skip nested object or array, returning position after it."""
+        pos = start_pos
+        char = json_str[pos]
+
+        if char == '{':
+            depth = 1
+            pos += 1
+            in_string = False
+            escape_next = False
+
+            while pos < len(json_str) and depth > 0:
+                ch = json_str[pos]
+                if escape_next:
+                    escape_next = False
+                    pos += 1
+                    continue
+                if ch == '\\':
+                    escape_next = True
+                    pos += 1
+                    continue
+                if ch == '"':
+                    in_string = not in_string
+                    pos += 1
+                    continue
+                if not in_string:
+                    if ch == '{':
+                        depth += 1
+                    elif ch == '}':
+                        depth -= 1
+                pos += 1
+            return pos
+        elif char == '[':
+            depth = 1
+            pos += 1
+            in_string = False
+            escape_next = False
+
+            while pos < len(json_str) and depth > 0:
+                ch = json_str[pos]
+                if escape_next:
+                    escape_next = False
+                    pos += 1
+                    continue
+                if ch == '\\':
+                    escape_next = True
+                    pos += 1
+                    continue
+                if ch == '"':
+                    in_string = not in_string
+                    pos += 1
+                    continue
+                if not in_string:
+                    if ch == '[':
+                        depth += 1
+                    elif ch == ']':
+                        depth -= 1
+                pos += 1
+            return pos
+
+        return pos
+
+    def _is_numeric_or_constant(self, value: str) -> bool:
+        """Check if value is a number, boolean, or null (shouldn't be quoted)."""
+        value = value.strip()
+        if not value:
+            return True  # Empty is safe
+
+        # Check for boolean/null
+        if value.lower() in ('true', 'false', 'null'):
+            return True
+
+        # Check for number (including negative, decimal, scientific notation)
+        try:
+            float(value)
+            return True
+        except ValueError:
+            pass
+
+        # Check if it's already quoted
+        if (value.startswith('"') and value.endswith('"')) or (value.startswith("'") and value.endswith("'")):
+            return True
+
+        return False
+
     def _validate_llm_response(self, response_text: str) -> Optional[Dict]:
         """
         Validate and parse LLM response JSON.
@@ -326,6 +644,7 @@ No markdown formatting, no code blocks, no extra text.
         - Markdown code blocks (```json ... ```)
         - Multiline JSON
         - Unquoted keys (JavaScript-style JSON)
+        - Unquoted string values (e.g., action: hold instead of "action": "hold")
 
         Args:
             response_text: Raw response text from LLM
@@ -344,8 +663,10 @@ No markdown formatting, no code blocks, no extra text.
         json_str = self._extract_json_from_text(response_text)
 
         if json_str:
-            # Try to fix unquoted keys
+            # Try to fix unquoted keys first
             json_str = self._fix_json_keys(json_str)
+            # Then fix unquoted string values
+            json_str = self._fix_json_string_values(json_str)
 
             try:
                 response = json.loads(json_str)

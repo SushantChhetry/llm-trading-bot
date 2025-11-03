@@ -10,8 +10,11 @@ LLM_API_KEY="sk-your-deepseek-api-key-here"
 LLM_MODEL="deepseek-chat"
 TRADING_MODE="paper"
 USE_TESTNET="true"
-EXCHANGE="kraken"
-SYMBOL="BTC/USDT"
+# Note: With Kraken, USE_TESTNET has limited effect as Kraken doesn't provide a testnet environment
+# Paper trading is controlled by TRADING_MODE=paper, not by testnet settings
+EXCHANGE="kraken"  # Options: kraken, bybit, binance, coinbase
+# Kraken is US-friendly and safe for paper trading without testnet
+SYMBOL="BTC/USDT"  # Note: Kraken may use BTC/USD format - adjust if BTC/USDT doesn't work
 LOG_LEVEL="INFO"
 
 # ============================================
@@ -36,12 +39,17 @@ LLM_TIMEOUT="30"
 
 # ============================================
 # TRADING BOT SERVICE - OPTIONAL (Exchange Keys)
-# Only needed if TRADING_MODE=live or USE_TESTNET=true with real testnet
+# For paper trading: Optional - may be needed for fetching real market data
+# For live trading: Required - must have valid exchange API credentials
+# Note: Kraken does NOT provide separate testnet keys (no testnet environment available)
+# If using Kraken, only set EXCHANGE_API_KEY and EXCHANGE_API_SECRET (ignore TESTNET_* keys)
 # ============================================
-EXCHANGE_API_KEY="your-exchange-api-key"
-EXCHANGE_API_SECRET="your-exchange-api-secret"
-TESTNET_API_KEY="your-testnet-api-key"
-TESTNET_API_SECRET="your-testnet-api-secret"
+EXCHANGE_API_KEY="your-kraken-api-key"  # For Kraken: your Kraken API key
+EXCHANGE_API_SECRET="your-kraken-api-secret"  # For Kraken: your Kraken API secret
+# TESTNET_API_KEY and TESTNET_API_SECRET are only needed for exchanges with testnet (Bybit, Binance)
+# Leave empty or omit if using Kraken
+TESTNET_API_KEY="your-testnet-api-key"  # Only for Bybit/Binance testnet
+TESTNET_API_SECRET="your-testnet-api-secret"  # Only for Bybit/Binance testnet
 
 # ============================================
 # TRADING BOT SERVICE - OPTIONAL (Advanced)
