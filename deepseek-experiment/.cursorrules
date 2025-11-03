@@ -1,0 +1,251 @@
+# Cursor Rules for DeepSeek Trading Bot - Performance Optimized
+
+## Core Principles
+
+1. **Performance First**: Every code change must consider latency, throughput, and resource efficiency. Trading decisions happen every 2.5 minutes - optimize for speed.
+
+2. **Code-First Implementation**: Prioritize working code over documentation. Write clean, maintainable code with clear intent. Only create markdown/docs when explicitly requested.
+
+3. **Think Through Architecture**: Analyze problems, edge cases, and design solutions before implementing. Consider performance implications of every decision.
+
+4. **No Documentation by Default**: Do NOT create markdown files (`.md`), analysis documents, summaries, or todo lists unless explicitly requested.
+
+## Performance Optimization Rules
+
+### Async/Await Patterns
+- **ALWAYS** use async/await for I/O operations:
+  - LLM API calls → Use `httpx.AsyncClient` or `aiohttp`
+  - Database queries → Use async database clients (asyncpg, async SQLAlchemy)
+  - Exchange API calls → Use async CCXT or async HTTP clients
+  - File I/O for logs → Use async logging handlers when possible
+
+- **NEVER** block the event loop:
+  - No synchronous `requests.get()` calls
+  - No blocking file operations in hot paths
+  - Use `asyncio.sleep()` instead of `time.sleep()` in async contexts
+  - Wrap sync operations with `asyncio.to_thread()` or executor
+
+### Database Performance
+- **Query Optimization**:
+  - Use prepared statements and parameterized queries
+  - Fetch only required columns, not `SELECT *`
+  - Use database indexes for frequently queried fields (timestamp, symbol, trade_id)
+  - Batch database writes (collect multiple inserts/updates, execute in batch)
+  - Use connection pooling with appropriate pool size
+
+- **Caching Strategy**:
+  - Cache portfolio state in memory with TTL (max 30 seconds for 2.5min cycles)
+  - Cache market data with short TTL (5-10 seconds)
+  - Cache LLM responses for identical inputs (consider request hashing)
+  - Use Redis or in-memory cache for frequently accessed data
+
+### LLM API Efficiency
+- **Request Optimization**:
+  - Minimize prompt tokens - remove unnecessary context
+  - Use streaming responses when possible to reduce latency
+  - Implement request queuing to prevent rate limit violations
+  - Batch multiple decisions if supported by provider
+  - Cache similar decisions (hash market data + portfolio state)
+
+- **Error Handling**:
+  - Implement exponential backoff for retries
+  - Use circuit breakers to prevent cascade failures
+  - Fallback to cached/stale decisions on API failures
+  - Log API response times and track latency metrics
+
+### Memory Management
+- **For Long-Running Processes**:
+  - Limit trade history in memory (keep last N trades, archive older ones)
+  - Use generators/yield for large data processing
+  - Clear references to large objects when no longer needed
+  - Monitor memory usage with `psutil` and log warnings
+
+- **Data Structures**:
+  - Use efficient data structures (dicts for O(1) lookups, deque for recent items)
+  - Prefer `collections.deque` for trade history with maxlen
+  - Use `__slots__` for data classes to reduce memory footprint
+
+### Concurrency & Threading
+- **Parallel Processing**:
+  - Run independent operations concurrently (data fetching + portfolio calculation)
+  - Use `asyncio.gather()` for parallel async operations
+  - Use `concurrent.futures.ThreadPoolExecutor` for CPU-bound tasks
+  - Don't create more threads/processes than CPU cores
+
+### Error Handling & Resilience
+- **Trading System Requirements**:
+  - NEVER fail silently on trading operations - always log errors
+  - Validate all inputs before executing trades (price, amount, leverage)
+  - Use type hints for all function parameters and returns
+  - Implement retry logic with exponential backoff for transient failures
+  - Use circuit breakers for external API calls
+
+- **Graceful Degradation**:
+  - Trading engine should continue with cached/stale data if APIs fail
+  - LLM failures should fallback to conservative hold decision
+  - Database failures should not stop trading cycles (log to file as backup)
+
+## Code Quality Standards
+
+### Python Best Practices
+- **Type Hints**: ALL functions must have type hints
+  ```python
+  def execute_buy(
+      self,
+      symbol: str,
+      price: float,
+      amount: float,
+      confidence: float
+  ) -> Optional[Dict[str, Any]]:
+  ```
+
+- **PEP 8 Compliance**: Use `black` formatter, `isort` for imports
+- **Docstrings**: Use Google-style docstrings for all public methods
+- **Imports**: Group imports (stdlib, third-party, local) with blank lines
+
+### Code Organization
+- **Single Responsibility**: Each class/function should do one thing well
+- **DRY Principle**: Extract common logic into reusable functions
+- **Separation of Concerns**:
+  - Trading logic separate from data fetching
+  - Business logic separate from I/O operations
+  - Configuration separate from implementation
+
+### Testing Requirements
+- **Unit Tests**: Test all trading logic, calculations, validations
+- **Integration Tests**: Test LLM client, database operations, API integrations
+- **Performance Tests**: Benchmark critical paths (trade execution, portfolio calculation)
+- **Mock External Services**: Always mock LLM APIs, exchange APIs in tests
+
+## Security & Safety
+
+### Trading Safety
+- **Input Validation**: Validate all trading parameters:
+  - Price > 0, Amount > 0, Leverage within limits (1.0-10.0)
+  - Position size within max limits
+  - Stop loss/take profit within reasonable bounds
+
+- **Risk Limits**: Enforce risk management rules:
+  - Maximum position size per trade
+  - Maximum leverage
+  - Maximum drawdown thresholds
+  - Position count limits
+
+### Security
+- **API Keys**: Never log API keys or sensitive credentials
+- **Environment Variables**: Use `.env` files, never commit secrets
+- **Rate Limiting**: Implement rate limiting for all external APIs
+- **Input Sanitization**: Sanitize all user inputs and API responses
+
+## Trading System Specific Rules
+
+### Market Data
+- **Data Freshness**: Market data older than 30 seconds is stale
+- **Price Validation**: Always validate prices (check for 0, negative, or NaN)
+- **Volume Checks**: Consider volume when making trading decisions
+- **Technical Indicators**: Cache indicator calculations, reuse where possible
+
+### Portfolio Management
+- **State Consistency**: Portfolio state must be consistent across all reads
+- **Atomic Operations**: Trading operations must be atomic (all-or-nothing)
+- **State Persistence**: Save portfolio state after every trade
+- **Performance Metrics**: Calculate metrics efficiently (cache intermediate values)
+
+### LLM Integration
+- **Prompt Engineering**: Keep prompts concise but comprehensive
+- **Response Parsing**: Always validate JSON responses, handle malformed data gracefully
+- **Token Management**: Track and log token usage for cost optimization
+- **Response Times**: Monitor and log LLM response times, alert on slowdowns
+
+## File & I/O Operations
+
+### Logging
+- **Structured Logging**: Use structured logging with JSON format for production
+- **Log Levels**: Use appropriate levels (DEBUG for dev, INFO for production)
+- **Log Rotation**: Implement log rotation to prevent disk space issues
+- **Performance Logging**: Log execution times for critical operations
+
+### File Operations
+- **Async I/O**: Use `aiofiles` for async file operations
+- **Atomic Writes**: Use temporary files + rename for atomic writes
+- **Error Handling**: Handle file permission errors gracefully
+
+## Database Schema & Migrations
+
+- **Migrations**: Always use Alembic for database schema changes
+- **Backwards Compatibility**: Ensure migrations are reversible
+- **Indexes**: Add indexes for frequently queried fields
+- **Connection Management**: Use connection pooling, close connections properly
+
+## Response Style
+
+- **Be Concise**: Show code changes directly, minimal explanation
+- **Action-Oriented**: Focus on "what to do" not "what was done"
+- **Code Examples**: Provide code examples inline when explaining concepts
+- **Error Messages**: Include actionable error messages with context
+
+## When Documentation IS Needed
+
+Only create markdown/documentation files when:
+- User explicitly requests documentation
+- User says "create a doc", "write documentation", "create a markdown file"
+- User requests summaries or explanations in markdown format
+
+## Performance Monitoring
+
+- **Metrics to Track**:
+  - LLM API response times (p50, p95, p99)
+  - Trading cycle execution time
+  - Database query latency
+  - Memory usage trends
+  - Error rates and types
+
+- **Alerting**:
+  - Alert on LLM API latency > 5 seconds
+  - Alert on trading cycle time > 30 seconds
+  - Alert on database connection errors
+  - Alert on memory usage > 80%
+
+## Example Code Patterns
+
+### Async LLM Call
+```python
+async def get_trading_decision_async(
+    self,
+    market_data: Dict[str, Any],
+    portfolio_state: Dict[str, Any]
+) -> Dict[str, Any]:
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        response = await client.post(
+            self.api_url,
+            json={"prompt": prompt, "model": self.model},
+            headers={"Authorization": f"Bearer {self.api_key}"}
+        )
+        response.raise_for_status()
+        return response.json()
+```
+
+### Cached Portfolio State
+```python
+from functools import lru_cache
+from datetime import datetime, timedelta
+
+@lru_cache(maxsize=1)
+def get_cached_portfolio_state(self, timestamp: int) -> Dict[str, Any]:
+    # Cache invalidates when timestamp changes (new cycle)
+    return self._calculate_portfolio_state()
+```
+
+### Batch Database Writes
+```python
+async def save_trades_batch(self, trades: List[Dict[str, Any]]) -> None:
+    async with self.db_pool.acquire() as conn:
+        await conn.executemany(
+            "INSERT INTO trades (...) VALUES (...)",
+            [(t['id'], t['symbol'], ...) for t in trades]
+        )
+```
+
+---
+
+**Remember**: This is a real-time trading system. Every millisecond counts. Optimize aggressively for the critical path (data fetch → LLM decision → trade execution).
