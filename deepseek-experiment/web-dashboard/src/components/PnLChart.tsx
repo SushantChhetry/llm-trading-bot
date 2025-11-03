@@ -2,14 +2,15 @@ import { memo } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { formatCurrency, formatPercentage, getProfitColor } from '@/lib/utils';
+import { usePnLData } from '@/contexts/TradingDataContext';
 import { PnLDataPoint } from '@/types/trading';
 
 interface PnLChartProps {
-  data: PnLDataPoint[];
   className?: string;
 }
 
-export const PnLChart = memo(function PnLChart({ data, className }: PnLChartProps) {
+function PnLChartComponent({ className }: PnLChartProps) {
+  const { pnlData: data } = usePnLData();
   const latestData = data?.[data.length - 1];
   const totalReturnPct = latestData?.total_return_pct ?? 0;
   const isPositive = totalReturnPct >= 0;
@@ -32,8 +33,8 @@ export const PnLChart = memo(function PnLChart({ data, className }: PnLChartProp
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={data} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
               <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
-              <XAxis 
-                dataKey="timestamp" 
+              <XAxis
+                dataKey="timestamp"
                 tickFormatter={(value) => new Date(value).toLocaleTimeString('en-US', {
                   timeZone: 'America/New_York', // EST/EDT
                   hour: '2-digit',
@@ -41,7 +42,7 @@ export const PnLChart = memo(function PnLChart({ data, className }: PnLChartProp
                 })}
                 className="text-xs"
               />
-              <YAxis 
+              <YAxis
                 tickFormatter={(value) => formatCurrency(value)}
                 className="text-xs"
               />
@@ -103,4 +104,9 @@ export const PnLChart = memo(function PnLChart({ data, className }: PnLChartProp
       </CardContent>
     </Card>
   );
+}
+
+// Memoize with custom comparison to prevent re-renders when unrelated data changes
+export const PnLChart = memo(PnLChartComponent, (prevProps, nextProps) => {
+  return prevProps.className === nextProps.className;
 });

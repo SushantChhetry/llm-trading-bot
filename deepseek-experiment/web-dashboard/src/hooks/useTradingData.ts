@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Trade, Portfolio, PnLDataPoint, BotStatus } from '@/types/trading';
 
 interface TradingData {
@@ -13,9 +13,9 @@ interface TradingData {
 }
 
 const MAX_RETRY_COUNT = 3;
-const INITIAL_POLL_INTERVAL = 30000; // 30 seconds (optimized for Alpha Arena - bot updates every 2.5 min)
-const ERROR_RETRY_INTERVAL = 30000; // 30 seconds when error
-const MAX_ERROR_RETRY_INTERVAL = 300000; // 5 minutes max delay
+const INITIAL_POLL_INTERVAL = 5000; // 5 seconds - matches UI promise
+// const ERROR_RETRY_INTERVAL = 5000; // Reserved for future use
+// const MAX_ERROR_RETRY_INTERVAL = 300000; // Reserved for future use
 
 // Get API base URL from environment variable or use relative path
 // Vercel rewrites will handle /api/* requests, or use VITE_API_URL if set
@@ -80,14 +80,16 @@ export function useTradingData() {
         return { ...prev, isLoading: prev.error === null };
       });
 
+      // Add cache-busting timestamp to ensure fresh data
+      const cacheBuster = `?t=${Date.now()}`;
       const [tradesRes, portfolioRes, statusRes] = await Promise.all([
-        fetch(getApiUrl('/api/trades')).catch(err => {
+        fetch(getApiUrl('/api/trades') + cacheBuster).catch(err => {
           throw new Error(`Failed to fetch trades: ${err.message}`);
         }),
-        fetch(getApiUrl('/api/portfolio')).catch(err => {
+        fetch(getApiUrl('/api/portfolio') + cacheBuster).catch(err => {
           throw new Error(`Failed to fetch portfolio: ${err.message}`);
         }),
-        fetch(getApiUrl('/api/status')).catch(err => {
+        fetch(getApiUrl('/api/status') + cacheBuster).catch(err => {
           throw new Error(`Failed to fetch status: ${err.message}`);
         }),
       ]);
@@ -115,20 +117,10 @@ export function useTradingData() {
         statusRes.json(),
       ]);
 
-      // Check if data has actually changed before updating state (prevents unnecessary re-renders)
-      setData(prev => {
-        const hasChanges = (
-          JSON.stringify(prev.trades) !== JSON.stringify(trades) ||
-          JSON.stringify(prev.portfolio) !== JSON.stringify(portfolio) ||
-          JSON.stringify(prev.botStatus) !== JSON.stringify(botStatus)
-        );
-
-        // If no changes and already connected, skip the expensive update
-        if (!hasChanges && prev.isConnected && !prev.error) {
-          return prev;
-        }
-
-        // Generate PnL data points from trades (only if data changed)
+      // Always update state to ensure UI reflects latest data
+      // The React reconciliation will minimize re-renders if data is truly unchanged
+      setData(() => {
+        // Generate PnL data points from trades (regenerate on each fetch to ensure accuracy)
         const pnlData: PnLDataPoint[] = [];
         const initialBalance = portfolio?.initial_balance && !isNaN(portfolio.initial_balance) ? portfolio.initial_balance : 10000;
         const positionsValue = portfolio?.positions_value && !isNaN(portfolio.positions_value) ? portfolio.positions_value : 0;
@@ -192,13 +184,13 @@ export function useTradingData() {
           retryCount: 0,
         };
       });
-      
+
     } catch (error) {
       const errorMessage = getErrorMessage(error);
-      
+
       setData(prev => {
         const newRetryCount = isManualRetry ? 0 : prev.retryCount + 1;
-        
+
         return {
           ...prev,
           isLoading: false,
@@ -224,9 +216,9 @@ export function useTradingData() {
     const pollInterval = setInterval(() => {
       fetchData(false);
     }, INITIAL_POLL_INTERVAL);
-    
+
     intervalRef.current = pollInterval;
-    
+
     return () => {
       if (intervalRef.current) {
         clearInterval(intervalRef.current);

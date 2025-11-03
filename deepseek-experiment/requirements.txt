@@ -34,7 +34,13 @@ colorama>=0.4.6
 # Database dependencies
 asyncpg>=0.29.0
 sqlalchemy[asyncio]>=2.0.0
+alembic>=1.13.0
+
+# Development tools (optional, for CI/CD)
+# black>=24.0.0
+# isort>=5.13.0
+# mypy>=1.8.0
+# flake8>=7.0.0
 
 # Note: All other dependencies use Python standard library
 # (json, logging, pathlib, datetime, time, sys, argparse)
-

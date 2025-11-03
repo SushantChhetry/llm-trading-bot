@@ -1,0 +1,106 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  lint:
+    name: Lint and Format Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          cache: 'pip'
+
+      - name: Install dependencies
+        working-directory: ./deepseek-experiment
+        run: |
+          python -m pip install --upgrade pip
+          pip install black isort mypy flake8
+
+      - name: Check code formatting (Black)
+        working-directory: ./deepseek-experiment
+        run: black --check src/ config/ --line-length 120 || exit 1
+
+      - name: Check import sorting (isort)
+        working-directory: ./deepseek-experiment
+        run: isort --check-only src/ config/ --profile black || exit 1
+
+      - name: Lint with flake8
+        working-directory: ./deepseek-experiment
+        run: |
+          flake8 src/ config/ --max-line-length=120 --extend-ignore=E203,W503 || exit 1
+
+      - name: Type check (mypy)
+        working-directory: ./deepseek-experiment
+        run: |
+          mypy src/ --ignore-missing-imports --no-strict-optional || true
+
+  frontend-lint:
+    name: Frontend Lint
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: ./deepseek-experiment/web-dashboard/package-lock.json
+
+      - name: Install dependencies
+        working-directory: ./deepseek-experiment/web-dashboard
+        run: npm ci
+
+      - name: Run ESLint
+        working-directory: ./deepseek-experiment/web-dashboard
+        run: npm run lint || exit 1
+
+      - name: Type check
+        working-directory: ./deepseek-experiment/web-dashboard
+        run: npx tsc --noEmit || exit 1
+
+  validate:
+    name: Validate Configuration
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          cache: 'pip'
+
+      - name: Install dependencies
+        working-directory: ./deepseek-experiment
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Validate startup
+        working-directory: ./deepseek-experiment
+        env:
+          ENVIRONMENT: development
+          LLM_PROVIDER: mock
+          TRADING_MODE: paper
+          EXCHANGE: bybit
+          SYMBOL: BTC/USDT
+        run: |
+          python -m src.startup_validator || exit 1
+
+      - name: Check imports
+        working-directory: ./deepseek-experiment
+        run: |
+          python -c "from src.main import TradingBot; from src.llm_client import LLMClient; from src.trading_engine import TradingEngine; print('✅ Imports valid')" || exit 1

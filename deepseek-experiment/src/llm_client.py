@@ -21,18 +21,18 @@ logger = logging.getLogger(__name__)
 class LLMClient:
     """
     Client for interacting with DeepSeek LLM API.
-    
+
     Provides methods to prompt the LLM for trading decisions and can operate
     in mock mode for testing without API calls. Uses structured prompt templates
     and validates JSON responses for reliable trading decisions.
-    
+
     Attributes:
         api_key: DeepSeek API key
         api_url: DeepSeek API endpoint URL
         model: Model name to use
         mock_mode: Whether to use mock responses instead of real API calls
     """
-    
+
     def __init__(
         self,
         provider: str = None,
@@ -43,7 +43,7 @@ class LLMClient:
     ):
         """
         Initialize the LLM client.
-        
+
         Args:
             provider: LLM provider ("mock", "deepseek", "openai", "anthropic"). Defaults to config.
             api_key: API key. Defaults to config.
@@ -55,16 +55,16 @@ class LLMClient:
         self.api_key = api_key or config.LLM_API_KEY
         self.api_url = api_url or config.LLM_API_URL
         self.model = model or config.LLM_MODEL
-        
+
         # Initialize security manager
         self.security_manager = SecurityManager()
-        
+
         # Auto-detect mock mode if not specified
         if mock_mode is None:
             self.mock_mode = (self.provider == "mock" or not self.api_key)
         else:
             self.mock_mode = mock_mode
-        
+
         # Validate API key if not in mock mode
         if not self.mock_mode:
             if not self.api_key:
@@ -73,17 +73,17 @@ class LLMClient:
             elif not self.security_manager.validate_api_key(self.api_key, self.provider):
                 logger.error(f"Invalid API key format for {self.provider}. Will use mock responses.")
                 self.mock_mode = True
-        
+
         logger.info(f"LLM Client initialized: {self.provider.upper()} {'(MOCK)' if self.mock_mode else '(LIVE)'}")
-    
+
     def _format_trading_prompt(self, market_data: Dict, portfolio_state: Dict) -> str:
         """
         Format a structured prompt for trading decisions.
-        
+
         Args:
             market_data: Current market information (price, volume, etc.)
             portfolio_state: Current portfolio state (balance, positions, etc.)
-            
+
         Returns:
             Formatted prompt string for the LLM
         """
@@ -92,27 +92,27 @@ class LLMClient:
             price = float(market_data.get('price', 0))
         except (ValueError, TypeError):
             price = 0.0
-            
+
         try:
             volume = float(market_data.get('volume', 0))
         except (ValueError, TypeError):
             volume = 0.0
-            
+
         try:
             change_24h = float(market_data.get('change_24h', 0))
         except (ValueError, TypeError):
             change_24h = 0.0
-            
+
         try:
             balance = float(portfolio_state.get('balance', 0))
         except (ValueError, TypeError):
             balance = 0.0
-            
+
         try:
             total_value = float(portfolio_state.get('total_value', 0))
         except (ValueError, TypeError):
             total_value = 0.0
-            
+
         try:
             return_pct = float(portfolio_state.get('total_return_pct', 0))
         except (ValueError, TypeError):
@@ -211,52 +211,52 @@ Format:
 CRITICAL: Respond with ONLY the raw JSON object above. Start with {{ and end with }}. All property names must be in double quotes (e.g., "action" not action). No markdown formatting, no code blocks, no extra text.
 """
         return prompt.strip()
-    
+
     def _extract_json_from_text(self, text: str) -> Optional[str]:
         """
         Extract JSON object from text, handling markdown code blocks and nested braces.
-        
+
         Args:
             text: Text that may contain JSON
-            
+
         Returns:
             Extracted JSON string, or None if not found
         """
         # Clean up the text
         cleaned = text.strip()
-        
+
         # Remove markdown code blocks if present
         # Match ```json ... ``` or ``` ... ```
         code_block_pattern = r'```(?:json)?\s*\n?(.*?)\n?```'
         code_block_match = re.search(code_block_pattern, cleaned, re.DOTALL)
         if code_block_match:
             cleaned = code_block_match.group(1).strip()
-        
+
         # Find the first { and then find the matching }
         start_idx = cleaned.find('{')
         if start_idx == -1:
             return None
-        
+
         # Count braces to find the matching closing brace
         brace_count = 0
         in_string = False
         escape_next = False
-        
+
         for i in range(start_idx, len(cleaned)):
             char = cleaned[i]
-            
+
             if escape_next:
                 escape_next = False
                 continue
-            
+
             if char == '\\':
                 escape_next = True
                 continue
-            
+
             if char == '"' and not escape_next:
                 in_string = not in_string
                 continue
-            
+
             if not in_string:
                 if char == '{':
                     brace_count += 1
@@ -266,16 +266,16 @@ CRITICAL: Respond with ONLY the raw JSON object above. Start with {{ and end wit
                         # Found the matching closing brace
                         json_str = cleaned[start_idx:i+1]
                         return json_str
-        
+
         return None
-    
+
     def _fix_json_keys(self, json_str: str) -> str:
         """
         Fix unquoted keys in JSON (JavaScript-style to JSON).
-        
+
         Args:
             json_str: JSON string with potential unquoted keys
-            
+
         Returns:
             JSON string with quoted keys
         """
@@ -288,7 +288,7 @@ CRITICAL: Respond with ONLY the raw JSON object above. Start with {{ and end wit
             key = match.group(3)      # the key name (identifier)
             whitespace2 = match.group(4) or ''  # optional whitespace before :
             return f'{prefix}{whitespace1}"{key}"{whitespace2}:'
-        
+
         # Match unquoted keys that appear after { or ,
         # Pattern breakdown:
         # ([{,]) - matches { or ,
@@ -298,20 +298,20 @@ CRITICAL: Respond with ONLY the raw JSON object above. Start with {{ and end wit
         # : - colon
         json_str = re.sub(r'([{,])(\s*)([a-zA-Z_][a-zA-Z0-9_]*)(\s*):', quote_key, json_str)
         return json_str
-    
+
     @validate_trading_inputs
     def _validate_llm_response(self, response_text: str) -> Optional[Dict]:
         """
         Validate and parse LLM response JSON.
-        
+
         Handles:
         - Markdown code blocks (```json ... ```)
         - Multiline JSON
         - Unquoted keys (JavaScript-style JSON)
-        
+
         Args:
             response_text: Raw response text from LLM
-            
+
         Returns:
             Parsed and validated response dict, or None if invalid
         """
@@ -321,45 +321,45 @@ CRITICAL: Respond with ONLY the raw JSON object above. Start with {{ and end wit
             return self._validate_response_structure(response)
         except json.JSONDecodeError:
             pass
-        
+
         # Extract JSON from text
         json_str = self._extract_json_from_text(response_text)
-        
+
         if json_str:
             # Try to fix unquoted keys
             json_str = self._fix_json_keys(json_str)
-            
+
             try:
                 response = json.loads(json_str)
                 return self._validate_response_structure(response)
             except json.JSONDecodeError as e:
                 logger.error(f"Could not parse JSON after extraction and fixes: {e}")
                 logger.debug(f"Extracted JSON string: {json_str[:300]}...")
-        
+
         logger.error(f"No valid JSON found in response: {response_text[:200]}...")
         return None
-    
+
     def _validate_response_structure(self, response: Dict) -> Optional[Dict]:
         """
         Validate and normalize the response structure.
-        
+
         Args:
             response: Parsed JSON response
-            
+
         Returns:
             Validated and normalized response dict, or None if invalid
         """
-        
+
         # Use security manager for validation
         if not self.security_manager.validate_trading_decision(response):
             logger.error("Trading decision failed security validation")
             return None
-        
+
         # Validate exit plan structure
         exit_plan = response.get("exit_plan", {})
         if not isinstance(exit_plan, dict):
             exit_plan = {}
-        
+
         # Set defaults for optional fields
         response["direction"] = response.get("direction", "none").lower()
         response["quantity"] = float(response.get("quantity", 0.0))
@@ -370,28 +370,28 @@ CRITICAL: Respond with ONLY the raw JSON object above. Start with {{ and end wit
             "stop_loss": float(exit_plan.get("stop_loss", 0.0)),
             "invalidation_conditions": exit_plan.get("invalidation_conditions", [])
         }
-        
+
         # Normalize action to lowercase
         response["action"] = response["action"].lower()
-        
+
         return response
-    
+
     @circuit_breaker(CircuitBreakerConfig(failure_threshold=3, recovery_timeout=30))
     @retry(RetryConfig(max_attempts=3, base_delay=1.0, max_delay=10.0))
     @rate_limit(60)  # 60 requests per minute
     def _make_api_request(self, prompt: str) -> Dict:
         """
         Make actual API request to the configured LLM provider.
-        
+
         Supports DeepSeek, OpenAI, and Anthropic APIs with proper error handling
         and automatic fallback to mock mode on API failures.
-        
+
         Args:
             prompt: The prompt text to send
-            
+
         Returns:
             Response dictionary from API
-            
+
         Raises:
             Exception: If API request fails
         """
@@ -403,14 +403,14 @@ CRITICAL: Respond with ONLY the raw JSON object above. Start with {{ and end wit
             return self._make_anthropic_request(prompt)
         else:
             raise ValueError(f"Unsupported LLM provider: {self.provider}")
-    
+
     def _make_deepseek_request(self, prompt: str) -> Dict:
         """Make API request to DeepSeek."""
         headers = {
             "Content-Type": "application/json",
             "Authorization": f"Bearer {self.api_key}"
         }
-        
+
         payload = {
             "model": self.model,
             "messages": [
@@ -426,10 +426,10 @@ CRITICAL: Respond with ONLY the raw JSON object above. Start with {{ and end wit
             "temperature": 0.7,
             "max_tokens": 500
         }
-        
+
         try:
             response = requests.post(self.api_url, headers=headers, json=payload, timeout=30)
-            
+
             # Handle specific HTTP errors
             if response.status_code == 402:
                 error_msg = (
@@ -439,7 +439,7 @@ CRITICAL: Respond with ONLY the raw JSON object above. Start with {{ and end wit
                 )
                 logger.error(error_msg)
                 raise ValueError(error_msg)
-            
+
             if response.status_code == 401:
                 error_msg = (
                     "🔑 DeepSeek API authentication failed (401). "
@@ -447,7 +447,7 @@ CRITICAL: Respond with ONLY the raw JSON object above. Start with {{ and end wit
                 )
                 logger.error(error_msg)
                 raise ValueError(error_msg)
-            
+
             response.raise_for_status()
             return response.json()
         except requests.exceptions.HTTPError as e:
@@ -459,14 +459,14 @@ CRITICAL: Respond with ONLY the raw JSON object above. Start with {{ and end wit
         except Exception as e:
             logger.error(f"DeepSeek API request failed: {e}")
             raise
-    
+
     def _make_openai_request(self, prompt: str) -> Dict:
         """Make API request to OpenAI."""
         headers = {
             "Content-Type": "application/json",
             "Authorization": f"Bearer {self.api_key}"
         }
-        
+
         payload = {
             "model": self.model,
             "messages": [
@@ -482,7 +482,7 @@ CRITICAL: Respond with ONLY the raw JSON object above. Start with {{ and end wit
             "temperature": 0.7,
             "max_tokens": 500
         }
-        
+
         try:
             response = requests.post(self.api_url, headers=headers, json=payload, timeout=30)
             response.raise_for_status()
@@ -490,7 +490,7 @@ CRITICAL: Respond with ONLY the raw JSON object above. Start with {{ and end wit
         except Exception as e:
             logger.error(f"OpenAI API request failed: {e}")
             raise
-    
+
     def _make_anthropic_request(self, prompt: str) -> Dict:
         """Make API request to Anthropic Claude."""
         headers = {
@@ -498,7 +498,7 @@ CRITICAL: Respond with ONLY the raw JSON object above. Start with {{ and end wit
             "x-api-key": self.api_key,
             "anthropic-version": "2023-06-01"
         }
-        
+
         payload = {
             "model": self.model,
             "max_tokens": 500,
@@ -511,7 +511,7 @@ CRITICAL: Respond with ONLY the raw JSON object above. Start with {{ and end wit
                 }
             ]
         }
-        
+
         try:
             response = requests.post(self.api_url, headers=headers, json=payload, timeout=30)
             response.raise_for_status()
@@ -519,14 +519,14 @@ CRITICAL: Respond with ONLY the raw JSON object above. Start with {{ and end wit
         except Exception as e:
             logger.error(f"Anthropic API request failed: {e}")
             raise
-    
+
     def _extract_response_content(self, response: Dict) -> str:
         """
         Extract content from API response based on provider format.
-        
+
         Args:
             response: Raw API response dictionary
-            
+
         Returns:
             Extracted text content
         """
@@ -536,26 +536,26 @@ CRITICAL: Respond with ONLY the raw JSON object above. Start with {{ and end wit
             return response["content"][0]["text"]
         else:
             raise ValueError(f"Unknown provider for response parsing: {self.provider}")
-    
+
     def _get_mock_response(self, market_data: Dict, portfolio_state: Dict) -> Dict:
         """
         Generate a mock LLM response for testing.
-        
+
         Args:
             market_data: Current market data for context
             portfolio_state: Current portfolio state for context
-            
+
         Returns:
             Mock API response structure
         """
         import random
-        
+
         # Simulate more realistic decision making based on market data
         price = market_data.get('price', 50000)
         change_24h = market_data.get('change_24h', 0)
         balance = portfolio_state.get('balance', 10000)
         open_positions = portfolio_state.get('open_positions', 0)
-        
+
         # Enhanced mock logic for Alpha Arena style trading
         if change_24h > 2.0 and balance > 1000:
             action = "buy"
@@ -577,12 +577,12 @@ CRITICAL: Respond with ONLY the raw JSON object above. Start with {{ and end wit
             direction = "none"
             confidence = random.uniform(0.5, 0.7)
             reasoning = f"Mock: Market conditions unclear ({change_24h:.1f}%), holding position"
-        
+
         # Calculate position size based on available balance and confidence
         position_size_usdt = min(balance * 0.1 * confidence, balance * 0.2)  # Max 20% of balance
         leverage = random.uniform(1.0, 3.0)  # Conservative leverage for mock
         quantity = position_size_usdt * leverage / price if price > 0 else 0
-        
+
         mock_decision = {
             "action": action,
             "direction": direction,
@@ -598,7 +598,7 @@ CRITICAL: Respond with ONLY the raw JSON object above. Start with {{ and end wit
             "position_size_usdt": round(position_size_usdt, 2),
             "risk_assessment": random.choice(["low", "medium", "high"])
         }
-        
+
         return {
             "choices": [
                 {
@@ -608,17 +608,17 @@ CRITICAL: Respond with ONLY the raw JSON object above. Start with {{ and end wit
                 }
             ]
         }
-    
+
     @validate_trading_inputs
     @fallback(lambda: {"action": "hold", "direction": "none", "confidence": 0.0, "justification": "Fallback due to error"})
     def get_trading_decision(self, market_data: Dict, portfolio_state: Dict = None) -> Dict:
         """
         Get a trading decision from the LLM based on market data and portfolio state.
-        
+
         Args:
             market_data: Dictionary containing market information (price, volume, etc.)
             portfolio_state: Dictionary containing portfolio state (balance, positions, etc.)
-            
+
         Returns:
             Dictionary with validated trading decision including action, confidence, reasoning, etc.
         """
@@ -631,10 +631,10 @@ CRITICAL: Respond with ONLY the raw JSON object above. Start with {{ and end wit
                 "total_return_pct": 0.0,
                 "total_trades": 0
             }
-        
+
         # Format structured prompt
         prompt = self._format_trading_prompt(market_data, portfolio_state)
-        
+
         try:
             if self.mock_mode:
                 logger.info(f"Using mock LLM response ({self.provider})")
@@ -663,17 +663,17 @@ CRITICAL: Respond with ONLY the raw JSON object above. Start with {{ and end wit
                         logger.error(f"API call failed: {api_error}")
                     logger.warning("🔄 Falling back to mock mode for this cycle")
                     response = self._get_mock_response(market_data, portfolio_state)
-            
+
             # Extract content from response based on provider
-            content = self._extract_response_content(response)
-            logger.debug(f"Raw LLM response: {content}")
-            
+            raw_response_content = self._extract_response_content(response)
+            logger.debug(f"Raw LLM response: {raw_response_content}")
+
             # Validate and parse response
-            decision = self._validate_llm_response(content)
-            
+            decision = self._validate_llm_response(raw_response_content)
+
             if decision is None:
                 logger.error("Invalid LLM response, falling back to hold")
-                return {
+                fallback_decision = {
                     "action": "hold",
                     "direction": "none",
                     "quantity": 0.0,
@@ -686,16 +686,23 @@ CRITICAL: Respond with ONLY the raw JSON object above. Start with {{ and end wit
                         "invalidation_conditions": []
                     },
                     "position_size_usdt": 0.0,
-                    "risk_assessment": "high"
+                    "risk_assessment": "high",
+                    "_prompt": prompt,
+                    "_raw_response": raw_response_content
                 }
-            
+                return fallback_decision
+
             logger.info(f"LLM decision: {decision['action'].upper()} "
                        f"(confidence: {decision['confidence']:.2f}, "
                        f"risk: {decision['risk_assessment']})")
             logger.info(f"LLM justification: {decision['justification']}")
-            
+
+            # Attach prompt and raw response for storage
+            decision["_prompt"] = prompt
+            decision["_raw_response"] = raw_response_content
+
             return decision
-            
+
         except Exception as e:
             logger.error(f"Error getting trading decision: {e}")
             # Fallback to hold on error
@@ -712,6 +719,7 @@ CRITICAL: Respond with ONLY the raw JSON object above. Start with {{ and end wit
                     "invalidation_conditions": []
                 },
                 "position_size_usdt": 0.0,
-                "risk_assessment": "high"
+                "risk_assessment": "high",
+                "_prompt": prompt if 'prompt' in locals() else "",
+                "_raw_response": ""
             }
-

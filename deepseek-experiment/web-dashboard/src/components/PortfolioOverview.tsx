@@ -2,16 +2,15 @@ import { memo } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Badge } from './ui/badge';
 import { formatCurrency, formatPercentage, getProfitColor } from '@/lib/utils';
-import { Portfolio, BotStatus } from '@/types/trading';
+import { usePortfolioOverview } from '@/contexts/TradingDataContext';
 import { TrendingUp, TrendingDown, DollarSign, Activity, Target, Zap } from 'lucide-react';
 
 interface PortfolioOverviewProps {
-  portfolio: Portfolio | null;
-  botStatus: BotStatus | null;
   className?: string;
 }
 
-export const PortfolioOverview = memo(function PortfolioOverview({ portfolio, botStatus, className }: PortfolioOverviewProps) {
+function PortfolioOverviewComponent({ className }: PortfolioOverviewProps) {
+  const { portfolio, botStatus } = usePortfolioOverview();
   // Safely extract values with defaults to prevent NaN
   const totalValue = portfolio?.total_value ?? 0;
   const balance = portfolio?.balance ?? 0;
@@ -20,10 +19,10 @@ export const PortfolioOverview = memo(function PortfolioOverview({ portfolio, bo
   const openPositions = portfolio?.open_positions ?? 0;
   const positionsValue = portfolio?.positions_value ?? 0;
   const totalTrades = portfolio?.total_trades ?? 0;
-  
+
   const isPositive = totalReturnPct >= 0;
   const TrendIcon = isPositive ? TrendingUp : TrendingDown;
-  
+
   // Default bot status values
   const tradingMode = botStatus?.trading_mode ?? 'paper';
   const llmProvider = botStatus?.llm_provider ?? 'unknown';
@@ -138,4 +137,9 @@ export const PortfolioOverview = memo(function PortfolioOverview({ portfolio, bo
       </Card>
     </div>
   );
+}
+
+// Memoize with custom comparison to prevent re-renders when unrelated data changes
+export const PortfolioOverview = memo(PortfolioOverviewComponent, (prevProps, nextProps) => {
+  return prevProps.className === nextProps.className;
 });

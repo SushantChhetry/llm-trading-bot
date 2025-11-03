@@ -1,12 +1,17 @@
 import { PnLChart } from './components/PnLChart';
 import { PortfolioOverview } from './components/PortfolioOverview';
 import { RecentTrades } from './components/RecentTrades';
+import { DashboardHeader } from './components/DashboardHeader';
+import { ErrorBanner } from './components/ErrorBanner';
 import { useTradingData } from './hooks/useTradingData';
+import { TradingDataProvider } from './contexts/TradingDataContext';
 import { Separator } from './components/ui/separator';
-import { Activity, AlertCircle, Loader2 } from 'lucide-react';
+import { AlertCircle, Loader2 } from 'lucide-react';
+import { useConnectionStatus, usePortfolio } from './contexts/TradingDataContext';
 
-function App() {
-  const { trades, portfolio, pnlData, botStatus, isLoading, error, refetch, isConnected, retryCount } = useTradingData();
+function DashboardContent() {
+  const { isLoading, error, retryCount, refetch } = useConnectionStatus();
+  const { portfolio } = usePortfolio();
 
   if (isLoading) {
     return (
@@ -26,7 +31,7 @@ function App() {
           <AlertCircle className="h-12 w-12 text-destructive mx-auto mb-4" />
           <h2 className="text-xl font-semibold mb-2">Connection Error</h2>
           <p className="text-destructive mb-6">{error}</p>
-          
+
           {retryCount >= 3 && (
             <div className="bg-muted p-4 rounded-lg mb-4 text-left">
               <p className="text-sm font-medium mb-2">Troubleshooting Tips:</p>
@@ -38,14 +43,14 @@ function App() {
               </ul>
             </div>
           )}
-          
-          <button 
+
+          <button
             onClick={refetch}
             className="px-6 py-3 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 font-medium transition-colors"
           >
             {isLoading ? 'Retrying...' : 'Retry Connection'}
           </button>
-          
+
           <p className="text-xs text-muted-foreground mt-4">
             Auto-retry paused after {retryCount} failed attempts
           </p>
@@ -57,76 +62,26 @@ function App() {
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
-      <header className="border-b bg-card">
-        <div className="container mx-auto px-4 py-6">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <Activity className="h-8 w-8 text-primary" />
-              <div>
-                <h1 className="text-2xl font-bold">Trading Bot Dashboard</h1>
-                <p className="text-muted-foreground">Real-time portfolio monitoring</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              {isConnected ? (
-                <>
-                  <div className="h-2 w-2 bg-green-500 rounded-full animate-pulse"></div>
-                  <span className="text-sm text-muted-foreground">Live</span>
-                </>
-              ) : error ? (
-                <>
-                  <div className="h-2 w-2 bg-red-500 rounded-full"></div>
-                  <span className="text-sm text-destructive">Disconnected</span>
-                </>
-              ) : (
-                <>
-                  <div className="h-2 w-2 bg-yellow-500 rounded-full animate-pulse"></div>
-                  <span className="text-sm text-muted-foreground">Connecting...</span>
-                </>
-              )}
-            </div>
-          </div>
-        </div>
-      </header>
+      <DashboardHeader />
 
       {/* Error Banner (if error but we have cached data) */}
-      {error && portfolio && (
-        <div className="bg-destructive/10 border-l-4 border-destructive p-4 mx-4 mt-4 rounded">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <AlertCircle className="h-5 w-5 text-destructive" />
-              <p className="text-sm text-destructive font-medium">{error}</p>
-            </div>
-            <button 
-              onClick={refetch}
-              className="text-sm px-3 py-1 bg-destructive text-destructive-foreground rounded hover:bg-destructive/90"
-            >
-              Retry
-            </button>
-          </div>
-          <p className="text-xs text-muted-foreground mt-2">
-            Showing cached data. Updates paused due to connection issues.
-          </p>
-        </div>
-      )}
+      <ErrorBanner />
 
       {/* Main Content */}
       <main className="container mx-auto px-4 py-6">
         <div className="space-y-6">
           {/* Portfolio Overview */}
-          {portfolio && botStatus && (
-            <PortfolioOverview portfolio={portfolio} botStatus={botStatus} />
-          )}
+          <PortfolioOverview />
 
           <Separator />
 
           {/* P&L Chart */}
-          <PnLChart data={pnlData} />
+          <PnLChart />
 
           <Separator />
 
           {/* Recent Trades */}
-          <RecentTrades trades={trades} />
+          <RecentTrades />
         </div>
       </main>
 
@@ -140,6 +95,16 @@ function App() {
         </div>
       </footer>
     </div>
+  );
+}
+
+function App() {
+  const tradingData = useTradingData();
+
+  return (
+    <TradingDataProvider value={tradingData}>
+      <DashboardContent />
+    </TradingDataProvider>
   );
 }
 

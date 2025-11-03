@@ -2,16 +2,31 @@ export interface Trade {
   id: number;
   timestamp: string;
   symbol: string;
-  side: 'buy' | 'sell';
+  side: 'buy' | 'sell' | 'short';
+  direction?: 'long' | 'short' | 'none';
   price: number;
   quantity: number;
   amount_usdt: number;
   confidence: number;
   mode: 'paper' | 'live';
-  llm_reasoning: string;
-  llm_risk_assessment: 'low' | 'medium' | 'high';
-  llm_position_size: number;
+  leverage?: number;
+  trading_fee?: number;
+  margin_used?: number;
+  llm_prompt?: string;
+  llm_raw_response?: string;
+  llm_parsed_decision?: Record<string, any>;
+  llm_reasoning?: string;
+  llm_justification?: string;
+  llm_risk_assessment?: 'low' | 'medium' | 'high';
+  llm_position_size?: number;
+  llm_position_size_usdt?: number;
+  exit_plan?: {
+    profit_target?: number;
+    stop_loss?: number;
+    invalidation_conditions?: string[];
+  };
   profit?: number;
+  profit_pct?: number;
 }
 
 export interface Portfolio {

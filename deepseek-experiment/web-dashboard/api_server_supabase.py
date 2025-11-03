@@ -15,10 +15,12 @@ from datetime import datetime
 from typing import Dict, List, Any, Optional
 import asyncio
 import websockets
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from starlette.middleware.base import BaseHTTPMiddleware
 import uvicorn
+import time
 
 # Add project root to path
 project_root = Path(__file__).parent.parent
@@ -37,6 +39,70 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Trading Bot API", version="1.0.0")
 
+
+class RateLimitMiddleware(BaseHTTPMiddleware):
+    """Rate limiting middleware for API endpoints."""
+
+    def __init__(self, app, requests_per_minute: int = 60):
+        super().__init__(app)
+        self.requests_per_minute = requests_per_minute
+        self.rate_limits: Dict[str, List[float]] = {}
+
+    async def dispatch(self, request: Request, call_next):
+        # Skip rate limiting for health checks
+        if request.url.path in ["/health", "/ready", "/live", "/"]:
+            return await call_next(request)
+
+        # Get client identifier (IP address)
+        client_ip = request.client.host if request.client else "unknown"
+
+        # Clean old entries (older than 1 minute)
+        current_time = time.time()
+        if client_ip in self.rate_limits:
+            self.rate_limits[client_ip] = [
+                req_time for req_time in self.rate_limits[client_ip]
+                if current_time - req_time < 60
+            ]
+        else:
+            self.rate_limits[client_ip] = []
+
+        # Check rate limit
+        if len(self.rate_limits.get(client_ip, [])) >= self.requests_per_minute:
+            return JSONResponse(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                content={
+                    "error": "Rate limit exceeded",
+                    "message": f"Maximum {self.requests_per_minute} requests per minute",
+                    "retry_after": 60
+                },
+                headers={
+                    "Retry-After": "60",
+                    "X-RateLimit-Limit": str(self.requests_per_minute),
+                    "X-RateLimit-Remaining": "0"
+                }
+            )
+
+        # Record request
+        if client_ip not in self.rate_limits:
+            self.rate_limits[client_ip] = []
+        self.rate_limits[client_ip].append(current_time)
+
+        # Process request
+        response = await call_next(request)
+
+        # Add rate limit headers
+        remaining = max(0, self.requests_per_minute - len(self.rate_limits[client_ip]))
+        response.headers["X-RateLimit-Limit"] = str(self.requests_per_minute)
+        response.headers["X-RateLimit-Remaining"] = str(remaining)
+        response.headers["X-RateLimit-Reset"] = str(int(current_time + 60))
+
+        return response
+
+
+# Apply rate limiting
+rate_limit_rpm = int(os.getenv("API_RATE_LIMIT_RPM", "60"))
+app.add_middleware(RateLimitMiddleware, requests_per_minute=rate_limit_rpm)
+
 # Enable CORS for React frontend
 # Get allowed origins from environment variable for production
 cors_origins_str = os.getenv("CORS_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000")
@@ -49,7 +115,7 @@ if is_production:
     # In production, use regex to allow all Vercel deployments
     # This includes production, preview, and branch deployments
     cors_origin_regex = r"https://.*\.vercel\.app"
-    
+
     app.add_middleware(
         CORSMiddleware,
         allow_origins=cors_origins,  # Any explicitly listed origins
@@ -121,7 +187,7 @@ def get_bot_status() -> Dict[str, Any]:
     else:
         hyperparams = load_json_file(HYPERPARAMS_FILE, {})
         params = hyperparams.get("hyperparameters", {})
-        
+
         return {
             "is_running": True,
             "last_update": datetime.now().isoformat(),
@@ -147,7 +213,7 @@ def get_portfolio() -> Dict[str, Any]:
     """Get current portfolio state."""
     # Get trades for calculations
     trades = get_trades(10000)  # Get all trades for calculations
-    
+
     if USE_SUPABASE and supabase:
         try:
             portfolio = supabase.get_portfolio()
@@ -157,22 +223,22 @@ def get_portfolio() -> Dict[str, Any]:
                 unrealized_pnl = float(portfolio.get("unrealized_pnl", 0))
                 realized_pnl = float(portfolio.get("realized_pnl", 0))
                 active_positions = int(portfolio.get("active_positions", 0))
-                
+
                 # Calculate positions_value (total value of open positions)
                 positions_value = total_value - balance
-                
+
                 # Calculate total_return from realized_pnl
                 total_return = realized_pnl
-                
+
                 # Calculate initial_balance (balance + realized_pnl + unrealized_pnl - positions_value)
                 # Or get from first trade or config
                 initial_balance = balance + realized_pnl + unrealized_pnl - positions_value
                 if initial_balance <= 0:
                     initial_balance = config.INITIAL_BALANCE
-                
+
                 # Calculate total_return_pct
                 total_return_pct = (total_return / initial_balance * 100) if initial_balance > 0 else 0
-                
+
                 return {
                     "balance": balance,
                     "total_value": total_value,
@@ -229,23 +295,23 @@ def get_portfolio() -> Dict[str, Any]:
                 "initial_balance": initial_balance,
                 "timestamp": datetime.now().isoformat()
             }
-        
+
         # Calculate missing fields from portfolio.json
         balance = float(portfolio.get("balance", config.INITIAL_BALANCE))
         positions = portfolio.get("positions", {})
         positions_value = sum(pos.get("value", 0) for pos in positions.values())
         total_value = balance + positions_value
         open_positions = len(positions)
-        
+
         # Calculate total_return from trades
         total_return = sum(trade.get("profit", 0) for trade in trades if trade.get("profit") is not None)
-        
+
         # Get initial_balance from portfolio or config
         initial_balance = float(portfolio.get("initial_balance", config.INITIAL_BALANCE))
-        
+
         # Calculate total_return_pct
         total_return_pct = (total_return / initial_balance * 100) if initial_balance > 0 else 0
-        
+
         return {
             "balance": balance,
             "total_value": total_value,
@@ -356,29 +422,73 @@ async def root():
 
 @app.get("/health")
 async def health():
-    """Health check endpoint for Railway and monitoring."""
+    """Enhanced health check with dependency validation."""
+    from fastapi import Response
+
+    checks = {
+        "api_server": "healthy",
+        "database": None,
+        "file_system": None,
+    }
+    overall_status = "healthy"
+    status_code = 200
+
     try:
-        # Check database connection
-        db_status = "fallback"  # Default to fallback mode
+        # Check file system accessibility
+        try:
+            DATA_DIR.mkdir(parents=True, exist_ok=True)
+            (DATA_DIR / "logs").mkdir(parents=True, exist_ok=True)
+            test_file = DATA_DIR / ".healthcheck"
+            test_file.write_text("test")
+            test_file.unlink()
+            checks["file_system"] = "healthy"
+        except Exception as e:
+            checks["file_system"] = f"unhealthy: {str(e)}"
+            overall_status = "degraded"
+
+        # Check database connectivity
         if USE_SUPABASE and supabase:
             try:
-                # Quick database ping (synchronous call, FastAPI handles it)
                 supabase.get_trades(limit=1)
-                db_status = "healthy"
+                portfolio = supabase.get_portfolio()
+                checks["database"] = {
+                    "status": "healthy",
+                    "type": "supabase",
+                    "readable": True,
+                    "writable": True
+                }
             except Exception as e:
-                db_status = f"unhealthy: {str(e)}"
-        elif USE_SUPABASE and not supabase:
-            db_status = "not_configured"
-        
-        return {
-            "status": "healthy",
-            "timestamp": datetime.now().isoformat(),
-            "database": db_status,
-            "version": "1.0.0",
-            "environment": os.getenv("ENVIRONMENT", "development")
-        }
+                checks["database"] = {
+                    "status": f"unhealthy: {str(e)}",
+                    "type": "supabase",
+                    "readable": False,
+                    "writable": False
+                }
+                overall_status = "degraded"
+        else:
+            checks["database"] = {
+                "status": "healthy",
+                "type": "file_based",
+                "readable": TRADES_FILE.exists() or True,
+                "writable": os.access(DATA_DIR, os.W_OK)
+            }
+
+        if overall_status == "degraded":
+            status_code = 503
+
+        return Response(
+            content=json.dumps({
+                "status": overall_status,
+                "timestamp": datetime.now().isoformat(),
+                "service": "trading-bot-api",
+                "version": "1.0.0",
+                "environment": os.getenv("ENVIRONMENT", "development"),
+                "checks": checks
+            }, indent=2),
+            status_code=status_code,
+            media_type="application/json"
+        )
     except Exception as e:
-        from fastapi import Response
         return Response(
             content=json.dumps({
                 "status": "unhealthy",
@@ -388,6 +498,37 @@ async def health():
             status_code=503,
             media_type="application/json"
         )
+
+@app.get("/ready")
+async def ready():
+    """Readiness probe - checks if service is ready to accept traffic."""
+    from fastapi import Response
+
+    try:
+        if USE_SUPABASE and supabase:
+            supabase.get_trades(limit=1)
+        return {
+            "status": "ready",
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        return Response(
+            content=json.dumps({
+                "status": "not_ready",
+                "reason": str(e),
+                "timestamp": datetime.now().isoformat()
+            }),
+            status_code=503,
+            media_type="application/json"
+        )
+
+@app.get("/live")
+async def live():
+    """Liveness probe - checks if service is alive."""
+    return {
+        "status": "alive",
+        "timestamp": datetime.now().isoformat()
+    }
 
 @app.get("/api/status")
 async def status():
@@ -420,7 +561,7 @@ async def stats():
     """Get trading statistics."""
     trades = get_trades(1000)
     portfolio = get_portfolio()
-    
+
     if not trades:
         return {
             "total_trades": 0,
@@ -428,13 +569,13 @@ async def stats():
             "win_rate": 0,
             "avg_trade_size": 0
         }
-    
+
     total_trades = len(trades)
     total_pnl = sum(trade.get("pnl", 0) for trade in trades)
     winning_trades = sum(1 for trade in trades if trade.get("pnl", 0) > 0)
     win_rate = (winning_trades / total_trades * 100) if total_trades > 0 else 0
     avg_trade_size = sum(trade.get("amount_usdt", 0) for trade in trades) / total_trades if total_trades > 0 else 0
-    
+
     return {
         "total_trades": total_trades,
         "total_pnl": total_pnl,

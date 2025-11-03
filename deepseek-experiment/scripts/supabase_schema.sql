@@ -6,18 +6,28 @@ CREATE TABLE IF NOT EXISTS trades (
     id SERIAL PRIMARY KEY,
     timestamp TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
     symbol VARCHAR(20) NOT NULL,
-    side VARCHAR(10) NOT NULL CHECK (side IN ('buy', 'sell')),
+    side VARCHAR(10) NOT NULL CHECK (side IN ('buy', 'sell', 'short')),
+    direction VARCHAR(10) CHECK (direction IN ('long', 'short', 'none')),
     price DECIMAL(20, 8) NOT NULL,
     quantity DECIMAL(20, 8) NOT NULL,
     amount_usdt DECIMAL(20, 8) NOT NULL,
     confidence DECIMAL(3, 2) NOT NULL CHECK (confidence >= 0 AND confidence <= 1),
     mode VARCHAR(20) NOT NULL DEFAULT 'paper',
-    llm_reasoning TEXT,
-    llm_risk_assessment VARCHAR(20),
-    llm_position_size DECIMAL(5, 4),
     leverage DECIMAL(5, 2) DEFAULT 1.0,
+    trading_fee DECIMAL(20, 8) DEFAULT 0,
+    margin_used DECIMAL(20, 8) DEFAULT 0,
     fees DECIMAL(20, 8) DEFAULT 0,
     pnl DECIMAL(20, 8) DEFAULT 0,
+    profit DECIMAL(20, 8),
+    profit_pct DECIMAL(10, 4),
+    llm_prompt TEXT,
+    llm_raw_response TEXT,
+    llm_parsed_decision JSONB,
+    llm_reasoning TEXT,
+    llm_justification TEXT,
+    llm_risk_assessment VARCHAR(20),
+    llm_position_size_usdt DECIMAL(20, 8),
+    exit_plan JSONB,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
@@ -26,11 +36,27 @@ CREATE TABLE IF NOT EXISTS portfolio_snapshots (
     id SERIAL PRIMARY KEY,
     timestamp TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
     balance DECIMAL(20, 8) NOT NULL,
+    positions_value DECIMAL(20, 8) DEFAULT 0,
     total_value DECIMAL(20, 8) NOT NULL,
+    initial_balance DECIMAL(20, 8) DEFAULT 10000,
+    total_return DECIMAL(20, 8) DEFAULT 0,
+    total_return_pct DECIMAL(10, 4) DEFAULT 0,
+    total_trades INTEGER DEFAULT 0,
     unrealized_pnl DECIMAL(20, 8) DEFAULT 0,
     realized_pnl DECIMAL(20, 8) DEFAULT 0,
     total_fees DECIMAL(20, 8) DEFAULT 0,
     active_positions INTEGER DEFAULT 0,
+    sharpe_ratio DECIMAL(8, 4),
+    volatility DECIMAL(10, 4),
+    max_drawdown DECIMAL(20, 8),
+    win_rate DECIMAL(5, 2),
+    profit_factor DECIMAL(8, 4),
+    risk_adjusted_return DECIMAL(10, 4),
+    excess_return DECIMAL(10, 4),
+    avg_profit_per_trade DECIMAL(20, 8),
+    avg_trade_duration_hours DECIMAL(8, 2),
+    max_consecutive_wins INTEGER,
+    max_consecutive_losses INTEGER,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
@@ -59,13 +85,19 @@ CREATE TABLE IF NOT EXISTS behavioral_metrics (
     bullish_tilt DECIMAL(3, 2) NOT NULL,
     avg_holding_period_hours DECIMAL(8, 2) NOT NULL,
     trade_frequency_per_day DECIMAL(8, 2) NOT NULL,
-    avg_position_size DECIMAL(20, 8) NOT NULL,
+    avg_position_size_usdt DECIMAL(20, 8) NOT NULL,
     avg_confidence DECIMAL(3, 2) NOT NULL,
     exit_plan_tightness DECIMAL(5, 2) NOT NULL,
-    active_positions INTEGER NOT NULL,
-    fee_impact_percent DECIMAL(5, 2) NOT NULL,
+    active_positions_count INTEGER NOT NULL,
+    total_trading_fees DECIMAL(20, 8) DEFAULT 0,
+    fee_impact_pct DECIMAL(5, 2) NOT NULL,
     sharpe_ratio DECIMAL(8, 4),
-    max_drawdown DECIMAL(8, 4),
+    volatility DECIMAL(10, 4),
+    max_drawdown DECIMAL(20, 8),
+    win_rate DECIMAL(5, 2),
+    profit_factor DECIMAL(8, 4),
+    risk_adjusted_return DECIMAL(10, 4),
+    excess_return DECIMAL(10, 4),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
@@ -82,6 +114,8 @@ CREATE TABLE IF NOT EXISTS bot_config (
 CREATE INDEX IF NOT EXISTS idx_trades_timestamp ON trades(timestamp);
 CREATE INDEX IF NOT EXISTS idx_trades_symbol ON trades(symbol);
 CREATE INDEX IF NOT EXISTS idx_trades_side ON trades(side);
+CREATE INDEX IF NOT EXISTS idx_trades_confidence ON trades(confidence);
+CREATE INDEX IF NOT EXISTS idx_trades_llm_fields ON trades USING gin(llm_parsed_decision);
 CREATE INDEX IF NOT EXISTS idx_portfolio_timestamp ON portfolio_snapshots(timestamp);
 CREATE INDEX IF NOT EXISTS idx_positions_symbol ON positions(symbol);
 CREATE INDEX IF NOT EXISTS idx_positions_active ON positions(is_active);
@@ -109,14 +143,14 @@ END;
 $$ language 'plpgsql';
 
 -- Create trigger for positions table
-CREATE TRIGGER update_positions_updated_at 
-    BEFORE UPDATE ON positions 
-    FOR EACH ROW 
+CREATE TRIGGER update_positions_updated_at
+    BEFORE UPDATE ON positions
+    FOR EACH ROW
     EXECUTE FUNCTION update_updated_at_column();
 
 -- Create a view for recent trading activity
 CREATE OR REPLACE VIEW recent_trades AS
-SELECT 
+SELECT
     t.*,
     p.balance as portfolio_balance,
     p.total_value as portfolio_value
@@ -132,7 +166,7 @@ ORDER BY t.timestamp DESC;
 
 -- Create a view for portfolio performance
 CREATE OR REPLACE VIEW portfolio_performance AS
-SELECT 
+SELECT
     ps.timestamp,
     ps.balance,
     ps.total_value,
@@ -141,8 +175,8 @@ SELECT
     ps.total_fees,
     ps.active_positions,
     LAG(ps.total_value) OVER (ORDER BY ps.timestamp) as prev_value,
-    CASE 
-        WHEN LAG(ps.total_value) OVER (ORDER BY ps.timestamp) IS NOT NULL 
+    CASE
+        WHEN LAG(ps.total_value) OVER (ORDER BY ps.timestamp) IS NOT NULL
         THEN ((ps.total_value - LAG(ps.total_value) OVER (ORDER BY ps.timestamp)) / LAG(ps.total_value) OVER (ORDER BY ps.timestamp)) * 100
         ELSE 0
     END as daily_return_percent
