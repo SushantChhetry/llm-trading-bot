@@ -2,12 +2,13 @@
 Supabase client for trading bot database operations
 """
 
-import os
-from typing import List, Dict, Any, Optional
-from supabase import create_client, Client
 import json
+import os
 from datetime import datetime
 from pathlib import Path
+from typing import Any, Dict, List, Optional
+
+from supabase import Client, create_client
 
 
 # Load environment variables from .env file

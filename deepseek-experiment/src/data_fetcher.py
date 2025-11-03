@@ -9,10 +9,11 @@ Includes technical indicator calculations for Alpha Arena-style trading signals.
 
 import logging
 import time
-from typing import Dict, Optional, List
+from typing import Dict, List, Optional
+
 import ccxt
-from ccxt.base.errors import NetworkError, ExchangeError, RateLimitExceeded
 import pandas as pd
+from ccxt.base.errors import ExchangeError, NetworkError, RateLimitExceeded
 
 try:
     import pandas_ta as ta
@@ -25,7 +26,8 @@ except ImportError:
     )
 
 from config import config
-from .resilience import RetryHandler, RetryConfig, exchange_circuit_breaker
+
+from .resilience import RetryConfig, RetryHandler, exchange_circuit_breaker
 
 logger = logging.getLogger(__name__)
 

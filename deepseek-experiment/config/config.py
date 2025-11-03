@@ -7,6 +7,7 @@ to switch between paper trading and live trading, or change exchanges/LLM provid
 
 import os
 from pathlib import Path
+
 from dotenv import load_dotenv
 
 # Load environment variables from .env file

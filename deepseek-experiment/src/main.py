@@ -5,24 +5,25 @@ Schedules bot workflow to run at regular intervals (default: every 5 minutes),
 handles logging, and coordinates data fetching, LLM decisions, and trade execution.
 """
 
-import logging
-import time
-import sys
 import argparse
 import json
+import logging
 import os
-from pathlib import Path
+import sys
+import time
 from datetime import datetime
+from pathlib import Path
 from typing import Dict
+
+import colorama
+from colorama import Back, Fore, Style
+from rich import box
 from rich.console import Console
+from rich.live import Live
 from rich.panel import Panel
+from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.table import Table
 from rich.text import Text
-from rich.progress import Progress, SpinnerColumn, TextColumn
-from rich.live import Live
-from rich import box
-import colorama
-from colorama import Fore, Back, Style
 
 # Initialize colorama for cross-platform color support
 colorama.init(autoreset=True)
@@ -34,9 +35,9 @@ sys.path.insert(0, str(project_root))
 from config import config
 from src.data_fetcher import DataFetcher
 from src.llm_client import LLMClient
-from src.trading_engine import TradingEngine
 from src.logger import configure_production_logging, get_logger
 from src.startup_validator import validate_startup
+from src.trading_engine import TradingEngine
 
 # Configure logging based on environment
 environment = os.getenv("ENVIRONMENT", "development")

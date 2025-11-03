@@ -3,12 +3,12 @@ Production logging configuration with structured output and rotation.
 Industry-standard implementation following twelve-factor app methodology.
 """
 
+import json
 import logging
 import logging.handlers
 import sys
-import json
-from pathlib import Path
 from datetime import datetime
+from pathlib import Path
 from typing import Optional
 
 

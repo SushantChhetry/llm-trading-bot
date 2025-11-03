@@ -5,22 +5,23 @@ Supports running parameter sweeps and systematic testing of trading strategies
 and LLM behaviors with comprehensive logging and metrics tracking.
 """
 
-import json
-import yaml
-import hashlib
-import logging
 import argparse
-import time
-import random
+import hashlib
+import itertools
+import json
+import logging
 import os
+import random
+import time
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Any, Optional
-import itertools
+from typing import Any, Dict, List, Optional
+
+import yaml
 
 from config import config
-from src.main import TradingBot
 from src.llm_client import LLMClient
+from src.main import TradingBot
 from src.trading_engine import TradingEngine
 
 logger = logging.getLogger(__name__)

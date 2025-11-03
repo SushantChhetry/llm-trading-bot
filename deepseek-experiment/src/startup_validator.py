@@ -4,11 +4,11 @@ Startup validation for trading bot.
 Validates environment, configuration, and dependencies before starting the bot.
 """
 
+import logging
 import os
 import sys
-import logging
-from typing import Dict, List, Tuple
 from pathlib import Path
+from typing import Dict, List, Tuple
 
 logger = logging.getLogger(__name__)
 

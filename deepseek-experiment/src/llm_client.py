@@ -5,15 +5,17 @@ Handles communication with DeepSeek LLM for trading decision generation.
 Includes a mock mode for testing without API calls and structured prompt templates.
 """
 
-import logging
 import json
+import logging
 import re
-from typing import Dict, Optional, List
+from typing import Dict, List, Optional
+
 import requests
 
 from config import config
-from .security import SecurityManager, secure_api_key_required, validate_trading_inputs, rate_limit
-from .resilience import circuit_breaker, retry, fallback, CircuitBreakerConfig, RetryConfig
+
+from .resilience import CircuitBreakerConfig, RetryConfig, circuit_breaker, fallback, retry
+from .security import SecurityManager, rate_limit, secure_api_key_required, validate_trading_inputs
 
 logger = logging.getLogger(__name__)
 
