@@ -12,8 +12,9 @@ matplotlib>=3.7.0
 seaborn>=0.12.0
 numpy>=1.24.0
 
-# Technical indicators for Alpha Arena (required for enhanced trading signals)
-pandas-ta>=0.3.14b0
+# Technical indicators for Alpha Arena (optional - code has fallback if unavailable)
+# pandas-ta>=0.3.14b0  # Commented out: version deleted from PyPI, newer versions require Python 3.12+
+# If pandas-ta is needed, install manually or upgrade to Python 3.12+
 
 # Experimentation and configuration
 pyyaml>=6.0
