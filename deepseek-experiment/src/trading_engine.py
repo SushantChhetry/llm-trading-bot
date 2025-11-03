@@ -83,8 +83,46 @@ class TradingEngine:
     def _save_trades(self):
         """Save trade history to file."""
         try:
+            # Clean trades to remove non-serializable objects (like MagicMock from tests)
+            def clean_value(value):
+                """Recursively clean non-serializable values."""
+                # Keep None as-is
+                if value is None:
+                    return None
+                # Check if it's a mock object (has mock attributes)
+                if hasattr(value, '_mock_name') or hasattr(value, '_mock_children'):
+                    # Return a sentinel to indicate this should be skipped
+                    return "__SKIP_MOCK__"
+                # Handle dicts
+                if isinstance(value, dict):
+                    cleaned = {}
+                    for k, v in value.items():
+                        cleaned_v = clean_value(v)
+                        # Skip mock objects but keep None values
+                        if cleaned_v != "__SKIP_MOCK__":
+                            cleaned[k] = cleaned_v
+                    return cleaned
+                # Handle lists
+                if isinstance(value, list):
+                    cleaned = []
+                    for v in value:
+                        cleaned_v = clean_value(v)
+                        # Skip mock objects but keep None values
+                        if cleaned_v != "__SKIP_MOCK__":
+                            cleaned.append(cleaned_v)
+                    return cleaned
+                # Test if value is JSON serializable
+                try:
+                    json.dumps(value)
+                    return value
+                except (TypeError, ValueError):
+                    # Convert non-serializable to string representation
+                    return str(value)
+
+            cleaned_trades = [clean_value(trade) for trade in self.trades]
+
             with open(self.trades_file, "w") as f:
-                json.dump(self.trades, f, indent=2)
+                json.dump(cleaned_trades, f, indent=2, default=str)
         except Exception as e:
             logger.error(f"Error saving trades: {e}")
 
@@ -286,11 +324,20 @@ class TradingEngine:
         trading_fee = amount_usdt * (config.TRADING_FEE_PERCENT / 100)
 
         # Extract LLM context for storage
+        # Note: llm_decision may be None if not provided, or may be sanitized by @validate_trading_inputs decorator
         llm_prompt = llm_decision.get("_prompt", "") if llm_decision else ""
         llm_raw_response = llm_decision.get("_raw_response", "") if llm_decision else ""
         llm_parsed_decision = {k: v for k, v in (llm_decision or {}).items() if not k.startswith("_")}
 
         # Record trade with enhanced LLM context
+        # Safely extract justification - handle both None and dict cases
+        justification = ""
+        if llm_decision:
+            if isinstance(llm_decision, dict):
+                justification = llm_decision.get("justification", "")
+            else:
+                logger.warning(f"llm_decision is not a dict: {type(llm_decision)}")
+
         trade = {
             "id": len(self.trades) + 1,
             "timestamp": datetime.now().isoformat(),
@@ -308,11 +355,11 @@ class TradingEngine:
             "llm_prompt": llm_prompt,
             "llm_raw_response": llm_raw_response,
             "llm_parsed_decision": llm_parsed_decision,
-            "llm_justification": llm_decision.get("justification", "") if llm_decision else "",
-            "llm_reasoning": llm_decision.get("justification", "") if llm_decision else "",
-            "llm_risk_assessment": llm_decision.get("risk_assessment", "medium") if llm_decision else "medium",
-            "llm_position_size_usdt": llm_decision.get("position_size_usdt", 0.0) if llm_decision else 0.0,
-            "exit_plan": llm_decision.get("exit_plan", {}) if llm_decision else {},
+            "llm_justification": justification,
+            "llm_reasoning": justification,
+            "llm_risk_assessment": llm_decision.get("risk_assessment", "medium") if llm_decision and isinstance(llm_decision, dict) else "medium",
+            "llm_position_size_usdt": llm_decision.get("position_size_usdt", 0.0) if llm_decision and isinstance(llm_decision, dict) else 0.0,
+            "exit_plan": llm_decision.get("exit_plan", {}) if llm_decision and isinstance(llm_decision, dict) else {},
         }
 
         # Update balance and positions (deduct margin + fees)
@@ -410,9 +457,18 @@ class TradingEngine:
         margin_returned = (position.get("margin_used", 0) * sell_quantity) / position["quantity"]
 
         # Extract LLM context for storage
+        # Note: llm_decision may be None if not provided, or may be sanitized by @validate_trading_inputs decorator
         llm_prompt = llm_decision.get("_prompt", "") if llm_decision else ""
         llm_raw_response = llm_decision.get("_raw_response", "") if llm_decision else ""
         llm_parsed_decision = {k: v for k, v in (llm_decision or {}).items() if not k.startswith("_")}
+
+        # Safely extract justification - handle both None and dict cases
+        justification = ""
+        if llm_decision:
+            if isinstance(llm_decision, dict):
+                justification = llm_decision.get("justification", "")
+            else:
+                logger.warning(f"llm_decision is not a dict: {type(llm_decision)}")
 
         # Record trade with enhanced LLM context
         trade = {
@@ -434,11 +490,11 @@ class TradingEngine:
             "llm_prompt": llm_prompt,
             "llm_raw_response": llm_raw_response,
             "llm_parsed_decision": llm_parsed_decision,
-            "llm_justification": llm_decision.get("justification", "") if llm_decision else "",
-            "llm_reasoning": llm_decision.get("justification", "") if llm_decision else "",
-            "llm_risk_assessment": llm_decision.get("risk_assessment", "medium") if llm_decision else "medium",
-            "llm_position_size_usdt": llm_decision.get("position_size_usdt", 0.0) if llm_decision else 0.0,
-            "exit_plan": llm_decision.get("exit_plan", {}) if llm_decision else {},
+            "llm_justification": justification,
+            "llm_reasoning": justification,
+            "llm_risk_assessment": llm_decision.get("risk_assessment", "medium") if llm_decision and isinstance(llm_decision, dict) else "medium",
+            "llm_position_size_usdt": llm_decision.get("position_size_usdt", 0.0) if llm_decision and isinstance(llm_decision, dict) else 0.0,
+            "exit_plan": llm_decision.get("exit_plan", {}) if llm_decision and isinstance(llm_decision, dict) else {},
         }
 
         # Update balance and positions (add margin returned + profit - fees)
