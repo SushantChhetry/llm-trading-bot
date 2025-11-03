@@ -29,8 +29,9 @@ Base = declarative_base()
 
 class Trade(Base):
     """Trade model for database storage."""
+
     __tablename__ = "trades"
-    
+
     id = Column(Integer, primary_key=True)
     trade_id = Column(String(50), unique=True, nullable=False)
     timestamp = Column(DateTime, nullable=False, default=datetime.utcnow)
@@ -57,8 +58,9 @@ class Trade(Base):
 
 class Position(Base):
     """Position model for database storage."""
+
     __tablename__ = "positions"
-    
+
     id = Column(Integer, primary_key=True)
     position_id = Column(String(50), unique=True, nullable=False)
     symbol = Column(String(20), nullable=False)
@@ -80,8 +82,9 @@ class Position(Base):
 
 class PortfolioSnapshot(Base):
     """Portfolio snapshot model for database storage."""
+
     __tablename__ = "portfolio_snapshots"
-    
+
     id = Column(Integer, primary_key=True)
     snapshot_id = Column(String(50), unique=True, nullable=False)
     timestamp = Column(DateTime, nullable=False, default=datetime.utcnow)
@@ -98,8 +101,9 @@ class PortfolioSnapshot(Base):
 
 class BehavioralMetrics(Base):
     """Behavioral metrics model for database storage."""
+
     __tablename__ = "behavioral_metrics"
-    
+
     id = Column(Integer, primary_key=True)
     metrics_id = Column(String(50), unique=True, nullable=False)
     timestamp = Column(DateTime, nullable=False, default=datetime.utcnow)
@@ -122,11 +126,11 @@ class BehavioralMetrics(Base):
 
 class DatabaseManager:
     """Manages database operations with transaction support and resilience."""
-    
+
     def __init__(self, database_url: str, fallback_to_json: bool = True):
         """
         Initialize database manager.
-        
+
         Args:
             database_url: Database connection URL
             fallback_to_json: Whether to fallback to JSON files if database fails
@@ -136,7 +140,7 @@ class DatabaseManager:
         self.engine = None
         self.session_factory = None
         self.is_connected = False
-        
+
         # Fallback JSON file paths
         self.data_dir = Path("data")
         self.data_dir.mkdir(exist_ok=True)
@@ -144,34 +148,26 @@ class DatabaseManager:
         self.positions_file = self.data_dir / "positions.json"
         self.portfolio_file = self.data_dir / "portfolio.json"
         self.metrics_file = self.data_dir / "behavioral_metrics.json"
-        
+
         # Initialize connection
         asyncio.create_task(self._initialize_connection())
-    
+
     async def _initialize_connection(self):
         """Initialize database connection."""
         try:
             self.engine = create_async_engine(
-                self.database_url,
-                echo=False,
-                pool_size=10,
-                max_overflow=20,
-                pool_pre_ping=True
+                self.database_url, echo=False, pool_size=10, max_overflow=20, pool_pre_ping=True
             )
-            
-            self.session_factory = sessionmaker(
-                self.engine,
-                class_=AsyncSession,
-                expire_on_commit=False
-            )
-            
+
+            self.session_factory = sessionmaker(self.engine, class_=AsyncSession, expire_on_commit=False)
+
             # Create tables
             async with self.engine.begin() as conn:
                 await conn.run_sync(Base.metadata.create_all)
-            
+
             self.is_connected = True
             logger.info("Database connection established successfully")
-            
+
         except Exception as e:
             logger.error(f"Database connection failed: {e}")
             if self.fallback_to_json:
@@ -179,13 +175,13 @@ class DatabaseManager:
                 self.is_connected = False
             else:
                 raise
-    
+
     @asynccontextmanager
     async def get_session(self):
         """Get database session with automatic cleanup."""
         if not self.is_connected:
             raise Exception("Database not connected")
-        
+
         async with self.session_factory() as session:
             try:
                 yield session
@@ -195,23 +191,23 @@ class DatabaseManager:
                 raise
             finally:
                 await session.close()
-    
+
     @circuit_breaker(CircuitBreakerConfig(failure_threshold=5, recovery_timeout=60))
     async def save_trade(self, trade_data: Dict[str, Any]) -> str:
         """
         Save trade to database.
-        
+
         Args:
             trade_data: Trade data dictionary
-            
+
         Returns:
             Trade ID
         """
         if not self.is_connected:
             return await self._save_trade_json(trade_data)
-        
+
         trade_id = str(uuid.uuid4())
-        
+
         trade = Trade(
             trade_id=trade_id,
             timestamp=datetime.fromisoformat(trade_data.get("timestamp", datetime.utcnow().isoformat())),
@@ -232,49 +228,49 @@ class DatabaseManager:
             llm_justification=trade_data.get("llm_justification", ""),
             llm_risk_assessment=trade_data.get("llm_risk_assessment", ""),
             llm_position_size_usdt=float(trade_data.get("llm_position_size_usdt", 0)),
-            exit_plan=trade_data.get("exit_plan", {})
+            exit_plan=trade_data.get("exit_plan", {}),
         )
-        
+
         async with self.get_session() as session:
             session.add(trade)
             await session.flush()
             await session.refresh(trade)
-        
+
         logger.info(f"Trade saved to database: {trade_id}")
         return trade_id
-    
+
     async def _save_trade_json(self, trade_data: Dict[str, Any]) -> str:
         """Fallback: Save trade to JSON file."""
         trade_id = str(uuid.uuid4())
         trade_data["id"] = trade_id
         trade_data["trade_id"] = trade_id
-        
+
         try:
             trades = []
             if self.trades_file.exists():
-                with open(self.trades_file, 'r') as f:
+                with open(self.trades_file, "r") as f:
                     trades = json.load(f)
-            
+
             trades.append(trade_data)
-            
-            with open(self.trades_file, 'w') as f:
+
+            with open(self.trades_file, "w") as f:
                 json.dump(trades, f, indent=2, default=str)
-            
+
             logger.info(f"Trade saved to JSON: {trade_id}")
             return trade_id
-            
+
         except Exception as e:
             logger.error(f"Failed to save trade to JSON: {e}")
             raise
-    
+
     @circuit_breaker(CircuitBreakerConfig(failure_threshold=5, recovery_timeout=60))
     async def save_position(self, position_data: Dict[str, Any]) -> str:
         """Save position to database."""
         if not self.is_connected:
             return await self._save_position_json(position_data)
-        
+
         position_id = str(uuid.uuid4())
-        
+
         position = Position(
             position_id=position_id,
             symbol=position_data.get("symbol", ""),
@@ -288,50 +284,50 @@ class DatabaseManager:
             notional_value=float(position_data.get("notional_value", 0)),
             unrealized_pnl=float(position_data.get("unrealized_pnl", 0)),
             is_active=position_data.get("is_active", True),
-            opened_at=datetime.fromisoformat(position_data.get("opened_at", datetime.utcnow().isoformat()))
+            opened_at=datetime.fromisoformat(position_data.get("opened_at", datetime.utcnow().isoformat())),
         )
-        
+
         async with self.get_session() as session:
             session.add(position)
             await session.flush()
             await session.refresh(position)
-        
+
         logger.info(f"Position saved to database: {position_id}")
         return position_id
-    
+
     async def _save_position_json(self, position_data: Dict[str, Any]) -> str:
         """Fallback: Save position to JSON file."""
         position_id = str(uuid.uuid4())
         position_data["id"] = position_id
         position_data["position_id"] = position_id
-        
+
         try:
             positions = {}
             if self.positions_file.exists():
-                with open(self.positions_file, 'r') as f:
+                with open(self.positions_file, "r") as f:
                     positions = json.load(f)
-            
+
             symbol = position_data.get("symbol", "UNKNOWN")
             positions[symbol] = position_data
-            
-            with open(self.positions_file, 'w') as f:
+
+            with open(self.positions_file, "w") as f:
                 json.dump(positions, f, indent=2, default=str)
-            
+
             logger.info(f"Position saved to JSON: {position_id}")
             return position_id
-            
+
         except Exception as e:
             logger.error(f"Failed to save position to JSON: {e}")
             raise
-    
+
     @circuit_breaker(CircuitBreakerConfig(failure_threshold=5, recovery_timeout=60))
     async def save_portfolio_snapshot(self, portfolio_data: Dict[str, Any]) -> str:
         """Save portfolio snapshot to database."""
         if not self.is_connected:
             return await self._save_portfolio_json(portfolio_data)
-        
+
         snapshot_id = str(uuid.uuid4())
-        
+
         snapshot = PortfolioSnapshot(
             snapshot_id=snapshot_id,
             timestamp=datetime.fromisoformat(portfolio_data.get("timestamp", datetime.utcnow().isoformat())),
@@ -342,42 +338,42 @@ class DatabaseManager:
             realized_pnl=float(portfolio_data.get("realized_pnl", 0)),
             total_fees=float(portfolio_data.get("total_fees", 0)),
             active_positions=int(portfolio_data.get("active_positions", 0)),
-            total_trades=int(portfolio_data.get("total_trades", 0))
+            total_trades=int(portfolio_data.get("total_trades", 0)),
         )
-        
+
         async with self.get_session() as session:
             session.add(snapshot)
             await session.flush()
             await session.refresh(snapshot)
-        
+
         logger.info(f"Portfolio snapshot saved to database: {snapshot_id}")
         return snapshot_id
-    
+
     async def _save_portfolio_json(self, portfolio_data: Dict[str, Any]) -> str:
         """Fallback: Save portfolio to JSON file."""
         snapshot_id = str(uuid.uuid4())
         portfolio_data["id"] = snapshot_id
         portfolio_data["snapshot_id"] = snapshot_id
-        
+
         try:
-            with open(self.portfolio_file, 'w') as f:
+            with open(self.portfolio_file, "w") as f:
                 json.dump(portfolio_data, f, indent=2, default=str)
-            
+
             logger.info(f"Portfolio snapshot saved to JSON: {snapshot_id}")
             return snapshot_id
-            
+
         except Exception as e:
             logger.error(f"Failed to save portfolio to JSON: {e}")
             raise
-    
+
     @circuit_breaker(CircuitBreakerConfig(failure_threshold=5, recovery_timeout=60))
     async def save_behavioral_metrics(self, metrics_data: Dict[str, Any]) -> str:
         """Save behavioral metrics to database."""
         if not self.is_connected:
             return await self._save_metrics_json(metrics_data)
-        
+
         metrics_id = str(uuid.uuid4())
-        
+
         metrics = BehavioralMetrics(
             metrics_id=metrics_id,
             timestamp=datetime.fromisoformat(metrics_data.get("timestamp", datetime.utcnow().isoformat())),
@@ -394,54 +390,50 @@ class DatabaseManager:
             max_drawdown=float(metrics_data.get("max_drawdown", 0)) if metrics_data.get("max_drawdown") else None,
             volatility=float(metrics_data.get("volatility", 0)) if metrics_data.get("volatility") else None,
             win_rate=float(metrics_data.get("win_rate", 0)) if metrics_data.get("win_rate") else None,
-            profit_factor=float(metrics_data.get("profit_factor", 0)) if metrics_data.get("profit_factor") else None
+            profit_factor=float(metrics_data.get("profit_factor", 0)) if metrics_data.get("profit_factor") else None,
         )
-        
+
         async with self.get_session() as session:
             session.add(metrics)
             await session.flush()
             await session.refresh(metrics)
-        
+
         logger.info(f"Behavioral metrics saved to database: {metrics_id}")
         return metrics_id
-    
+
     async def _save_metrics_json(self, metrics_data: Dict[str, Any]) -> str:
         """Fallback: Save metrics to JSON file."""
         metrics_id = str(uuid.uuid4())
         metrics_data["id"] = metrics_id
         metrics_data["metrics_id"] = metrics_id
-        
+
         try:
             metrics_list = []
             if self.metrics_file.exists():
-                with open(self.metrics_file, 'r') as f:
+                with open(self.metrics_file, "r") as f:
                     metrics_list = json.load(f)
-            
+
             metrics_list.append(metrics_data)
-            
-            with open(self.metrics_file, 'w') as f:
+
+            with open(self.metrics_file, "w") as f:
                 json.dump(metrics_list, f, indent=2, default=str)
-            
+
             logger.info(f"Behavioral metrics saved to JSON: {metrics_id}")
             return metrics_id
-            
+
         except Exception as e:
             logger.error(f"Failed to save metrics to JSON: {e}")
             raise
-    
+
     async def get_recent_trades(self, limit: int = 100) -> List[Dict[str, Any]]:
         """Get recent trades from database."""
         if not self.is_connected:
             return await self._get_trades_json(limit)
-        
+
         async with self.get_session() as session:
-            result = await session.execute(
-                sa.select(Trade)
-                .order_by(Trade.timestamp.desc())
-                .limit(limit)
-            )
+            result = await session.execute(sa.select(Trade).order_by(Trade.timestamp.desc()).limit(limit))
             trades = result.scalars().all()
-            
+
             return [
                 {
                     "id": trade.id,
@@ -464,37 +456,35 @@ class DatabaseManager:
                     "llm_justification": trade.llm_justification,
                     "llm_risk_assessment": trade.llm_risk_assessment,
                     "llm_position_size_usdt": trade.llm_position_size_usdt,
-                    "exit_plan": trade.exit_plan
+                    "exit_plan": trade.exit_plan,
                 }
                 for trade in trades
             ]
-    
+
     async def _get_trades_json(self, limit: int) -> List[Dict[str, Any]]:
         """Fallback: Get trades from JSON file."""
         try:
             if not self.trades_file.exists():
                 return []
-            
-            with open(self.trades_file, 'r') as f:
+
+            with open(self.trades_file, "r") as f:
                 trades = json.load(f)
-            
+
             return trades[-limit:] if len(trades) > limit else trades
-            
+
         except Exception as e:
             logger.error(f"Failed to load trades from JSON: {e}")
             return []
-    
+
     async def get_active_positions(self) -> Dict[str, Dict[str, Any]]:
         """Get active positions from database."""
         if not self.is_connected:
             return await self._get_positions_json()
-        
+
         async with self.get_session() as session:
-            result = await session.execute(
-                sa.select(Position).where(Position.is_active == True)
-            )
+            result = await session.execute(sa.select(Position).where(Position.is_active == True))
             positions = result.scalars().all()
-            
+
             return {
                 pos.symbol: {
                     "id": pos.id,
@@ -511,24 +501,24 @@ class DatabaseManager:
                     "unrealized_pnl": pos.unrealized_pnl,
                     "is_active": pos.is_active,
                     "opened_at": pos.opened_at.isoformat() if pos.opened_at else None,
-                    "closed_at": pos.closed_at.isoformat() if pos.closed_at else None
+                    "closed_at": pos.closed_at.isoformat() if pos.closed_at else None,
                 }
                 for pos in positions
             }
-    
+
     async def _get_positions_json(self) -> Dict[str, Dict[str, Any]]:
         """Fallback: Get positions from JSON file."""
         try:
             if not self.positions_file.exists():
                 return {}
-            
-            with open(self.positions_file, 'r') as f:
+
+            with open(self.positions_file, "r") as f:
                 return json.load(f)
-            
+
         except Exception as e:
             logger.error(f"Failed to load positions from JSON: {e}")
             return {}
-    
+
     async def close(self):
         """Close database connection."""
         if self.engine:
@@ -539,11 +529,13 @@ class DatabaseManager:
 # Global database manager instance
 database_manager = None
 
+
 async def get_database_manager() -> DatabaseManager:
     """Get global database manager instance."""
     global database_manager
     if database_manager is None:
         from .config_manager import config_manager
+
         database_url = config_manager.database.url
         database_manager = DatabaseManager(database_url)
     return database_manager

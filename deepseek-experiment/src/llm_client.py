@@ -34,12 +34,7 @@ class LLMClient:
     """
 
     def __init__(
-        self,
-        provider: str = None,
-        api_key: str = None,
-        api_url: str = None,
-        model: str = None,
-        mock_mode: bool = None
+        self, provider: str = None, api_key: str = None, api_url: str = None, model: str = None, mock_mode: bool = None
     ):
         """
         Initialize the LLM client.
@@ -61,7 +56,7 @@ class LLMClient:
 
         # Auto-detect mock mode if not specified
         if mock_mode is None:
-            self.mock_mode = (self.provider == "mock" or not self.api_key)
+            self.mock_mode = self.provider == "mock" or not self.api_key
         else:
             self.mock_mode = mock_mode
 
@@ -89,40 +84,40 @@ class LLMClient:
         """
         # Safely extract and format values with error handling
         try:
-            price = float(market_data.get('price', 0))
+            price = float(market_data.get("price", 0))
         except (ValueError, TypeError):
             price = 0.0
 
         try:
-            volume = float(market_data.get('volume', 0))
+            volume = float(market_data.get("volume", 0))
         except (ValueError, TypeError):
             volume = 0.0
 
         try:
-            change_24h = float(market_data.get('change_24h', 0))
+            change_24h = float(market_data.get("change_24h", 0))
         except (ValueError, TypeError):
             change_24h = 0.0
 
         try:
-            balance = float(portfolio_state.get('balance', 0))
+            balance = float(portfolio_state.get("balance", 0))
         except (ValueError, TypeError):
             balance = 0.0
 
         try:
-            total_value = float(portfolio_state.get('total_value', 0))
+            total_value = float(portfolio_state.get("total_value", 0))
         except (ValueError, TypeError):
             total_value = 0.0
 
         try:
-            return_pct = float(portfolio_state.get('total_return_pct', 0))
+            return_pct = float(portfolio_state.get("total_return_pct", 0))
         except (ValueError, TypeError):
             return_pct = 0.0
 
         # Extract Sharpe ratio and risk metrics for Alpha Arena style feedback
-        sharpe_ratio = portfolio_state.get('sharpe_ratio', 0.0) if portfolio_state else 0.0
-        volatility = portfolio_state.get('volatility', 0.0) if portfolio_state else 0.0
-        max_drawdown = portfolio_state.get('max_drawdown', 0.0) if portfolio_state else 0.0
-        risk_adjusted_return = portfolio_state.get('risk_adjusted_return', 0.0) if portfolio_state else 0.0
+        sharpe_ratio = portfolio_state.get("sharpe_ratio", 0.0) if portfolio_state else 0.0
+        volatility = portfolio_state.get("volatility", 0.0) if portfolio_state else 0.0
+        max_drawdown = portfolio_state.get("max_drawdown", 0.0) if portfolio_state else 0.0
+        risk_adjusted_return = portfolio_state.get("risk_adjusted_return", 0.0) if portfolio_state else 0.0
 
         prompt = f"""
 You are a quantitative cryptocurrency trader in the Alpha Arena competition. Your goal is to maximize PnL through systematic analysis of numerical data only. You have $10,000 to trade perpetual futures with leverage.
@@ -227,13 +222,13 @@ CRITICAL: Respond with ONLY the raw JSON object above. Start with {{ and end wit
 
         # Remove markdown code blocks if present
         # Match ```json ... ``` or ``` ... ```
-        code_block_pattern = r'```(?:json)?\s*\n?(.*?)\n?```'
+        code_block_pattern = r"```(?:json)?\s*\n?(.*?)\n?```"
         code_block_match = re.search(code_block_pattern, cleaned, re.DOTALL)
         if code_block_match:
             cleaned = code_block_match.group(1).strip()
 
         # Find the first { and then find the matching }
-        start_idx = cleaned.find('{')
+        start_idx = cleaned.find("{")
         if start_idx == -1:
             return None
 
@@ -249,7 +244,7 @@ CRITICAL: Respond with ONLY the raw JSON object above. Start with {{ and end wit
                 escape_next = False
                 continue
 
-            if char == '\\':
+            if char == "\\":
                 escape_next = True
                 continue
 
@@ -258,13 +253,13 @@ CRITICAL: Respond with ONLY the raw JSON object above. Start with {{ and end wit
                 continue
 
             if not in_string:
-                if char == '{':
+                if char == "{":
                     brace_count += 1
-                elif char == '}':
+                elif char == "}":
                     brace_count -= 1
                     if brace_count == 0:
                         # Found the matching closing brace
-                        json_str = cleaned[start_idx:i+1]
+                        json_str = cleaned[start_idx : i + 1]
                         return json_str
 
         return None
@@ -279,14 +274,15 @@ CRITICAL: Respond with ONLY the raw JSON object above. Start with {{ and end wit
         Returns:
             JSON string with quoted keys
         """
+
         # Use regex to find and quote unquoted keys
         # Pattern matches: ({ or ,) whitespace? identifier whitespace? :
         # This handles the common case of unquoted keys
         def quote_key(match):
             prefix = match.group(1)  # { or ,
-            whitespace1 = match.group(2) or ''  # optional whitespace
-            key = match.group(3)      # the key name (identifier)
-            whitespace2 = match.group(4) or ''  # optional whitespace before :
+            whitespace1 = match.group(2) or ""  # optional whitespace
+            key = match.group(3)  # the key name (identifier)
+            whitespace2 = match.group(4) or ""  # optional whitespace before :
             return f'{prefix}{whitespace1}"{key}"{whitespace2}:'
 
         # Match unquoted keys that appear after { or ,
@@ -296,7 +292,7 @@ CRITICAL: Respond with ONLY the raw JSON object above. Start with {{ and end wit
         # ([a-zA-Z_][a-zA-Z0-9_]*) - identifier (word starting with letter/underscore)
         # (\s*) - optional whitespace before colon
         # : - colon
-        json_str = re.sub(r'([{,])(\s*)([a-zA-Z_][a-zA-Z0-9_]*)(\s*):', quote_key, json_str)
+        json_str = re.sub(r"([{,])(\s*)([a-zA-Z_][a-zA-Z0-9_]*)(\s*):", quote_key, json_str)
         return json_str
 
     @validate_trading_inputs
@@ -368,7 +364,7 @@ CRITICAL: Respond with ONLY the raw JSON object above. Start with {{ and end wit
         response["exit_plan"] = {
             "profit_target": float(exit_plan.get("profit_target", 0.0)),
             "stop_loss": float(exit_plan.get("stop_loss", 0.0)),
-            "invalidation_conditions": exit_plan.get("invalidation_conditions", [])
+            "invalidation_conditions": exit_plan.get("invalidation_conditions", []),
         }
 
         # Normalize action to lowercase
@@ -406,25 +402,19 @@ CRITICAL: Respond with ONLY the raw JSON object above. Start with {{ and end wit
 
     def _make_deepseek_request(self, prompt: str) -> Dict:
         """Make API request to DeepSeek."""
-        headers = {
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {self.api_key}"
-        }
+        headers = {"Content-Type": "application/json", "Authorization": f"Bearer {self.api_key}"}
 
         payload = {
             "model": self.model,
             "messages": [
                 {
                     "role": "system",
-                    "content": "You are a cryptocurrency trading assistant. Always respond with valid JSON in the exact format requested."
+                    "content": "You are a cryptocurrency trading assistant. Always respond with valid JSON in the exact format requested.",
                 },
-                {
-                    "role": "user",
-                    "content": prompt
-                }
+                {"role": "user", "content": prompt},
             ],
             "temperature": 0.7,
-            "max_tokens": 500
+            "max_tokens": 500,
         }
 
         try:
@@ -462,25 +452,19 @@ CRITICAL: Respond with ONLY the raw JSON object above. Start with {{ and end wit
 
     def _make_openai_request(self, prompt: str) -> Dict:
         """Make API request to OpenAI."""
-        headers = {
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {self.api_key}"
-        }
+        headers = {"Content-Type": "application/json", "Authorization": f"Bearer {self.api_key}"}
 
         payload = {
             "model": self.model,
             "messages": [
                 {
                     "role": "system",
-                    "content": "You are a cryptocurrency trading assistant. Always respond with valid JSON in the exact format requested."
+                    "content": "You are a cryptocurrency trading assistant. Always respond with valid JSON in the exact format requested.",
                 },
-                {
-                    "role": "user",
-                    "content": prompt
-                }
+                {"role": "user", "content": prompt},
             ],
             "temperature": 0.7,
-            "max_tokens": 500
+            "max_tokens": 500,
         }
 
         try:
@@ -493,23 +477,14 @@ CRITICAL: Respond with ONLY the raw JSON object above. Start with {{ and end wit
 
     def _make_anthropic_request(self, prompt: str) -> Dict:
         """Make API request to Anthropic Claude."""
-        headers = {
-            "Content-Type": "application/json",
-            "x-api-key": self.api_key,
-            "anthropic-version": "2023-06-01"
-        }
+        headers = {"Content-Type": "application/json", "x-api-key": self.api_key, "anthropic-version": "2023-06-01"}
 
         payload = {
             "model": self.model,
             "max_tokens": 500,
             "temperature": 0.7,
             "system": "You are a cryptocurrency trading assistant. Always respond with valid JSON in the exact format requested.",
-            "messages": [
-                {
-                    "role": "user",
-                    "content": prompt
-                }
-            ]
+            "messages": [{"role": "user", "content": prompt}],
         }
 
         try:
@@ -551,10 +526,10 @@ CRITICAL: Respond with ONLY the raw JSON object above. Start with {{ and end wit
         import random
 
         # Simulate more realistic decision making based on market data
-        price = market_data.get('price', 50000)
-        change_24h = market_data.get('change_24h', 0)
-        balance = portfolio_state.get('balance', 10000)
-        open_positions = portfolio_state.get('open_positions', 0)
+        price = market_data.get("price", 50000)
+        change_24h = market_data.get("change_24h", 0)
+        balance = portfolio_state.get("balance", 10000)
+        open_positions = portfolio_state.get("open_positions", 0)
 
         # Enhanced mock logic for Alpha Arena style trading
         if change_24h > 2.0 and balance > 1000:
@@ -591,26 +566,24 @@ CRITICAL: Respond with ONLY the raw JSON object above. Start with {{ and end wit
             "confidence": round(confidence, 2),
             "justification": reasoning,
             "exit_plan": {
-                "profit_target": round(price * 0.02, 2) if action == "buy" else round(price * 0.02, 2) if action == "sell" else 0.0,
+                "profit_target": (
+                    round(price * 0.02, 2) if action == "buy" else round(price * 0.02, 2) if action == "sell" else 0.0
+                ),
                 "stop_loss": round(price * 0.01, 2) if action in ["buy", "sell"] else 0.0,
-                "invalidation_conditions": ["market_volatility_spike", "unexpected_news"] if action in ["buy", "sell"] else []
+                "invalidation_conditions": (
+                    ["market_volatility_spike", "unexpected_news"] if action in ["buy", "sell"] else []
+                ),
             },
             "position_size_usdt": round(position_size_usdt, 2),
-            "risk_assessment": random.choice(["low", "medium", "high"])
+            "risk_assessment": random.choice(["low", "medium", "high"]),
         }
 
-        return {
-            "choices": [
-                {
-                    "message": {
-                        "content": json.dumps(mock_decision)
-                    }
-                }
-            ]
-        }
+        return {"choices": [{"message": {"content": json.dumps(mock_decision)}}]}
 
     @validate_trading_inputs
-    @fallback(lambda: {"action": "hold", "direction": "none", "confidence": 0.0, "justification": "Fallback due to error"})
+    @fallback(
+        lambda: {"action": "hold", "direction": "none", "confidence": 0.0, "justification": "Fallback due to error"}
+    )
     def get_trading_decision(self, market_data: Dict, portfolio_state: Dict = None) -> Dict:
         """
         Get a trading decision from the LLM based on market data and portfolio state.
@@ -629,7 +602,7 @@ CRITICAL: Respond with ONLY the raw JSON object above. Start with {{ and end wit
                 "total_value": 10000.0,
                 "open_positions": 0,
                 "total_return_pct": 0.0,
-                "total_trades": 0
+                "total_trades": 0,
             }
 
         # Format structured prompt
@@ -680,21 +653,19 @@ CRITICAL: Respond with ONLY the raw JSON object above. Start with {{ and end wit
                     "leverage": 1.0,
                     "confidence": 0.0,
                     "justification": "Invalid LLM response format",
-                    "exit_plan": {
-                        "profit_target": 0.0,
-                        "stop_loss": 0.0,
-                        "invalidation_conditions": []
-                    },
+                    "exit_plan": {"profit_target": 0.0, "stop_loss": 0.0, "invalidation_conditions": []},
                     "position_size_usdt": 0.0,
                     "risk_assessment": "high",
                     "_prompt": prompt,
-                    "_raw_response": raw_response_content
+                    "_raw_response": raw_response_content,
                 }
                 return fallback_decision
 
-            logger.info(f"LLM decision: {decision['action'].upper()} "
-                       f"(confidence: {decision['confidence']:.2f}, "
-                       f"risk: {decision['risk_assessment']})")
+            logger.info(
+                f"LLM decision: {decision['action'].upper()} "
+                f"(confidence: {decision['confidence']:.2f}, "
+                f"risk: {decision['risk_assessment']})"
+            )
             logger.info(f"LLM justification: {decision['justification']}")
 
             # Attach prompt and raw response for storage
@@ -713,13 +684,9 @@ CRITICAL: Respond with ONLY the raw JSON object above. Start with {{ and end wit
                 "leverage": 1.0,
                 "confidence": 0.0,
                 "justification": f"Error occurred: {str(e)}",
-                "exit_plan": {
-                    "profit_target": 0.0,
-                    "stop_loss": 0.0,
-                    "invalidation_conditions": []
-                },
+                "exit_plan": {"profit_target": 0.0, "stop_loss": 0.0, "invalidation_conditions": []},
                 "position_size_usdt": 0.0,
                 "risk_assessment": "high",
-                "_prompt": prompt if 'prompt' in locals() else "",
-                "_raw_response": ""
+                "_prompt": prompt if "prompt" in locals() else "",
+                "_raw_response": "",
             }

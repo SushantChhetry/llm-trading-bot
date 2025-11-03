@@ -42,19 +42,14 @@ from src.startup_validator import validate_startup
 environment = os.getenv("ENVIRONMENT", "development")
 if environment == "production":
     configure_production_logging(
-        log_level=os.getenv("LOG_LEVEL", "INFO"),
-        log_directory="data/logs",
-        app_name="trading-bot"
+        log_level=os.getenv("LOG_LEVEL", "INFO"), log_directory="data/logs", app_name="trading-bot"
     )
 else:
     # Development logging
     logging.basicConfig(
         level=getattr(logging, config.LOG_LEVEL),
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-        handlers=[
-            logging.FileHandler(config.LOG_FILE),
-            logging.StreamHandler(sys.stdout)
-        ]
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        handlers=[logging.FileHandler(config.LOG_FILE), logging.StreamHandler(sys.stdout)],
     )
 
 logger = get_logger(__name__)
@@ -93,11 +88,9 @@ class TradingBot:
             config.TRADING_MODE = "live" if live_mode else "paper"
 
         # Colorful initialization banner
-        self.console.print(Panel.fit(
-            "[bold blue]🤖 DEEPSEEK TRADING BOT[/bold blue]",
-            border_style="blue",
-            padding=(1, 2)
-        ))
+        self.console.print(
+            Panel.fit("[bold blue]🤖 DEEPSEEK TRADING BOT[/bold blue]", border_style="blue", padding=(1, 2))
+        )
 
         self.data_fetcher = DataFetcher()
         self.llm_client = LLMClient()
@@ -142,7 +135,7 @@ class TradingBot:
             "stop_loss_percent": config.STOP_LOSS_PERCENT,
             "take_profit_percent": config.TAKE_PROFIT_PERCENT,
             "run_interval_seconds": config.RUN_INTERVAL_SECONDS,
-            "llm_mock_mode": self.llm_client.mock_mode
+            "llm_mock_mode": self.llm_client.mock_mode,
         }
 
         logger.info("HYPERPARAMETERS:")
@@ -151,11 +144,8 @@ class TradingBot:
 
         # Save hyperparameters to file for experiment tracking
         hyperparams_file = config.DATA_DIR / "hyperparameters.json"
-        with open(hyperparams_file, 'w') as f:
-            json.dump({
-                "timestamp": datetime.now().isoformat(),
-                "hyperparameters": hyperparams
-            }, f, indent=2)
+        with open(hyperparams_file, "w") as f:
+            json.dump({"timestamp": datetime.now().isoformat(), "hyperparameters": hyperparams}, f, indent=2)
 
     def run_cycle(self):
         """
@@ -165,7 +155,9 @@ class TradingBot:
         """
         try:
             # Colorful cycle header
-            self.console.print(f"\n[bold cyan]🔄 Starting trading cycle at {datetime.now().strftime('%H:%M:%S')}[/bold cyan]")
+            self.console.print(
+                f"\n[bold cyan]🔄 Starting trading cycle at {datetime.now().strftime('%H:%M:%S')}[/bold cyan]"
+            )
 
             # 1. Fetch market data and technical indicators (Alpha Arena enhancement)
             with self.console.status("[bold green]Fetching market data & technical indicators...", spinner="dots"):
@@ -184,15 +176,15 @@ class TradingBot:
                 except Exception as e:
                     logger.warning(f"Failed to fetch technical indicators: {e}. Using fallback values.")
                     indicators = {
-                        'ema_20': current_price * 0.99,
-                        'ema_50': current_price * 0.98,
-                        'macd': 0.0,
-                        'macd_signal': 0.0,
-                        'macd_histogram': 0.0,
-                        'rsi_7': 50.0,
-                        'rsi_14': 50.0,
-                        'atr': current_price * 0.02,
-                        'current_price': current_price,
+                        "ema_20": current_price * 0.99,
+                        "ema_50": current_price * 0.98,
+                        "macd": 0.0,
+                        "macd_signal": 0.0,
+                        "macd_histogram": 0.0,
+                        "rsi_7": 50.0,
+                        "rsi_14": 50.0,
+                        "atr": current_price * 0.02,
+                        "current_price": current_price,
                     }
 
             market_data = {
@@ -201,35 +193,43 @@ class TradingBot:
                 "volume": ticker.get("quoteVolume", 0),
                 "change_24h": ticker.get("percentage", 0),
                 # Add technical indicators for Alpha Arena
-                "indicators": indicators
+                "indicators": indicators,
             }
 
             # Display market data
             price_change = ticker.get("percentage", 0)
             price_color = "green" if price_change >= 0 else "red"
-            self.console.print(f"[bold]💰 Current Price:[/bold] [bold {price_color}]${current_price:,.2f}[/bold {price_color}] "
-                             f"([{price_color}]{price_change:+.2f}%[/{price_color}])")
+            self.console.print(
+                f"[bold]💰 Current Price:[/bold] [bold {price_color}]${current_price:,.2f}[/bold {price_color}] "
+                f"([{price_color}]{price_change:+.2f}%[/{price_color}])"
+            )
 
             # 2. Get portfolio summary
             portfolio = self.trading_engine.get_portfolio_summary(current_price)
-            return_pct = portfolio['total_return_pct']
+            return_pct = portfolio["total_return_pct"]
             return_color = "green" if return_pct >= 0 else "red"
-            sharpe_ratio = portfolio.get('sharpe_ratio', 0.0)
+            sharpe_ratio = portfolio.get("sharpe_ratio", 0.0)
             sharpe_color = "green" if sharpe_ratio > 1.0 else "yellow" if sharpe_ratio > 0.5 else "red"
 
-            self.console.print(f"[bold]📊 Portfolio Value:[/bold] [bold {return_color}]${portfolio['total_value']:,.2f}[/bold {return_color}] "
-                             f"([{return_color}]{return_pct:+.2f}%[/{return_color}])")
-            self.console.print(f"[bold]📈 Sharpe Ratio:[/bold] [{sharpe_color}]{sharpe_ratio:.3f}[/{sharpe_color}] "
-                             f"(Risk-Adjusted Return: {portfolio.get('risk_adjusted_return', 0.0):.3f})")
+            self.console.print(
+                f"[bold]📊 Portfolio Value:[/bold] [bold {return_color}]${portfolio['total_value']:,.2f}[/bold {return_color}] "
+                f"([{return_color}]{return_pct:+.2f}%[/{return_color}])"
+            )
+            self.console.print(
+                f"[bold]📈 Sharpe Ratio:[/bold] [{sharpe_color}]{sharpe_ratio:.3f}[/{sharpe_color}] "
+                f"(Risk-Adjusted Return: {portfolio.get('risk_adjusted_return', 0.0):.3f})"
+            )
 
             # Display behavioral patterns
-            bullish_tilt = portfolio.get('bullish_tilt', 0.5)
+            bullish_tilt = portfolio.get("bullish_tilt", 0.5)
             tilt_color = "green" if bullish_tilt > 0.6 else "red" if bullish_tilt < 0.4 else "yellow"
-            self.console.print(f"[bold]📊 Trading Style:[/bold] "
-                             f"Bullish Tilt: [{tilt_color}]{bullish_tilt:.2f}[/{tilt_color}] | "
-                             f"Avg Hold: {portfolio.get('avg_holding_period_hours', 0):.1f}h | "
-                             f"Freq: {portfolio.get('trade_frequency_per_day', 0):.1f}/day | "
-                             f"Fees: ${portfolio.get('total_trading_fees', 0):.2f}")
+            self.console.print(
+                f"[bold]📊 Trading Style:[/bold] "
+                f"Bullish Tilt: [{tilt_color}]{bullish_tilt:.2f}[/{tilt_color}] | "
+                f"Avg Hold: {portfolio.get('avg_holding_period_hours', 0):.1f}h | "
+                f"Freq: {portfolio.get('trade_frequency_per_day', 0):.1f}/day | "
+                f"Fees: ${portfolio.get('total_trading_fees', 0):.2f}"
+            )
 
             # 3. Get LLM decision with portfolio context
             with self.console.status("[bold blue]🤖 Consulting AI for trading decision...", spinner="dots"):
@@ -260,12 +260,14 @@ class TradingBot:
 [bold]Exit Plan:[/bold] Profit Target: ${exit_plan.get('profit_target', 0):.2f}, Stop Loss: ${exit_plan.get('stop_loss', 0):.2f}
             """.strip()
 
-            self.console.print(Panel(
-                decision_text,
-                title="[bold blue]🤖 AI Trading Decision[/bold blue]",
-                border_style="blue",
-                padding=(1, 2)
-            ))
+            self.console.print(
+                Panel(
+                    decision_text,
+                    title="[bold blue]🤖 AI Trading Decision[/bold blue]",
+                    border_style="blue",
+                    padding=(1, 2),
+                )
+            )
 
             # 4. Execute trade based on decision
             trade_executed = False
@@ -276,20 +278,21 @@ class TradingBot:
                     # Use LLM's calculated position size
                     trade_amount = min(position_size_usdt, available_balance * config.MAX_POSITION_SIZE)
 
-                    self.console.print(f"[bold green]🟢 Executing BUY: ${trade_amount:.2f} with {leverage:.1f}x leverage[/bold green]")
+                    self.console.print(
+                        f"[bold green]🟢 Executing BUY: ${trade_amount:.2f} with {leverage:.1f}x leverage[/bold green]"
+                    )
                     trade = self.trading_engine.execute_buy(
-                        config.SYMBOL,
-                        current_price,
-                        trade_amount,
-                        confidence,
-                        decision,
-                        leverage
+                        config.SYMBOL, current_price, trade_amount, confidence, decision, leverage
                     )
                     if trade:
                         trade_executed = True
-                        self.console.print(f"[bold green]✅ BUY trade executed successfully (ID: {trade['id']})[/bold green]")
+                        self.console.print(
+                            f"[bold green]✅ BUY trade executed successfully (ID: {trade['id']})[/bold green]"
+                        )
                     else:
-                        self.console.print("[bold red]❌ BUY trade failed (insufficient balance or other error)[/bold red]")
+                        self.console.print(
+                            "[bold red]❌ BUY trade failed (insufficient balance or other error)[/bold red]"
+                        )
 
             elif action == "buy" and confidence > 0.6 and direction == "short":
                 # Execute short position
@@ -297,38 +300,37 @@ class TradingBot:
                 if available_balance > 0 and position_size_usdt > 0:
                     trade_amount = min(position_size_usdt, available_balance * config.MAX_POSITION_SIZE)
 
-                    self.console.print(f"[bold red]🔴 Executing SHORT: ${trade_amount:.2f} with {leverage:.1f}x leverage[/bold red]")
+                    self.console.print(
+                        f"[bold red]🔴 Executing SHORT: ${trade_amount:.2f} with {leverage:.1f}x leverage[/bold red]"
+                    )
                     trade = self.trading_engine.execute_short(
-                        config.SYMBOL,
-                        current_price,
-                        trade_amount,
-                        confidence,
-                        decision,
-                        leverage
+                        config.SYMBOL, current_price, trade_amount, confidence, decision, leverage
                     )
                     if trade:
                         trade_executed = True
-                        self.console.print(f"[bold red]✅ SHORT trade executed successfully (ID: {trade['id']})[/bold red]")
+                        self.console.print(
+                            f"[bold red]✅ SHORT trade executed successfully (ID: {trade['id']})[/bold red]"
+                        )
                     else:
-                        self.console.print("[bold red]❌ SHORT trade failed (insufficient balance or other error)[/bold red]")
+                        self.console.print(
+                            "[bold red]❌ SHORT trade failed (insufficient balance or other error)[/bold red]"
+                        )
 
             elif action == "sell" and confidence > 0.6:
                 # Sell all or partial position
                 if config.SYMBOL in self.trading_engine.positions:
                     self.console.print(f"[bold red]🔴 Executing SELL with {leverage:.1f}x leverage[/bold red]")
                     trade = self.trading_engine.execute_sell(
-                        config.SYMBOL,
-                        current_price,
-                        confidence=confidence,
-                        llm_decision=decision,
-                        leverage=leverage
+                        config.SYMBOL, current_price, confidence=confidence, llm_decision=decision, leverage=leverage
                     )
                     if trade:
                         trade_executed = True
-                        profit = trade.get('profit', 0)
+                        profit = trade.get("profit", 0)
                         profit_color = "green" if profit >= 0 else "red"
-                        self.console.print(f"[bold green]✅ SELL trade executed successfully[/bold green] "
-                                         f"(ID: {trade['id']}, Profit: [{profit_color}]${profit:.2f}[/{profit_color}])")
+                        self.console.print(
+                            f"[bold green]✅ SELL trade executed successfully[/bold green] "
+                            f"(ID: {trade['id']}, Profit: [{profit_color}]${profit:.2f}[/{profit_color}])"
+                        )
                     else:
                         self.console.print("[bold red]❌ SELL trade failed (no position or other error)[/bold red]")
                 else:
@@ -343,7 +345,7 @@ class TradingBot:
             self.trading_engine._save_portfolio_state(current_price)
 
             # Save behavioral metrics snapshot
-            if self.trading_engine.supabase_client and 'bullish_tilt' in portfolio:
+            if self.trading_engine.supabase_client and "bullish_tilt" in portfolio:
                 try:
                     behavioral_data = {
                         "timestamp": datetime.now().isoformat(),
@@ -353,16 +355,42 @@ class TradingBot:
                         "avg_position_size_usdt": float(portfolio.get("avg_position_size_usdt", 0)),
                         "avg_confidence": float(portfolio.get("avg_confidence", 0)),
                         "exit_plan_tightness": float(portfolio.get("exit_plan_tightness", 0)),
-                        "active_positions_count": int(portfolio.get("active_positions_count", len(self.trading_engine.positions))),
+                        "active_positions_count": int(
+                            portfolio.get("active_positions_count", len(self.trading_engine.positions))
+                        ),
                         "total_trading_fees": float(portfolio.get("total_trading_fees", 0)),
                         "fee_impact_pct": float(portfolio.get("fee_impact_pct", 0)),
-                        "sharpe_ratio": float(portfolio.get("sharpe_ratio", 0)) if portfolio.get("sharpe_ratio") is not None else None,
-                        "volatility": float(portfolio.get("volatility", 0)) if portfolio.get("volatility") is not None else None,
-                        "max_drawdown": float(portfolio.get("max_drawdown", 0)) if portfolio.get("max_drawdown") is not None else None,
-                        "win_rate": float(portfolio.get("win_rate", 0)) if portfolio.get("win_rate") is not None else None,
-                        "profit_factor": float(portfolio.get("profit_factor", 0)) if portfolio.get("profit_factor") is not None else None,
-                        "risk_adjusted_return": float(portfolio.get("risk_adjusted_return", 0)) if portfolio.get("risk_adjusted_return") is not None else None,
-                        "excess_return": float(portfolio.get("excess_return", 0)) if portfolio.get("excess_return") is not None else None,
+                        "sharpe_ratio": (
+                            float(portfolio.get("sharpe_ratio", 0))
+                            if portfolio.get("sharpe_ratio") is not None
+                            else None
+                        ),
+                        "volatility": (
+                            float(portfolio.get("volatility", 0)) if portfolio.get("volatility") is not None else None
+                        ),
+                        "max_drawdown": (
+                            float(portfolio.get("max_drawdown", 0))
+                            if portfolio.get("max_drawdown") is not None
+                            else None
+                        ),
+                        "win_rate": (
+                            float(portfolio.get("win_rate", 0)) if portfolio.get("win_rate") is not None else None
+                        ),
+                        "profit_factor": (
+                            float(portfolio.get("profit_factor", 0))
+                            if portfolio.get("profit_factor") is not None
+                            else None
+                        ),
+                        "risk_adjusted_return": (
+                            float(portfolio.get("risk_adjusted_return", 0))
+                            if portfolio.get("risk_adjusted_return") is not None
+                            else None
+                        ),
+                        "excess_return": (
+                            float(portfolio.get("excess_return", 0))
+                            if portfolio.get("excess_return") is not None
+                            else None
+                        ),
                     }
                     self.trading_engine.supabase_client.add_behavioral_metrics(behavioral_data)
                     logger.debug("Behavioral metrics saved to Supabase")
@@ -390,13 +418,15 @@ class TradingBot:
         Can be stopped with Ctrl+C.
         """
         # Colorful startup message
-        self.console.print(Panel.fit(
-            f"[bold green]🚀 Bot Starting![/bold green]\n"
-            f"[cyan]Running every {config.RUN_INTERVAL_SECONDS} seconds[/cyan]\n"
-            f"[yellow]Press Ctrl+C to stop[/yellow]",
-            border_style="green",
-            padding=(1, 2)
-        ))
+        self.console.print(
+            Panel.fit(
+                f"[bold green]🚀 Bot Starting![/bold green]\n"
+                f"[cyan]Running every {config.RUN_INTERVAL_SECONDS} seconds[/cyan]\n"
+                f"[yellow]Press Ctrl+C to stop[/yellow]",
+                border_style="green",
+                padding=(1, 2),
+            )
+        )
 
         try:
             while True:
@@ -418,15 +448,18 @@ class TradingBot:
                 final_table.add_column("Metric", style="cyan", no_wrap=True)
                 final_table.add_column("Value", style="green")
 
-                return_pct = portfolio['total_return_pct']
+                return_pct = portfolio["total_return_pct"]
                 return_color = "green" if return_pct >= 0 else "red"
 
                 final_table.add_row("Initial Balance", f"${portfolio['initial_balance']:,.2f}")
                 final_table.add_row("Current Balance", f"${portfolio['balance']:,.2f}")
                 final_table.add_row("Positions Value", f"${portfolio['positions_value']:,.2f}")
                 final_table.add_row("Total Value", f"${portfolio['total_value']:,.2f}")
-                final_table.add_row("Total Return", f"[{return_color}]${portfolio['total_return']:,.2f} ({return_pct:+.2f}%)[/{return_color}]")
-                final_table.add_row("Total Trades", str(portfolio['total_trades']))
+                final_table.add_row(
+                    "Total Return",
+                    f"[{return_color}]${portfolio['total_return']:,.2f} ({return_pct:+.2f}%)[/{return_color}]",
+                )
+                final_table.add_row("Total Trades", str(portfolio["total_trades"]))
 
                 self.console.print(final_table)
 
@@ -448,58 +481,35 @@ Examples:
   python -m src.main --no-testnet       # Use live market data
   python -m src.main --provider deepseek --api-key YOUR_KEY  # Use DeepSeek API
   python -m src.main --provider openai --api-key YOUR_KEY    # Use OpenAI API
-        """
+        """,
     )
 
     # Trading mode arguments
+    parser.add_argument("--live", action="store_true", help="Enable live trading mode (default: paper trading)")
     parser.add_argument(
-        "--live",
-        action="store_true",
-        help="Enable live trading mode (default: paper trading)"
-    )
-    parser.add_argument(
-        "--no-testnet",
-        action="store_true",
-        help="Use live market data instead of testnet (default: testnet)"
+        "--no-testnet", action="store_true", help="Use live market data instead of testnet (default: testnet)"
     )
 
     # LLM provider arguments
     parser.add_argument(
         "--provider",
         choices=["mock", "deepseek", "openai", "anthropic"],
-        help="LLM provider to use (default: from config)"
+        help="LLM provider to use (default: from config)",
     )
-    parser.add_argument(
-        "--api-key",
-        help="API key for LLM provider"
-    )
-    parser.add_argument(
-        "--model",
-        help="Model name to use (default: provider default)"
-    )
+    parser.add_argument("--api-key", help="API key for LLM provider")
+    parser.add_argument("--model", help="Model name to use (default: provider default)")
 
     # Exchange arguments
     parser.add_argument(
         "--exchange",
         choices=["bybit", "binance", "coinbase", "kraken"],
-        help="Exchange to use (default: from config). Note: Bybit/Binance restricted in USA"
+        help="Exchange to use (default: from config). Note: Bybit/Binance restricted in USA",
     )
-    parser.add_argument(
-        "--symbol",
-        help="Trading pair symbol (default: from config)"
-    )
+    parser.add_argument("--symbol", help="Trading pair symbol (default: from config)")
 
     # Other arguments
-    parser.add_argument(
-        "--interval",
-        type=int,
-        help="Run interval in seconds (default: from config)"
-    )
-    parser.add_argument(
-        "--balance",
-        type=float,
-        help="Initial paper trading balance (default: from config)"
-    )
+    parser.add_argument("--interval", type=int, help="Run interval in seconds (default: from config)")
+    parser.add_argument("--balance", type=float, help="Initial paper trading balance (default: from config)")
 
     return parser.parse_args()
 

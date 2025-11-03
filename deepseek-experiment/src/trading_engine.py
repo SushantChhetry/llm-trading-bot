@@ -56,6 +56,7 @@ class TradingEngine:
         self.supabase_client = None
         try:
             from .supabase_client import get_supabase_service
+
             self.supabase_client = get_supabase_service()
             logger.info("Supabase client initialized successfully")
         except ImportError as e:
@@ -72,7 +73,7 @@ class TradingEngine:
         """Load trade history from file."""
         if self.trades_file.exists():
             try:
-                with open(self.trades_file, 'r') as f:
+                with open(self.trades_file, "r") as f:
                     self.trades = json.load(f)
                 logger.info(f"Loaded {len(self.trades)} historical trades")
             except Exception as e:
@@ -82,7 +83,7 @@ class TradingEngine:
     def _save_trades(self):
         """Save trade history to file."""
         try:
-            with open(self.trades_file, 'w') as f:
+            with open(self.trades_file, "w") as f:
                 json.dump(self.trades, f, indent=2)
         except Exception as e:
             logger.error(f"Error saving trades: {e}")
@@ -104,7 +105,7 @@ class TradingEngine:
                 "total_return": 0,
                 "total_return_pct": 0,
                 "open_positions": len(self.positions),
-                "total_trades": len(self.trades)
+                "total_trades": len(self.trades),
             }
 
         # Prepare state for file storage
@@ -112,11 +113,11 @@ class TradingEngine:
             "balance": self.balance,
             "positions": self.positions,
             "timestamp": datetime.now().isoformat(),
-            **portfolio_summary
+            **portfolio_summary,
         }
 
         try:
-            with open(portfolio_file, 'w') as f:
+            with open(portfolio_file, "w") as f:
                 json.dump(state, f, indent=2)
         except Exception as e:
             logger.error(f"Error saving portfolio state: {e}")
@@ -135,17 +136,61 @@ class TradingEngine:
                     "total_trades": int(portfolio_summary.get("total_trades", 0)),
                     "active_positions": int(portfolio_summary.get("open_positions", 0)),
                     "total_fees": float(portfolio_summary.get("total_trading_fees", 0)),
-                    "sharpe_ratio": float(portfolio_summary.get("sharpe_ratio", 0)) if portfolio_summary.get("sharpe_ratio") is not None else None,
-                    "volatility": float(portfolio_summary.get("volatility", 0)) if portfolio_summary.get("volatility") is not None else None,
-                    "max_drawdown": float(portfolio_summary.get("max_drawdown", 0)) if portfolio_summary.get("max_drawdown") is not None else None,
-                    "win_rate": float(portfolio_summary.get("win_rate", 0)) if portfolio_summary.get("win_rate") is not None else None,
-                    "profit_factor": float(portfolio_summary.get("profit_factor", 0)) if portfolio_summary.get("profit_factor") is not None else None,
-                    "risk_adjusted_return": float(portfolio_summary.get("risk_adjusted_return", 0)) if portfolio_summary.get("risk_adjusted_return") is not None else None,
-                    "excess_return": float(portfolio_summary.get("excess_return", 0)) if portfolio_summary.get("excess_return") is not None else None,
-                    "avg_profit_per_trade": float(portfolio_summary.get("avg_profit_per_trade", 0)) if portfolio_summary.get("avg_profit_per_trade") is not None else None,
-                    "avg_trade_duration_hours": float(portfolio_summary.get("avg_trade_duration_hours", 0)) if portfolio_summary.get("avg_trade_duration_hours") is not None else None,
-                    "max_consecutive_wins": int(portfolio_summary.get("max_consecutive_wins", 0)) if portfolio_summary.get("max_consecutive_wins") is not None else None,
-                    "max_consecutive_losses": int(portfolio_summary.get("max_consecutive_losses", 0)) if portfolio_summary.get("max_consecutive_losses") is not None else None,
+                    "sharpe_ratio": (
+                        float(portfolio_summary.get("sharpe_ratio", 0))
+                        if portfolio_summary.get("sharpe_ratio") is not None
+                        else None
+                    ),
+                    "volatility": (
+                        float(portfolio_summary.get("volatility", 0))
+                        if portfolio_summary.get("volatility") is not None
+                        else None
+                    ),
+                    "max_drawdown": (
+                        float(portfolio_summary.get("max_drawdown", 0))
+                        if portfolio_summary.get("max_drawdown") is not None
+                        else None
+                    ),
+                    "win_rate": (
+                        float(portfolio_summary.get("win_rate", 0))
+                        if portfolio_summary.get("win_rate") is not None
+                        else None
+                    ),
+                    "profit_factor": (
+                        float(portfolio_summary.get("profit_factor", 0))
+                        if portfolio_summary.get("profit_factor") is not None
+                        else None
+                    ),
+                    "risk_adjusted_return": (
+                        float(portfolio_summary.get("risk_adjusted_return", 0))
+                        if portfolio_summary.get("risk_adjusted_return") is not None
+                        else None
+                    ),
+                    "excess_return": (
+                        float(portfolio_summary.get("excess_return", 0))
+                        if portfolio_summary.get("excess_return") is not None
+                        else None
+                    ),
+                    "avg_profit_per_trade": (
+                        float(portfolio_summary.get("avg_profit_per_trade", 0))
+                        if portfolio_summary.get("avg_profit_per_trade") is not None
+                        else None
+                    ),
+                    "avg_trade_duration_hours": (
+                        float(portfolio_summary.get("avg_trade_duration_hours", 0))
+                        if portfolio_summary.get("avg_trade_duration_hours") is not None
+                        else None
+                    ),
+                    "max_consecutive_wins": (
+                        int(portfolio_summary.get("max_consecutive_wins", 0))
+                        if portfolio_summary.get("max_consecutive_wins") is not None
+                        else None
+                    ),
+                    "max_consecutive_losses": (
+                        int(portfolio_summary.get("max_consecutive_losses", 0))
+                        if portfolio_summary.get("max_consecutive_losses") is not None
+                        else None
+                    ),
                 }
 
                 success = self.supabase_client.update_portfolio(portfolio_snapshot)
@@ -168,26 +213,34 @@ class TradingEngine:
         """
         position_value = 0.0
         for symbol, position in self.positions.items():
-            if position['side'] == 'long':
+            if position["side"] == "long":
                 # Long position: profit/loss from price appreciation
-                position_value += position['quantity'] * current_price
-            elif position['side'] == 'short':
+                position_value += position["quantity"] * current_price
+            elif position["side"] == "short":
                 # Short position: profit/loss from price decline
                 # Short profit = (entry_price - current_price) * quantity
-                entry_value = position['quantity'] * position['avg_price']
-                current_value = position['quantity'] * current_price
+                entry_value = position["quantity"] * position["avg_price"]
+                current_value = position["quantity"] * current_price
                 short_pnl = entry_value - current_value  # Profit when price goes down
                 position_value += entry_value + short_pnl  # Original value + PnL
             else:
                 # Fallback for other position types
-                position_value += position.get('value', 0)
+                position_value += position.get("value", 0)
 
         return self.balance + position_value
 
     @validate_trading_inputs
     @circuit_breaker(CircuitBreakerConfig(failure_threshold=5, recovery_timeout=30))
     @retry(RetryConfig(max_attempts=3, base_delay=0.5, max_delay=5.0))
-    def execute_buy(self, symbol: str, price: float, amount_usdt: float, confidence: float, llm_decision: Dict = None, leverage: float = 1.0) -> Optional[Dict]:
+    def execute_buy(
+        self,
+        symbol: str,
+        price: float,
+        amount_usdt: float,
+        confidence: float,
+        llm_decision: Dict = None,
+        leverage: float = 1.0,
+    ) -> Optional[Dict]:
         """
         Execute a buy order (paper trading) with leverage support.
 
@@ -210,12 +263,16 @@ class TradingEngine:
 
         # Check if we have enough balance for margin
         if required_margin > self.balance:
-            logger.warning(f"Insufficient balance for margin. Available: {self.balance}, Required margin: {required_margin}")
+            logger.warning(
+                f"Insufficient balance for margin. Available: {self.balance}, Required margin: {required_margin}"
+            )
             return None
 
         # Check position limits (Alpha Arena constraint)
         if len(self.positions) >= config.MAX_ACTIVE_POSITIONS:
-            logger.warning(f"Maximum active positions reached ({config.MAX_ACTIVE_POSITIONS}). Cannot open new position.")
+            logger.warning(
+                f"Maximum active positions reached ({config.MAX_ACTIVE_POSITIONS}). Cannot open new position."
+            )
             return None
 
         # Apply position size limit based on margin
@@ -255,35 +312,35 @@ class TradingEngine:
             "llm_reasoning": llm_decision.get("justification", "") if llm_decision else "",
             "llm_risk_assessment": llm_decision.get("risk_assessment", "medium") if llm_decision else "medium",
             "llm_position_size_usdt": llm_decision.get("position_size_usdt", 0.0) if llm_decision else 0.0,
-            "exit_plan": llm_decision.get("exit_plan", {}) if llm_decision else {}
+            "exit_plan": llm_decision.get("exit_plan", {}) if llm_decision else {},
         }
 
         # Update balance and positions (deduct margin + fees)
-        self.balance -= (required_margin + trading_fee)
+        self.balance -= required_margin + trading_fee
         if symbol in self.positions:
             # Average in if position exists
             pos = self.positions[symbol]
-            total_cost = (pos['quantity'] * pos['avg_price']) + amount_usdt
-            total_quantity = pos['quantity'] + quantity
-            total_margin = pos.get('margin_used', 0) + required_margin
+            total_cost = (pos["quantity"] * pos["avg_price"]) + amount_usdt
+            total_quantity = pos["quantity"] + quantity
+            total_margin = pos.get("margin_used", 0) + required_margin
             self.positions[symbol] = {
-                'side': 'long',
-                'quantity': total_quantity,
-                'avg_price': total_cost / total_quantity,
-                'value': amount_usdt,
-                'leverage': leverage,
-                'margin_used': total_margin,
-                'notional_value': total_quantity * price
+                "side": "long",
+                "quantity": total_quantity,
+                "avg_price": total_cost / total_quantity,
+                "value": amount_usdt,
+                "leverage": leverage,
+                "margin_used": total_margin,
+                "notional_value": total_quantity * price,
             }
         else:
             self.positions[symbol] = {
-                'side': 'long',
-                'quantity': quantity,
-                'avg_price': price,
-                'value': amount_usdt,
-                'leverage': leverage,
-                'margin_used': required_margin,
-                'notional_value': quantity * price
+                "side": "long",
+                "quantity": quantity,
+                "avg_price": price,
+                "value": amount_usdt,
+                "leverage": leverage,
+                "margin_used": required_margin,
+                "notional_value": quantity * price,
             }
 
         self.trades.append(trade)
@@ -309,7 +366,15 @@ class TradingEngine:
     @validate_trading_inputs
     @circuit_breaker(CircuitBreakerConfig(failure_threshold=5, recovery_timeout=30))
     @retry(RetryConfig(max_attempts=3, base_delay=0.5, max_delay=5.0))
-    def execute_sell(self, symbol: str, price: float, quantity: float = None, confidence: float = 0.0, llm_decision: Dict = None, leverage: float = 1.0) -> Optional[Dict]:
+    def execute_sell(
+        self,
+        symbol: str,
+        price: float,
+        quantity: float = None,
+        confidence: float = 0.0,
+        llm_decision: Dict = None,
+        leverage: float = 1.0,
+    ) -> Optional[Dict]:
         """
         Execute a sell order (paper trading) with leverage support.
 
@@ -325,24 +390,24 @@ class TradingEngine:
             Trade dictionary if successful, None otherwise
         """
         # Check if we have a position
-        if symbol not in self.positions or self.positions[symbol]['quantity'] <= 0:
+        if symbol not in self.positions or self.positions[symbol]["quantity"] <= 0:
             logger.warning(f"No position to sell for {symbol}")
             return None
 
         position = self.positions[symbol]
-        sell_quantity = quantity if quantity else position['quantity']
+        sell_quantity = quantity if quantity else position["quantity"]
 
-        if sell_quantity > position['quantity']:
-            sell_quantity = position['quantity']
+        if sell_quantity > position["quantity"]:
+            sell_quantity = position["quantity"]
 
         amount_usdt = sell_quantity * price
-        profit = (price - position['avg_price']) * sell_quantity
+        profit = (price - position["avg_price"]) * sell_quantity
 
         # Calculate trading fees
         trading_fee = amount_usdt * (config.TRADING_FEE_PERCENT / 100)
 
         # Calculate margin to return (proportional to quantity sold)
-        margin_returned = (position.get('margin_used', 0) * sell_quantity) / position['quantity']
+        margin_returned = (position.get("margin_used", 0) * sell_quantity) / position["quantity"]
 
         # Extract LLM context for storage
         llm_prompt = llm_decision.get("_prompt", "") if llm_decision else ""
@@ -359,11 +424,11 @@ class TradingEngine:
             "price": price,
             "quantity": sell_quantity,
             "amount_usdt": amount_usdt,
-            "leverage": position.get('leverage', 1.0),
+            "leverage": position.get("leverage", 1.0),
             "margin_returned": margin_returned,
             "trading_fee": trading_fee,
             "profit": profit,
-            "profit_pct": (profit / (position['avg_price'] * sell_quantity)) * 100,
+            "profit_pct": (profit / (position["avg_price"] * sell_quantity)) * 100,
             "confidence": confidence,
             "mode": config.TRADING_MODE,
             "llm_prompt": llm_prompt,
@@ -373,16 +438,16 @@ class TradingEngine:
             "llm_reasoning": llm_decision.get("justification", "") if llm_decision else "",
             "llm_risk_assessment": llm_decision.get("risk_assessment", "medium") if llm_decision else "medium",
             "llm_position_size_usdt": llm_decision.get("position_size_usdt", 0.0) if llm_decision else 0.0,
-            "exit_plan": llm_decision.get("exit_plan", {}) if llm_decision else {}
+            "exit_plan": llm_decision.get("exit_plan", {}) if llm_decision else {},
         }
 
         # Update balance and positions (add margin returned + profit - fees)
-        self.balance += (margin_returned + profit - trading_fee)
-        position['quantity'] -= sell_quantity
-        position['value'] -= position['avg_price'] * sell_quantity
-        position['margin_used'] -= margin_returned
+        self.balance += margin_returned + profit - trading_fee
+        position["quantity"] -= sell_quantity
+        position["value"] -= position["avg_price"] * sell_quantity
+        position["margin_used"] -= margin_returned
 
-        if position['quantity'] <= 0:
+        if position["quantity"] <= 0:
             del self.positions[symbol]
         else:
             self.positions[symbol] = position
@@ -410,7 +475,15 @@ class TradingEngine:
     @validate_trading_inputs
     @circuit_breaker(CircuitBreakerConfig(failure_threshold=5, recovery_timeout=30))
     @retry(RetryConfig(max_attempts=3, base_delay=0.5, max_delay=5.0))
-    def execute_short(self, symbol: str, price: float, amount_usdt: float, confidence: float, llm_decision: Dict = None, leverage: float = 1.0) -> Optional[Dict]:
+    def execute_short(
+        self,
+        symbol: str,
+        price: float,
+        amount_usdt: float,
+        confidence: float,
+        llm_decision: Dict = None,
+        leverage: float = 1.0,
+    ) -> Optional[Dict]:
         """
         Execute a short order (paper trading) with leverage support.
 
@@ -433,12 +506,16 @@ class TradingEngine:
 
         # Check if we have enough balance for margin
         if required_margin > self.balance:
-            logger.warning(f"Insufficient balance for short margin. Available: {self.balance}, Required margin: {required_margin}")
+            logger.warning(
+                f"Insufficient balance for short margin. Available: {self.balance}, Required margin: {required_margin}"
+            )
             return None
 
         # Check position limits (Alpha Arena constraint)
         if len(self.positions) >= config.MAX_ACTIVE_POSITIONS:
-            logger.warning(f"Maximum active positions reached ({config.MAX_ACTIVE_POSITIONS}). Cannot open new position.")
+            logger.warning(
+                f"Maximum active positions reached ({config.MAX_ACTIVE_POSITIONS}). Cannot open new position."
+            )
             return None
 
         # Apply position size limit based on margin
@@ -478,35 +555,35 @@ class TradingEngine:
             "llm_reasoning": llm_decision.get("justification", "") if llm_decision else "",
             "llm_risk_assessment": llm_decision.get("risk_assessment", "medium") if llm_decision else "medium",
             "llm_position_size_usdt": llm_decision.get("position_size_usdt", 0.0) if llm_decision else 0.0,
-            "exit_plan": llm_decision.get("exit_plan", {}) if llm_decision else {}
+            "exit_plan": llm_decision.get("exit_plan", {}) if llm_decision else {},
         }
 
         # Update balance and positions (deduct margin + fees)
-        self.balance -= (required_margin + trading_fee)
+        self.balance -= required_margin + trading_fee
         if symbol in self.positions:
             # Average in if position exists
             pos = self.positions[symbol]
-            total_cost = (pos['quantity'] * pos['avg_price']) + amount_usdt
-            total_quantity = pos['quantity'] + quantity
-            total_margin = pos.get('margin_used', 0) + required_margin
+            total_cost = (pos["quantity"] * pos["avg_price"]) + amount_usdt
+            total_quantity = pos["quantity"] + quantity
+            total_margin = pos.get("margin_used", 0) + required_margin
             self.positions[symbol] = {
-                'side': 'short',
-                'quantity': total_quantity,
-                'avg_price': total_cost / total_quantity,
-                'value': amount_usdt,
-                'leverage': leverage,
-                'margin_used': total_margin,
-                'notional_value': total_quantity * price
+                "side": "short",
+                "quantity": total_quantity,
+                "avg_price": total_cost / total_quantity,
+                "value": amount_usdt,
+                "leverage": leverage,
+                "margin_used": total_margin,
+                "notional_value": total_quantity * price,
             }
         else:
             self.positions[symbol] = {
-                'side': 'short',
-                'quantity': quantity,
-                'avg_price': price,
-                'value': amount_usdt,
-                'leverage': leverage,
-                'margin_used': required_margin,
-                'notional_value': quantity * price
+                "side": "short",
+                "quantity": quantity,
+                "avg_price": price,
+                "value": amount_usdt,
+                "leverage": leverage,
+                "margin_used": required_margin,
+                "notional_value": quantity * price,
             }
 
         self.trades.append(trade)
@@ -556,7 +633,7 @@ class TradingEngine:
             "total_return_pct": total_return_pct,
             "open_positions": len(self.positions),
             "total_trades": len(self.trades),
-            **advanced_metrics
+            **advanced_metrics,
         }
 
     def _calculate_advanced_metrics(self) -> Dict[str, Any]:
@@ -583,7 +660,7 @@ class TradingEngine:
                 "exit_plan_tightness": 0.0,
                 "active_positions_count": 0,
                 "total_trading_fees": 0.0,
-                "fee_impact_pct": 0.0
+                "fee_impact_pct": 0.0,
             }
 
         # Basic trade analysis
@@ -600,7 +677,7 @@ class TradingEngine:
                 "profit_factor": 0.0,
                 "avg_trade_duration_hours": 0.0,
                 "max_consecutive_wins": 0,
-                "max_consecutive_losses": 0
+                "max_consecutive_losses": 0,
             }
 
         # Win rate
@@ -617,7 +694,7 @@ class TradingEngine:
         if len(profits) > 1:
             mean_return = sum(profits) / len(profits)
             variance = sum((p - mean_return) ** 2 for p in profits) / (len(profits) - 1)
-            volatility = variance ** 0.5
+            volatility = variance**0.5
 
             # Risk-free rate assumed to be 0 for crypto trading
             risk_free_rate = 0.0
@@ -635,22 +712,25 @@ class TradingEngine:
         # Profit factor
         gross_profit = sum(p for p in profits if p > 0)
         gross_loss = abs(sum(p for p in profits if p < 0))
-        profit_factor = gross_profit / gross_loss if gross_loss > 0 else float('inf') if gross_profit > 0 else 0
+        profit_factor = gross_profit / gross_loss if gross_loss > 0 else float("inf") if gross_profit > 0 else 0
 
         # Trade duration analysis
         trade_durations = []
         for trade in self.trades:
             if "timestamp" in trade:
                 try:
-                    trade_time = datetime.fromisoformat(trade["timestamp"].replace('Z', '+00:00'))
+                    trade_time = datetime.fromisoformat(trade["timestamp"].replace("Z", "+00:00"))
                     # Find corresponding buy trade for duration calculation
                     if trade.get("side") == "sell":
-                        buy_trades = [t for t in self.trades
-                                    if t.get("side") == "buy"
-                                    and t.get("symbol") == trade.get("symbol")
-                                    and t.get("timestamp") < trade.get("timestamp")]
+                        buy_trades = [
+                            t
+                            for t in self.trades
+                            if t.get("side") == "buy"
+                            and t.get("symbol") == trade.get("symbol")
+                            and t.get("timestamp") < trade.get("timestamp")
+                        ]
                         if buy_trades:
-                            buy_time = datetime.fromisoformat(buy_trades[-1]["timestamp"].replace('Z', '+00:00'))
+                            buy_time = datetime.fromisoformat(buy_trades[-1]["timestamp"].replace("Z", "+00:00"))
                             duration = (trade_time - buy_time).total_seconds() / 3600  # hours
                             trade_durations.append(duration)
                 except (ValueError, TypeError):
@@ -677,7 +757,7 @@ class TradingEngine:
             "max_consecutive_losses": max_consecutive_losses,
             "excess_return": excess_return,
             "risk_adjusted_return": risk_adjusted_return,
-            **behavioral_metrics
+            **behavioral_metrics,
         }
 
     def _calculate_max_drawdown(self, profits: List[float]) -> float:
@@ -731,7 +811,7 @@ class TradingEngine:
                 "exit_plan_tightness": 0.0,
                 "active_positions_count": len(self.positions),
                 "total_trading_fees": 0.0,
-                "fee_impact_pct": 0.0
+                "fee_impact_pct": 0.0,
             }
 
         # Calculate bullish vs bearish tilt
@@ -745,14 +825,17 @@ class TradingEngine:
         for trade in self.trades:
             if "timestamp" in trade and trade.get("side") == "sell":
                 try:
-                    sell_time = datetime.fromisoformat(trade["timestamp"].replace('Z', '+00:00'))
+                    sell_time = datetime.fromisoformat(trade["timestamp"].replace("Z", "+00:00"))
                     # Find corresponding buy trade
-                    buy_trades = [t for t in self.trades
-                                if t.get("side") == "buy"
-                                and t.get("symbol") == trade.get("symbol")
-                                and t.get("timestamp") < trade.get("timestamp")]
+                    buy_trades = [
+                        t
+                        for t in self.trades
+                        if t.get("side") == "buy"
+                        and t.get("symbol") == trade.get("symbol")
+                        and t.get("timestamp") < trade.get("timestamp")
+                    ]
                     if buy_trades:
-                        buy_time = datetime.fromisoformat(buy_trades[-1]["timestamp"].replace('Z', '+00:00'))
+                        buy_time = datetime.fromisoformat(buy_trades[-1]["timestamp"].replace("Z", "+00:00"))
                         duration = (sell_time - buy_time).total_seconds() / 3600  # hours
                         holding_periods.append(duration)
                 except (ValueError, TypeError):
@@ -765,8 +848,8 @@ class TradingEngine:
             first_trade = min(self.trades, key=lambda x: x.get("timestamp", ""))
             last_trade = max(self.trades, key=lambda x: x.get("timestamp", ""))
             try:
-                start_time = datetime.fromisoformat(first_trade["timestamp"].replace('Z', '+00:00'))
-                end_time = datetime.fromisoformat(last_trade["timestamp"].replace('Z', '+00:00'))
+                start_time = datetime.fromisoformat(first_trade["timestamp"].replace("Z", "+00:00"))
+                end_time = datetime.fromisoformat(last_trade["timestamp"].replace("Z", "+00:00"))
                 days_elapsed = (end_time - start_time).total_seconds() / (24 * 3600)
                 trade_frequency = len(self.trades) / max(days_elapsed, 0.001)  # Avoid division by zero
             except (ValueError, TypeError):
@@ -814,5 +897,5 @@ class TradingEngine:
             "exit_plan_tightness": exit_plan_tightness,
             "active_positions_count": len(self.positions),
             "total_trading_fees": total_fees,
-            "fee_impact_pct": fee_impact
+            "fee_impact_pct": fee_impact,
         }
