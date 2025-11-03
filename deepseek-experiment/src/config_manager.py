@@ -63,7 +63,7 @@ class LLMConfig:
 class ExchangeConfig:
     """Exchange configuration settings."""
 
-    name: str = "bybit"
+    name: str = "kraken"
     api_key: str = ""
     api_secret: str = ""
     testnet_api_key: str = ""

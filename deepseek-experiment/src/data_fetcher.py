@@ -49,7 +49,7 @@ class DataFetcher:
         Initialize the data fetcher with exchange configuration.
 
         Args:
-            exchange_name: Name of exchange ("bybit" or "binance"). Defaults to config.
+            exchange_name: Name of exchange ("bybit", "binance", "coinbase", or "kraken"). Defaults to config.
             use_testnet: Whether to use testnet. Defaults to config.
         """
         exchange_name = exchange_name or config.EXCHANGE

@@ -178,7 +178,7 @@ def get_bot_status() -> Dict[str, Any]:
                 "last_update": datetime.now().isoformat(),
                 "trading_mode": config_data.get("trading_mode", "paper"),
                 "llm_provider": config_data.get("llm_provider", "mock"),
-                "exchange": config_data.get("exchange", "bybit"),
+                "exchange": config_data.get("exchange", "kraken"),
                 "run_interval_seconds": int(config_data.get("run_interval_seconds", "300"))
             }
         except Exception as e:
@@ -193,7 +193,7 @@ def get_bot_status() -> Dict[str, Any]:
             "last_update": datetime.now().isoformat(),
             "trading_mode": params.get("trading_mode", "paper"),
             "llm_provider": params.get("llm_provider", "mock"),
-            "exchange": params.get("exchange", "bybit"),
+            "exchange": params.get("exchange", "kraken"),
             "run_interval_seconds": params.get("run_interval_seconds", 300)
         }
 

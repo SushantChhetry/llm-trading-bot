@@ -36,7 +36,7 @@ services:
       - LLM_PROVIDER=${LLM_PROVIDER:-mock}
       - LLM_API_KEY=${LLM_API_KEY:-}
       - LLM_MODEL=${LLM_MODEL:-}
-      - EXCHANGE=${EXCHANGE:-bybit}
+      - EXCHANGE=${EXCHANGE:-kraken}
       - SYMBOL=${SYMBOL:-BTC/USDT}
       - INITIAL_BALANCE=${INITIAL_BALANCE:-10000.0}
       - MAX_POSITION_SIZE=${MAX_POSITION_SIZE:-0.1}
@@ -105,7 +105,7 @@ services:
       - LLM_PROVIDER=${LLM_PROVIDER:-mock}
       - LLM_API_KEY=${LLM_API_KEY:-}
       - LLM_MODEL=${LLM_MODEL:-}
-      - EXCHANGE=${EXCHANGE:-bybit}
+      - EXCHANGE=${EXCHANGE:-kraken}
       - SYMBOL=${SYMBOL:-BTC/USDT}
       - INITIAL_BALANCE=${INITIAL_BALANCE:-10000.0}
       - MAX_POSITION_SIZE=${MAX_POSITION_SIZE:-0.1}

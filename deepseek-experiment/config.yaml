@@ -22,7 +22,7 @@ llm:
 
 # Exchange Configuration
 exchange:
-  name: "bybit"  # Options: bybit, binance, coinbase, kraken
+  name: "kraken"  # Options: bybit, binance, coinbase, kraken
   api_key: "${EXCHANGE_API_KEY}"  # Will be replaced with environment variable
   api_secret: "${EXCHANGE_API_SECRET}"  # Will be replaced with environment variable
   testnet_api_key: "${TESTNET_API_KEY}"  # Will be replaced with environment variable
@@ -80,22 +80,22 @@ alerts:
     enabled: true
     threshold: 80  # CPU usage percentage
     severity: "warning"
-  
+
   high_memory_usage:
     enabled: true
     threshold: 85  # Memory usage percentage
     severity: "warning"
-  
+
   low_portfolio_value:
     enabled: true
     threshold: 5000  # Minimum portfolio value in USDT
     severity: "critical"
-  
+
   high_error_rate:
     enabled: true
     threshold: 0.1  # 10% error rate
     severity: "warning"
-  
+
   api_response_time:
     enabled: true
     threshold: 5000  # 5 seconds
