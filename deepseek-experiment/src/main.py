@@ -14,7 +14,6 @@ import time
 from datetime import datetime
 from pathlib import Path
 
-import colorama
 from colorama import init as colorama_init
 from rich.console import Console
 from rich.panel import Panel
@@ -27,12 +26,12 @@ colorama_init(autoreset=True)
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from config import config
-from src.data_fetcher import DataFetcher
-from src.llm_client import LLMClient
-from src.logger import configure_production_logging, get_logger
-from src.startup_validator import validate_startup
-from src.trading_engine import TradingEngine
+from config import config  # noqa: E402
+from src.data_fetcher import DataFetcher  # noqa: E402
+from src.llm_client import LLMClient  # noqa: E402
+from src.logger import configure_production_logging, get_logger  # noqa: E402
+from src.startup_validator import validate_startup  # noqa: E402
+from src.trading_engine import TradingEngine  # noqa: E402
 
 # Configure logging based on environment
 environment = os.getenv("ENVIRONMENT", "development")

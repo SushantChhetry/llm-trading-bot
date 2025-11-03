@@ -43,22 +43,30 @@ export function AIDecisionDetail({ trade }: AIDecisionDetailProps) {
               </CardHeader>
               <CardContent className="space-y-2 text-sm">
                 <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <span className="text-muted-foreground">Action:</span>{' '}
-                    <Badge variant="outline">{trade.llm_parsed_decision.action?.toUpperCase()}</Badge>
-                  </div>
-                  <div>
-                    <span className="text-muted-foreground">Direction:</span>{' '}
-                    <Badge variant="outline">{trade.llm_parsed_decision.direction?.toUpperCase()}</Badge>
-                  </div>
-                  <div>
-                    <span className="text-muted-foreground">Confidence:</span>{' '}
-                    {((trade.llm_parsed_decision.confidence || 0) * 100).toFixed(0)}%
-                  </div>
-                  <div>
-                    <span className="text-muted-foreground">Leverage:</span>{' '}
-                    {trade.llm_parsed_decision.leverage || 1}x
-                  </div>
+                  {trade.llm_parsed_decision.action && (
+                    <div>
+                      <span className="text-muted-foreground">Action:</span>{' '}
+                      <Badge variant="outline">{trade.llm_parsed_decision.action.toUpperCase()}</Badge>
+                    </div>
+                  )}
+                  {trade.llm_parsed_decision.direction && (
+                    <div>
+                      <span className="text-muted-foreground">Direction:</span>{' '}
+                      <Badge variant="outline">{trade.llm_parsed_decision.direction.toUpperCase()}</Badge>
+                    </div>
+                  )}
+                  {trade.llm_parsed_decision.confidence !== undefined && (
+                    <div>
+                      <span className="text-muted-foreground">Confidence:</span>{' '}
+                      {(trade.llm_parsed_decision.confidence * 100).toFixed(0)}%
+                    </div>
+                  )}
+                  {trade.llm_parsed_decision.leverage !== undefined && (
+                    <div>
+                      <span className="text-muted-foreground">Leverage:</span>{' '}
+                      {trade.llm_parsed_decision.leverage}x
+                    </div>
+                  )}
                 </div>
                 {trade.llm_parsed_decision.justification && (
                   <div className="pt-2 border-t">
@@ -70,12 +78,12 @@ export function AIDecisionDetail({ trade }: AIDecisionDetailProps) {
                   <div className="pt-2 border-t">
                     <span className="text-muted-foreground block mb-1">Exit Plan:</span>
                     <div className="grid grid-cols-2 gap-2 text-xs">
-                      {trade.llm_parsed_decision.exit_plan.profit_target && (
+                      {trade.llm_parsed_decision.exit_plan.profit_target !== undefined && (
                         <div>
                           <span className="text-muted-foreground">Target:</span> ${trade.llm_parsed_decision.exit_plan.profit_target.toFixed(2)}
                         </div>
                       )}
-                      {trade.llm_parsed_decision.exit_plan.stop_loss && (
+                      {trade.llm_parsed_decision.exit_plan.stop_loss !== undefined && (
                         <div>
                           <span className="text-muted-foreground">Stop:</span> ${trade.llm_parsed_decision.exit_plan.stop_loss.toFixed(2)}
                         </div>

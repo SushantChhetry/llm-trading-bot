@@ -5,9 +5,11 @@ Records paper trades, tracks portfolio balance, and can be upgraded to live trad
 by modifying the execution methods (see config.TRADING_MODE).
 """
 
+from __future__ import annotations
+
 import json
 from datetime import datetime
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from config import config
 

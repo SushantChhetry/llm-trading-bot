@@ -136,7 +136,9 @@ You are a quantitative cryptocurrency trader in the Alpha Arena competition.
 Your goal is to maximize PnL through systematic analysis of numerical data only.
 You have $10,000 to trade perpetual futures with leverage.
 
-IMPORTANT: Read all data carefully. Market data is presented in chronological order (oldest to newest). Account state shows current values.
+IMPORTANT: Read all data carefully.
+Market data is presented in chronological order (oldest to newest).
+Account state shows current values.
 
 MARKET DATA (Quantitative Only - Chronological Order):
 - Symbol: {market_data.get('symbol', 'N/A') if market_data else 'N/A'}
@@ -466,7 +468,7 @@ No markdown formatting, no code blocks, no extra text.
         except requests.exceptions.HTTPError as e:
             logger.error(f"DeepSeek API HTTP error: {e}")
             raise
-        except ValueError as e:
+        except ValueError:
             # Re-raise our custom error messages
             raise
         except Exception:

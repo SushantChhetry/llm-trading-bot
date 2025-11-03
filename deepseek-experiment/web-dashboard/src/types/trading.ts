@@ -14,7 +14,7 @@ export interface Trade {
   margin_used?: number;
   llm_prompt?: string;
   llm_raw_response?: string;
-  llm_parsed_decision?: Record<string, unknown>;
+  llm_parsed_decision?: LLMParsedDecision;
   llm_reasoning?: string;
   llm_justification?: string;
   llm_risk_assessment?: 'low' | 'medium' | 'high';
@@ -53,6 +53,19 @@ export interface LLMDecision {
   reasoning: string;
   position_size: number;
   risk_assessment: 'low' | 'medium' | 'high';
+}
+
+export interface LLMParsedDecision {
+  action?: string;
+  direction?: string;
+  confidence?: number;
+  leverage?: number;
+  justification?: string;
+  exit_plan?: {
+    profit_target?: number;
+    stop_loss?: number;
+    invalidation_conditions?: string[];
+  };
 }
 
 export interface PnLDataPoint {

@@ -444,7 +444,7 @@ Examples:
     if args.config:
         # Load configuration from file
         sweep_config = load_experiment_config(args.config)
-        results = runner.run_parameter_sweep(sweep_config, args.duration)
+        runner.run_parameter_sweep(sweep_config, args.duration)
     else:
         # Generate configuration from command line arguments
         if args.provider_sweep or args.risk_sweep:
