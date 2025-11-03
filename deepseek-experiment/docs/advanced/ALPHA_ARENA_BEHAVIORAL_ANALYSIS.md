@@ -6,7 +6,7 @@ This document implements the behavioral patterns observed in the Alpha Arena com
 
 ### 1. **Bullish vs Bearish Tilt Tracking** ✅
 - **Pattern**: Agents differ in their long/short mix over time; some show persistent long bias
-- **Implementation**: 
+- **Implementation**:
   - Tracks ratio of long vs short trades
   - Displays bullish tilt (1.0 = always long, 0.0 = always short)
   - Color-coded display for easy identification
@@ -72,7 +72,7 @@ This document implements the behavioral patterns observed in the Alpha Arena com
 
 ### 1. **Ordering Bias Prevention** ✅
 - **Issue**: Models read market data as oldest→newest when listed newest→oldest
-- **Fix**: 
+- **Fix**:
   - Explicit chronological order labeling
   - Clear "LATEST PRICE" indicators
   - Explicit instructions about data ordering
@@ -84,7 +84,7 @@ This document implements the behavioral patterns observed in the Alpha Arena com
   - Clear definitions in prompt
   - Consistent terminology usage
   - Explicit explanations of each term
-- **Implementation**: 
+- **Implementation**:
   - "Available Cash: $X (FREE COLLATERAL - money available for new positions)"
   - "Total Portfolio Value: $X (total account value including positions)"
 

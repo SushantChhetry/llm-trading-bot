@@ -2,6 +2,30 @@
 
 A sophisticated cryptocurrency trading bot that implements the Alpha Arena competition methodology with advanced behavioral pattern tracking, leverage support, and risk management.
 
+## 📚 Documentation
+
+**New to the project?** Start here:
+- **[Quick Start Guide](docs/getting-started/quickstart.md)** ⚡ - Get running in 5 minutes
+- **[Documentation Index](docs/README.md)** 📖 - Complete documentation navigation
+- **[Installation Guide](docs/getting-started/installation.md)** 📦 - Detailed setup (coming soon)
+
+**Ready to deploy?**
+- **[Deployment Overview](docs/guides/deployment/overview.md)** 🚀 - Choose your deployment method
+- **[Railway Deployment](docs/guides/deployment/railway.md)** ☁️ - Deploy to Railway
+- **[Docker Deployment](docs/guides/deployment/docker.md)** 🐳 - Deploy with Docker
+- **[Manual Deployment](docs/guides/deployment/manual.md)** 🔧 - Deploy to VPS
+
+**Need help?**
+- **[Troubleshooting Guide](docs/troubleshooting/common-issues.md)** 🔍 - Common issues and solutions
+- **[FAQ](docs/troubleshooting/faq.md)** ❓ - Frequently asked questions (coming soon)
+
+**Reference Documentation:**
+- **[API Documentation](API.md)** 🌐 - All API endpoints
+- **[Architecture Overview](ARCHITECTURE.md)** 🏗️ - System design
+- **[Configuration Reference](docs/reference/configuration.md)** ⚙️ - Complete config guide (coming soon)
+
+---
+
 ## 🎯 Overview
 
 This trading bot simulates the Alpha Arena competition where LLMs are given $10,000 to trade perpetual futures with zero human intervention. The system focuses on quantitative data analysis, PnL maximization, and comprehensive behavioral pattern tracking.
@@ -18,7 +42,7 @@ graph TB
     F --> G[Risk Manager]
     G --> H[Behavioral Tracker]
     H --> I[Performance Monitor]
-    
+
     subgraph "Alpha Arena Features"
         J[Sharpe Ratio Feedback]
         K[Leverage Support]
@@ -26,7 +50,7 @@ graph TB
         M[Exit Plans]
         N[Fee Awareness]
     end
-    
+
     subgraph "Behavioral Patterns"
         O[Bullish Tilt Tracking]
         P[Holding Period Analysis]
@@ -34,13 +58,13 @@ graph TB
         R[Position Sizing Patterns]
         S[Confidence Analysis]
     end
-    
+
     C --> J
     E --> K
     E --> L
     D --> M
     E --> N
-    
+
     H --> O
     H --> P
     H --> Q
@@ -58,7 +82,7 @@ sequenceDiagram
     participant T as Trading Engine
     participant R as Risk Manager
     participant B as Behavioral Tracker
-    
+
     M->>P: Fetch current price & volume
     P->>L: Calculate portfolio metrics
     L->>L: Generate trading decision
@@ -287,11 +311,20 @@ python scripts/compare_agents.py
 
 ## 🤝 Contributing
 
+We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for details on:
+- Development setup
+- Code style guidelines
+- Testing requirements
+- Pull request process
+
+Quick start:
 1. Fork the repository
 2. Create a feature branch
 3. Make your changes
 4. Add tests
 5. Submit a pull request
+
+**→ [Full Contributing Guide](CONTRIBUTING.md)** (coming soon)
 
 ## 📄 License
 

@@ -9,11 +9,81 @@ This document provides comprehensive API documentation for the LLM Trading Bot s
 
 ## 🔐 Authentication
 
+### Current Status
+
 Currently, the API does not require authentication for development. In production, consider implementing:
 
 - API Key authentication
 - JWT tokens
 - OAuth 2.0
+
+### Adding Authentication (Recommended for Production)
+
+#### Option 1: API Key Authentication
+
+Add to your API server:
+
+```python
+from fastapi import Header, HTTPException
+from functools import wraps
+
+API_KEY = os.getenv("API_KEY", "")
+
+def require_api_key(func):
+    @wraps(func)
+    async def wrapper(*args, api_key: str = Header(...), **kwargs):
+        if not API_KEY or api_key != API_KEY:
+            raise HTTPException(status_code=401, detail="Invalid API key")
+        return await func(*args, **kwargs)
+    return wrapper
+
+# Use in endpoints
+@router.get("/api/trades")
+@require_api_key
+async def get_trades():
+    ...
+```
+
+**Client Example:**
+```bash
+curl -H "X-API-Key: your-api-key" https://your-api.com/api/trades
+```
+
+#### Option 2: JWT Tokens
+
+```python
+from jose import JWTError, jwt
+from datetime import datetime, timedelta
+
+SECRET_KEY = os.getenv("JWT_SECRET_KEY")
+ALGORITHM = "HS256"
+
+def create_access_token(data: dict, expires_delta: timedelta = None):
+    to_encode = data.copy()
+    if expires_delta:
+        expire = datetime.utcnow() + expires_delta
+    else:
+        expire = datetime.utcnow() + timedelta(hours=1)
+    to_encode.update({"exp": expire})
+    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    return encoded_jwt
+
+def verify_token(token: str):
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        return payload
+    except JWTError:
+        return None
+```
+
+**Client Example:**
+```bash
+# Get token
+TOKEN=$(curl -X POST https://your-api.com/auth/login -d '{"username":"user","password":"pass"}' | jq -r .token)
+
+# Use token
+curl -H "Authorization: Bearer $TOKEN" https://your-api.com/api/trades
+```
 
 ## 📊 Endpoints
 
@@ -517,6 +587,48 @@ Connect to WebSocket for real-time updates:
 ws://localhost:8002/ws
 ```
 
+**JavaScript Example:**
+```javascript
+const ws = new WebSocket('ws://localhost:8002/ws');
+
+ws.onopen = () => {
+  console.log('WebSocket connected');
+
+  // Subscribe to updates
+  ws.send(JSON.stringify({
+    type: 'subscribe',
+    channels: ['portfolio', 'trades', 'alerts']
+  }));
+};
+
+ws.onmessage = (event) => {
+  const message = JSON.parse(event.data);
+  console.log('Received:', message);
+
+  // Handle different message types
+  switch(message.type) {
+    case 'portfolio_update':
+      updatePortfolio(message.data);
+      break;
+    case 'trade_executed':
+      addTradeToTable(message.data);
+      break;
+    case 'alert':
+      showAlert(message.data);
+      break;
+  }
+};
+
+ws.onerror = (error) => {
+  console.error('WebSocket error:', error);
+};
+
+ws.onclose = () => {
+  console.log('WebSocket disconnected');
+  // Reconnect logic
+};
+```
+
 ### Message Types
 
 #### Portfolio Updates
@@ -559,6 +671,29 @@ ws://localhost:8002/ws
     "timestamp": "2024-01-01T12:00:00Z"
   }
 }
+```
+
+### WebSocket Server Implementation (Example)
+
+```python
+from fastapi import WebSocket
+import json
+
+@app.websocket("/ws")
+async def websocket_endpoint(websocket: WebSocket):
+    await websocket.accept()
+    try:
+        while True:
+            # Send updates
+            portfolio_data = await get_portfolio_update()
+            await websocket.send_json({
+                "type": "portfolio_update",
+                "data": portfolio_data
+            })
+
+            await asyncio.sleep(5)  # Update every 5 seconds
+    except WebSocketDisconnect:
+        pass
 ```
 
 ---
@@ -659,6 +794,26 @@ curl -X GET "http://localhost:8001/api/trades?limit=10" \
 # Get market data
 curl -X GET "http://localhost:8001/api/market/ticker?symbol=BTC/USDT" \
   -H "Accept: application/json"
+
+# Get trades with filters
+curl -X GET "http://localhost:8001/api/trades?limit=50&side=buy&since=2024-01-01T00:00:00Z" \
+  -H "Accept: application/json"
+
+# Get specific trade
+curl -X GET "http://localhost:8001/api/trades/550e8400-e29b-41d4-a716-446655440000" \
+  -H "Accept: application/json"
+
+# Get active positions
+curl -X GET "http://localhost:8001/api/portfolio/positions" \
+  -H "Accept: application/json"
+
+# Start bot
+curl -X POST "http://localhost:8001/api/status/start" \
+  -H "Accept: application/json"
+
+# Stop bot
+curl -X POST "http://localhost:8001/api/status/stop" \
+  -H "Accept: application/json"
 ```
 
 ---
@@ -668,25 +823,162 @@ curl -X GET "http://localhost:8001/api/market/ticker?symbol=BTC/USDT" \
 ### Python
 ```python
 import requests
+from typing import Dict, List, Optional
+
+BASE_URL = "http://localhost:8001/api"
 
 # Get portfolio status
-response = requests.get("http://localhost:8001/api/portfolio")
-portfolio = response.json()
+def get_portfolio() -> Dict:
+    response = requests.get(f"{BASE_URL}/portfolio")
+    response.raise_for_status()
+    return response.json()
 
 # Get recent trades
-response = requests.get("http://localhost:8001/api/trades", params={"limit": 10})
-trades = response.json()
+def get_trades(limit: int = 10, symbol: Optional[str] = None) -> List[Dict]:
+    params = {"limit": limit}
+    if symbol:
+        params["symbol"] = symbol
+
+    response = requests.get(f"{BASE_URL}/trades", params=params)
+    response.raise_for_status()
+    return response.json()
+
+# Get specific trade
+def get_trade(trade_id: str) -> Dict:
+    response = requests.get(f"{BASE_URL}/trades/{trade_id}")
+    response.raise_for_status()
+    return response.json()
+
+# Get market data
+def get_ticker(symbol: str = "BTC/USDT") -> Dict:
+    response = requests.get(f"{BASE_URL}/market/ticker", params={"symbol": symbol})
+    response.raise_for_status()
+    return response.json()
+
+# Start bot
+def start_bot() -> Dict:
+    response = requests.post(f"{BASE_URL}/status/start")
+    response.raise_for_status()
+    return response.json()
+
+# Stop bot
+def stop_bot() -> Dict:
+    response = requests.post(f"{BASE_URL}/status/stop")
+    response.raise_for_status()
+    return response.json()
+
+# Example usage
+if __name__ == "__main__":
+    portfolio = get_portfolio()
+    print(f"Portfolio value: ${portfolio['total_value']}")
+
+    trades = get_trades(limit=5)
+    print(f"Recent trades: {len(trades)}")
+
+    ticker = get_ticker()
+    print(f"Current BTC price: ${ticker['price']}")
 ```
 
 ### JavaScript
 ```javascript
+const API_BASE_URL = 'http://localhost:8001/api';
+
 // Get portfolio status
-const response = await fetch('http://localhost:8001/api/portfolio');
-const portfolio = await response.json();
+async function getPortfolio() {
+  const response = await fetch(`${API_BASE_URL}/portfolio`);
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+  return await response.json();
+}
 
 // Get recent trades
-const response = await fetch('http://localhost:8001/api/trades?limit=10');
-const trades = await response.json();
+async function getTrades(limit = 10, symbol = null) {
+  const params = new URLSearchParams({ limit: limit.toString() });
+  if (symbol) params.append('symbol', symbol);
+
+  const response = await fetch(`${API_BASE_URL}/trades?${params}`);
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+  return await response.json();
+}
+
+// Get specific trade
+async function getTrade(tradeId) {
+  const response = await fetch(`${API_BASE_URL}/trades/${tradeId}`);
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+  return await response.json();
+}
+
+// Get market data
+async function getTicker(symbol = 'BTC/USDT') {
+  const response = await fetch(`${API_BASE_URL}/market/ticker?symbol=${symbol}`);
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+  return await response.json();
+}
+
+// Start bot
+async function startBot() {
+  const response = await fetch(`${API_BASE_URL}/status/start`, {
+    method: 'POST'
+  });
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+  return await response.json();
+}
+
+// Stop bot
+async function stopBot() {
+  const response = await fetch(`${API_BASE_URL}/status/stop`, {
+    method: 'POST'
+  });
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+  return await response.json();
+}
+
+// Example usage with error handling
+async function fetchPortfolioData() {
+  try {
+    const portfolio = await getPortfolio();
+    console.log('Portfolio value:', portfolio.total_value);
+
+    const trades = await getTrades(5);
+    console.log('Recent trades:', trades.length);
+
+    const ticker = await getTicker();
+    console.log('BTC price:', ticker.price);
+  } catch (error) {
+    console.error('Error fetching data:', error);
+  }
+}
+
+// React hook example
+import { useState, useEffect } from 'react';
+
+function useTradingData() {
+  const [portfolio, setPortfolio] = useState(null);
+  const [trades, setTrades] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function fetchData() {
+      try {
+        const [portfolioData, tradesData] = await Promise.all([
+          getPortfolio(),
+          getTrades(10)
+        ]);
+        setPortfolio(portfolioData);
+        setTrades(tradesData);
+      } catch (error) {
+        console.error('Error:', error);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    fetchData();
+    const interval = setInterval(fetchData, 5000); // Refresh every 5s
+    return () => clearInterval(interval);
+  }, []);
+
+  return { portfolio, trades, loading };
+}
 ```
 
 ### cURL

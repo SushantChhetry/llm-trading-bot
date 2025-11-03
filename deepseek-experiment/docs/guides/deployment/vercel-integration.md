@@ -269,4 +269,3 @@ Your integration is complete when:
 - API calls reach Railway ✅
 - No CORS errors ✅
 - Data displays correctly ✅
-

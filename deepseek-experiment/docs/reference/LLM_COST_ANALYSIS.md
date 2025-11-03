@@ -18,7 +18,7 @@ Based on your prompt structure in `src/llm_client.py`:
 
 **Input Tokens (per cycle)**:
 - Market data: ~50 tokens
-- Portfolio state: ~80 tokens  
+- Portfolio state: ~80 tokens
 - Trading rules: ~100 tokens
 - System prompt: ~200 tokens
 - **Total Input**: ~430 tokens per cycle

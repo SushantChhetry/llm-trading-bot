@@ -1,6 +1,6 @@
-# Docker Setup for Trading Bot Dashboard
+# Docker Deployment Guide
 
-This guide explains how to run the trading bot and web dashboard using Docker and Docker Compose.
+Deploy the Alpha Arena Trading Bot using Docker and Docker Compose.
 
 ## 🐳 Quick Start
 
@@ -15,7 +15,7 @@ This guide explains how to run the trading bot and web dashboard using Docker an
 cp docker.env.example .env
 
 # Edit the environment variables
-nano .env
+nano .env  # or use any text editor
 ```
 
 ### 2. Run the Dashboard Only
@@ -44,6 +44,8 @@ docker-compose logs -f
 docker-compose down
 ```
 
+---
+
 ## 🚀 Available Services
 
 ### API Server (Backend)
@@ -61,6 +63,8 @@ docker-compose down
 - **Purpose**: Runs the actual trading bot
 - **Data**: Writes to shared volume
 
+---
+
 ## 🔧 Development Mode
 
 For development with hot reload:
@@ -73,10 +77,14 @@ docker-compose -f docker-compose.dev.yml up -d
 docker-compose -f docker-compose.dev.yml logs -f
 ```
 
+---
+
 ## 📁 Volume Mounts
 
 - `./data` → `/app/data` (trading data)
 - `./logs` → `/app/logs` (log files)
+
+---
 
 ## 🌐 Environment Variables
 
@@ -91,9 +99,12 @@ docker-compose -f docker-compose.dev.yml logs -f
 | `INITIAL_BALANCE` | `10000.0` | Starting balance |
 | `RUN_INTERVAL_SECONDS` | `300` | Bot run interval |
 
+---
+
 ## 🛠️ Docker Commands
 
 ### Build Images
+
 ```bash
 # Build all images
 docker-compose build
@@ -104,6 +115,7 @@ docker-compose build frontend
 ```
 
 ### View Logs
+
 ```bash
 # All services
 docker-compose logs -f
@@ -114,6 +126,7 @@ docker-compose logs -f frontend
 ```
 
 ### Execute Commands
+
 ```bash
 # Access API container
 docker-compose exec api bash
@@ -126,6 +139,7 @@ docker-compose run --rm trading-bot python -m src.main
 ```
 
 ### Clean Up
+
 ```bash
 # Stop and remove containers
 docker-compose down
@@ -137,9 +151,12 @@ docker-compose down -v
 docker-compose down --rmi all
 ```
 
+---
+
 ## 🔍 Troubleshooting
 
 ### Port Conflicts
+
 If ports 3000 or 8001 are already in use:
 
 ```bash
@@ -151,12 +168,14 @@ lsof -i :8001
 ```
 
 ### Permission Issues
+
 ```bash
 # Fix volume permissions
 sudo chown -R $USER:$USER ./data ./logs
 ```
 
 ### Container Won't Start
+
 ```bash
 # Check logs
 docker-compose logs api
@@ -167,11 +186,14 @@ docker-compose build --no-cache
 ```
 
 ### Data Not Persisting
+
 ```bash
 # Check volume mounts
 docker-compose exec api ls -la /app/data
 docker-compose exec frontend ls -la /usr/share/nginx/html
 ```
+
+---
 
 ## 📊 Monitoring
 
@@ -181,6 +203,7 @@ docker-compose exec frontend ls -la /usr/share/nginx/html
 - **Docker**: `docker-compose ps`
 
 ### Resource Usage
+
 ```bash
 # View resource usage
 docker stats
@@ -189,6 +212,8 @@ docker stats
 docker-compose ps
 ```
 
+---
+
 ## 🔒 Security Notes
 
 1. **Never commit `.env` files** with real API keys
@@ -196,9 +221,12 @@ docker-compose ps
 3. **Set strong passwords** for production
 4. **Limit network access** in production
 
+---
+
 ## 🚀 Production Deployment
 
 ### 1. Environment Setup
+
 ```bash
 # Create production environment
 cp docker.env.example .env.production
@@ -208,6 +236,7 @@ nano .env.production
 ```
 
 ### 2. Run Production
+
 ```bash
 # Use production environment
 docker-compose --env-file .env.production up -d
@@ -220,11 +249,15 @@ docker-compose up -d
 ```
 
 ### 3. Reverse Proxy (Optional)
+
 For production, consider using a reverse proxy like Traefik or Nginx.
+
+---
 
 ## 📝 Examples
 
 ### Run with DeepSeek API
+
 ```bash
 export LLM_PROVIDER=deepseek
 export LLM_API_KEY=sk-your-deepseek-key
@@ -232,6 +265,7 @@ docker-compose up -d
 ```
 
 ### Run with Live Trading
+
 ```bash
 export TRADING_MODE=live
 export USE_TESTNET=false
@@ -241,15 +275,19 @@ docker-compose up -d
 ```
 
 ### Run Only Dashboard (No Bot)
+
 ```bash
 docker-compose up -d api frontend
 ```
 
-## 🆘 Support
+---
 
-If you encounter issues:
+## Related Documentation
 
-1. Check the logs: `docker-compose logs -f`
-2. Verify environment variables: `docker-compose config`
-3. Check container status: `docker-compose ps`
-4. Rebuild if needed: `docker-compose build --no-cache`
+- **[Deployment Overview](overview.md)** - Choose deployment method
+- **[Configuration Reference](../../reference/configuration.md)** - All settings
+- **[Troubleshooting Guide](../../troubleshooting/common-issues.md)** - Common issues
+
+---
+
+**Last Updated**: See git history for updates.

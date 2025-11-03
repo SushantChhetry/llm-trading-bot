@@ -1,8 +1,12 @@
 # Database Migration Guide
 
+Complete guide for managing database schema changes using Alembic.
+
 ## Using Alembic for Database Migrations
 
 Alembic is configured for managing database schema changes. This replaces manual SQL scripts.
+
+---
 
 ## Initial Setup
 
@@ -18,6 +22,8 @@ Alembic is configured for managing database schema changes. This replaces manual
 
    Or for Supabase, get connection string from Supabase dashboard.
 
+   **See**: [Database Setup Guide](setup.md) for getting your connection string.
+
 3. **Create initial migration** (one-time setup):
    ```bash
    python scripts/create_initial_migration.py
@@ -27,6 +33,8 @@ Alembic is configured for managing database schema changes. This replaces manual
    ```bash
    alembic revision --autogenerate -m "Initial schema migration"
    ```
+
+---
 
 ## Creating Migrations
 
@@ -42,12 +50,16 @@ alembic revision -m "Description of changes"
 
 Then edit the generated file in `alembic/versions/` with your SQL.
 
+---
+
 ## Applying Migrations
 
 ### Preview (dry-run):
 ```bash
 alembic upgrade head --sql
 ```
+
+This shows what SQL will be executed without actually running it.
 
 ### Apply migration:
 ```bash
@@ -58,6 +70,8 @@ alembic upgrade head
 ```bash
 alembic upgrade <revision_id>
 ```
+
+---
 
 ## Rolling Back
 
@@ -76,6 +90,8 @@ alembic downgrade <revision_id>
 alembic downgrade base
 ```
 
+---
+
 ## Checking Status
 
 ```bash
@@ -89,6 +105,8 @@ alembic history
 alembic heads
 ```
 
+---
+
 ## Production Deployment
 
 1. **Before deployment**: Review migration in `alembic/versions/`
@@ -96,6 +114,8 @@ alembic heads
 3. **Backup database**: Always backup before migrations
 4. **Apply migration**: `alembic upgrade head`
 5. **Verify**: Check application health after migration
+
+---
 
 ## Migration Best Practices
 
@@ -105,6 +125,8 @@ alembic heads
 - ✅ Include both upgrade and downgrade logic
 - ✅ Test rollback procedures
 - ✅ Document breaking changes
+
+---
 
 ## Converting Existing SQL to Alembic
 
@@ -131,6 +153,8 @@ If you have existing SQL migration scripts:
        """)
    ```
 
+---
+
 ## Example: Adding LLM Fields Migration
 
 ```python
@@ -144,3 +168,35 @@ def downgrade():
     op.drop_column('trades', 'llm_raw_response')
     op.drop_column('trades', 'llm_prompt')
 ```
+
+---
+
+## Troubleshooting
+
+### "DATABASE_URL not found"
+- Check `.env` file exists
+- Verify variable name is exactly `DATABASE_URL` (case-sensitive)
+- See [Database Setup Guide](setup.md)
+
+### "Can't connect to database"
+- Verify connection string is correct
+- Check database is running
+- Verify network access/permissions
+- See [Database Setup Guide](setup.md) for troubleshooting
+
+### "Table already exists"
+- Check if migration was already applied: `alembic current`
+- Review migration history: `alembic history`
+- May need to mark as applied: `alembic stamp head`
+
+---
+
+## Related Documentation
+
+- **[Database Setup Guide](setup.md)** - Initial database configuration
+- **[Configuration Reference](../../reference/configuration.md)** - Environment variables
+- **[Troubleshooting Guide](../../troubleshooting/common-issues.md)** - Common issues
+
+---
+
+**Last Updated**: See git history for updates.

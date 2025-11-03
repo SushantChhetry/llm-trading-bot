@@ -1,6 +1,6 @@
-# Local Debugging Guide - Docker Compose
+# Dashboard Debugging Guide
 
-This guide helps you debug the Vercel + Railway integration locally using Docker Compose.
+This guide helps you debug the dashboard and API integration locally using Docker Compose or development setup.
 
 ## Quick Start
 
@@ -193,4 +193,3 @@ If local works but production doesn't, check:
 - Railway environment variables (especially `ENVIRONMENT=production`)
 - Railway deployment URL in `vercel.json`
 - Vercel environment variables
-

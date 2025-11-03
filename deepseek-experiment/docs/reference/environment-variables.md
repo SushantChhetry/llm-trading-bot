@@ -276,4 +276,3 @@ After setting up variables, verify they're loaded correctly:
 - Monitor `LLM_MAX_TOKENS` - lower if needed
 - Check `RUN_INTERVAL_SECONDS` - longer intervals = fewer API calls
 - Review logs for excessive API calls
-
