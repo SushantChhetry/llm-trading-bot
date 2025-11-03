@@ -10,7 +10,7 @@ interface AIDecisionDetailProps {
 
 export function AIDecisionDetail({ trade }: AIDecisionDetailProps) {
   const [isExpanded, setIsExpanded] = useState(false);
-  const hasLLMData = !!(trade.llm_prompt || trade.llm_raw_response || trade.llm_parsed_decision);
+  const hasLLMData = !!(trade.llm_prompt || trade.llm_raw_response || trade.llm_parsed_decision || trade.llm_reasoning);
 
   if (!hasLLMData) {
     return null;
@@ -33,6 +33,20 @@ export function AIDecisionDetail({ trade }: AIDecisionDetailProps) {
 
       {isExpanded && (
         <div className="mt-3 space-y-3">
+          {trade.llm_reasoning && (
+            <Card className="bg-muted/50">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm flex items-center gap-2">
+                  <MessageSquare className="h-4 w-4" />
+                  Parsed Reason
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm whitespace-pre-wrap">{trade.llm_reasoning}</p>
+              </CardContent>
+            </Card>
+          )}
+
           {trade.llm_parsed_decision && (
             <Card className="bg-muted/50">
               <CardHeader className="pb-2">
