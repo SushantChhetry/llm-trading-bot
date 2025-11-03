@@ -14,8 +14,19 @@ import requests
 
 from config import config
 
-from .resilience import CircuitBreakerConfig, RetryConfig, circuit_breaker, fallback, retry
-from .security import SecurityManager, rate_limit, secure_api_key_required, validate_trading_inputs
+from .resilience import (
+    CircuitBreakerConfig,
+    RetryConfig,
+    circuit_breaker,
+    fallback,
+    retry,
+)
+from .security import (
+    SecurityManager,
+    rate_limit,
+    secure_api_key_required,
+    validate_trading_inputs,
+)
 
 logger = logging.getLogger(__name__)
 

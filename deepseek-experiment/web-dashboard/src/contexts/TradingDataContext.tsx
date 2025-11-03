@@ -25,16 +25,22 @@ interface TradingDataProviderProps {
 export function TradingDataProvider({ children, value }: TradingDataProviderProps) {
   // Memoize the context value using JSON.stringify for deep comparison
   // This ensures we only update when actual data changes, not object references
+  const tradesString = JSON.stringify(value.trades);
+  const portfolioString = JSON.stringify(value.portfolio);
+  const pnlDataString = JSON.stringify(value.pnlData);
+  const botStatusString = JSON.stringify(value.botStatus);
+
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   const contextValue = useMemo(() => value, [
-    JSON.stringify(value.trades),
-    JSON.stringify(value.portfolio),
-    JSON.stringify(value.pnlData),
-    JSON.stringify(value.botStatus),
+    tradesString,
+    portfolioString,
+    pnlDataString,
+    botStatusString,
     value.isLoading,
     value.error,
     value.isConnected,
     value.retryCount,
-    // refetch is a function, should be stable from useCallback
+    value.refetch,
   ]);
 
   return (

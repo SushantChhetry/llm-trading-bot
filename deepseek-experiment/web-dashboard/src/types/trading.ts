@@ -14,7 +14,7 @@ export interface Trade {
   margin_used?: number;
   llm_prompt?: string;
   llm_raw_response?: string;
-  llm_parsed_decision?: Record<string, any>;
+  llm_parsed_decision?: Record<string, unknown>;
   llm_reasoning?: string;
   llm_justification?: string;
   llm_risk_assessment?: 'low' | 'medium' | 'high';
