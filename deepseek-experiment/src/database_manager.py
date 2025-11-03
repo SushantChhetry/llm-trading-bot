@@ -154,8 +154,25 @@ class DatabaseManager:
     async def _initialize_connection(self):
         """Initialize database connection."""
         try:
+            # Configure connection pool to reduce unnecessary queries
+            # Set timezone in connect_args to avoid pg_timezone_names lookups
+            # Use UTC to match our datetime.utcnow() usage
+            # For asyncpg driver (PostgreSQL async), server_settings go in connect_args
+            connect_args = {
+                "server_settings": {
+                    "timezone": "UTC",
+                    "application_name": "trading_bot",
+                }
+            }
+
             self.engine = create_async_engine(
-                self.database_url, echo=False, pool_size=10, max_overflow=20, pool_pre_ping=True
+                self.database_url,
+                echo=False,
+                pool_size=10,
+                max_overflow=20,
+                pool_pre_ping=True,
+                pool_recycle=3600,  # Recycle connections after 1 hour
+                connect_args=connect_args,
             )
 
             self.session_factory = sessionmaker(self.engine, class_=AsyncSession, expire_on_commit=False)
