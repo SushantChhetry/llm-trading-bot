@@ -1,5 +1,22 @@
 # Cursor Rules for DeepSeek Trading Bot - Performance Optimized
 
+## ⚠️ CRITICAL: Follow ALL Rules When Writing Code
+
+**YOU MUST follow every rule in this document when generating or modifying code. These are MANDATORY requirements, not suggestions.**
+
+- ✅ **ALWAYS** use type hints on ALL functions
+- ✅ **ALWAYS** use async/await for I/O operations
+- ✅ **ALWAYS** use `pathlib.Path` for file paths
+- ✅ **ALWAYS** follow the import patterns specified below
+- ✅ **ALWAYS** place files in the correct directories as specified
+- ✅ **ALWAYS** follow naming conventions (snake_case for files/functions, PascalCase for classes)
+- ✅ **NEVER** use blocking I/O in async contexts
+- ✅ **NEVER** create documentation files unless explicitly requested
+- ✅ **NEVER** commit code without type hints
+- ✅ **NEVER** use `SELECT *` in database queries
+
+When writing code, reference this file and ensure compliance with ALL sections.
+
 ## Core Principles
 
 1. **Performance First**: Every code change must consider latency, throughput, and resource efficiency. Trading decisions happen every 2.5 minutes - optimize for speed.
@@ -10,20 +27,30 @@
 
 4. **No Documentation by Default**: Do NOT create markdown files (`.md`), analysis documents, summaries, or todo lists unless explicitly requested.
 
+5. **Rule Compliance**: Every line of code must follow ALL rules in this document. No exceptions.
+
 ## Performance Optimization Rules
 
 ### Async/Await Patterns
-- **ALWAYS** use async/await for I/O operations:
+- **MANDATORY: ALWAYS use async/await for I/O operations. Blocking I/O is FORBIDDEN.**
+
   - LLM API calls → Use `httpx.AsyncClient` or `aiohttp`
   - Database queries → Use async database clients (asyncpg, async SQLAlchemy)
   - Exchange API calls → Use async CCXT or async HTTP clients
   - File I/O for logs → Use async logging handlers when possible
 
-- **NEVER** block the event loop:
-  - No synchronous `requests.get()` calls
-  - No blocking file operations in hot paths
-  - Use `asyncio.sleep()` instead of `time.sleep()` in async contexts
-  - Wrap sync operations with `asyncio.to_thread()` or executor
+  Examples:
+  - ❌ NEVER: `requests.get(url)` or `requests.post(url)`
+  - ✅ ALWAYS: `async with httpx.AsyncClient() as client: await client.get(url)`
+
+  - ❌ NEVER: `conn.execute(query)` (blocking SQLAlchemy)
+  - ✅ ALWAYS: `await conn.execute(query)` (async SQLAlchemy) or `await conn.fetch(query)` (asyncpg)
+
+- **NEVER block the event loop:**
+  - ❌ NO synchronous `requests.get()` calls - use `httpx.AsyncClient` instead
+  - ❌ NO blocking file operations in hot paths - use `aiofiles` instead
+  - ❌ NO `time.sleep()` in async contexts - use `await asyncio.sleep()` instead
+  - ✅ Wrap sync operations with `asyncio.to_thread()` or executor if unavoidable
 
 ### Database Performance
 - **Query Optimization**:
@@ -88,7 +115,7 @@
 ## Code Quality Standards
 
 ### Python Best Practices
-- **Type Hints**: ALL functions must have type hints
+- **Type Hints**: ALL functions MUST have type hints. Code without type hints is INVALID.
   ```python
   def execute_buy(
       self,
@@ -98,10 +125,12 @@
       confidence: float
   ) -> Optional[Dict[str, Any]]:
   ```
+  - ❌ NEVER write: `def execute_buy(self, symbol, price, amount):`
+  - ✅ ALWAYS write: `def execute_buy(self, symbol: str, price: float, amount: float) -> Optional[Dict[str, Any]]:`
 
-- **PEP 8 Compliance**: Use `black` formatter, `isort` for imports
-- **Docstrings**: Use Google-style docstrings for all public methods
-- **Imports**: Group imports (stdlib, third-party, local) with blank lines
+- **PEP 8 Compliance**: Use `black` formatter, `isort` for imports. Code must pass these formatters.
+- **Docstrings**: Use Google-style docstrings for all public methods and classes.
+- **Imports**: Group imports (stdlib, third-party, local) with blank lines. Follow isort ordering exactly.
 
 ### Code Organization
 - **Single Responsibility**: Each class/function should do one thing well
@@ -185,13 +214,15 @@ deepseek-experiment/
 
 ### Import Patterns
 
-**ALWAYS follow these import conventions:**
+**MANDATORY: ALWAYS follow these import conventions. Deviating from these patterns is NOT allowed.**
 
 1. **From config module:**
    ```python
    from config import config
    # Access: config.INITIAL_BALANCE, config.LLM_PROVIDER
    ```
+   - ❌ NEVER: `from config.config import config` or `import config.config`
+   - ✅ ALWAYS: `from config import config`
 
 2. **From src modules (within src/):**
    ```python
@@ -200,6 +231,8 @@ deepseek-experiment/
    from .resilience import retry, circuit_breaker
    from .security import validate_trading_inputs
    ```
+   - ❌ NEVER: `from src.logger import get_logger` (when inside src/)
+   - ✅ ALWAYS: `from .logger import get_logger` (relative import)
 
 3. **From src modules (from main.py or scripts):**
    ```python
@@ -207,16 +240,18 @@ deepseek-experiment/
    from src.trading_engine import TradingEngine
    from src.llm_client import LLMClient
    ```
+   - ❌ NEVER: `from .trading_engine import TradingEngine` (when outside src/)
+   - ✅ ALWAYS: `from src.trading_engine import TradingEngine` (absolute import)
 
-4. **Import grouping (isort style):**
+4. **Import grouping (isort style) - REQUIRED ORDER:**
    ```python
-   # 1. Standard library
+   # 1. Standard library (NO blank line before)
    import json
    import logging
    from datetime import datetime
    from typing import Dict, Optional
 
-   # 2. Third-party
+   # 2. Third-party (blank line before)
    import httpx
    import pandas as pd
 
@@ -224,6 +259,7 @@ deepseek-experiment/
    from config import config
    from .logger import get_logger
    ```
+   - Must have exactly 2 blank lines separating the groups
 
 ### File Naming Conventions
 
@@ -252,7 +288,8 @@ deepseek-experiment/
 
 ### Path Handling
 
-**ALWAYS use `pathlib.Path` for file paths:**
+**MANDATORY: ALWAYS use `pathlib.Path` for file paths. NEVER use string concatenation or `os.path.join()`.**
+
 ```python
 from pathlib import Path
 
@@ -264,6 +301,10 @@ LOG_DIR = DATA_DIR / "logs"
 # In src modules
 trades_file = config.DATA_DIR / "trades.json"
 ```
+
+- ❌ NEVER: `trades_file = os.path.join(config.DATA_DIR, "trades.json")`
+- ❌ NEVER: `trades_file = config.DATA_DIR + "/trades.json"`
+- ✅ ALWAYS: `trades_file = config.DATA_DIR / "trades.json"`
 
 ### Entry Point Pattern
 
@@ -403,4 +444,19 @@ async def save_trades_batch(self, trades: List[Dict[str, Any]]) -> None:
 
 ---
 
+## Final Reminders
+
+**Before submitting any code:**
+
+1. ✅ Verify ALL functions have type hints
+2. ✅ Verify ALL I/O operations use async/await
+3. ✅ Verify file paths use `pathlib.Path`
+4. ✅ Verify imports follow the exact patterns above
+5. ✅ Verify files are placed in correct directories
+6. ✅ Verify naming conventions are followed
+7. ✅ Run `black` and `isort` on all Python files
+8. ✅ Ensure code passes all linter checks
+
 **Remember**: This is a real-time trading system. Every millisecond counts. Optimize aggressively for the critical path (data fetch → LLM decision → trade execution).
+
+**These rules are MANDATORY. Non-compliant code will be rejected.**
