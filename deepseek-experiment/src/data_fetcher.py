@@ -9,7 +9,7 @@ Includes technical indicator calculations for Alpha Arena-style trading signals.
 
 import logging
 import time
-from typing import Dict, List, Optional
+from typing import Dict, List
 
 import ccxt
 import pandas as pd
@@ -234,7 +234,7 @@ class DataFetcher:
             return ohlcv
         except Exception as e:
             if "403" in str(e) or "Forbidden" in str(e):
-                logger.warning(f"⚠️ Geo-blocked from fetching OHLCV. Consider using alternative exchange.")
+                logger.warning("⚠️ Geo-blocked from fetching OHLCV. Consider using alternative exchange.")
             logger.error(f"Error fetching OHLCV: {e}")
             raise
 
@@ -276,7 +276,7 @@ class DataFetcher:
             return orderbook
         except Exception as e:
             if "403" in str(e) or "Forbidden" in str(e):
-                logger.warning(f"⚠️ Geo-blocked from fetching orderbook. Consider using alternative exchange.")
+                logger.warning("⚠️ Geo-blocked from fetching orderbook. Consider using alternative exchange.")
             logger.error(f"Error fetching orderbook: {e}")
             raise
 
@@ -375,7 +375,7 @@ class DataFetcher:
         """
         try:
             current_price = self.get_price()
-        except:
+        except Exception:
             current_price = 50000.0  # Default BTC price
 
         return {

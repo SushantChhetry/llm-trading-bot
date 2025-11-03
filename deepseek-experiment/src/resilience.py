@@ -11,7 +11,7 @@ import time
 from dataclasses import dataclass
 from enum import Enum
 from functools import wraps
-from typing import Any, Callable, Dict, List, Optional, Union
+from typing import Any, Callable, Dict
 
 logger = logging.getLogger(__name__)
 

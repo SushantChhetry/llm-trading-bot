@@ -4,12 +4,11 @@ Secure configuration management for the trading bot.
 Handles environment variables, secrets, and configuration validation.
 """
 
-import json
 import logging
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, Optional, Union
+from typing import Any, Dict, Optional
 
 import yaml
 from dotenv import load_dotenv

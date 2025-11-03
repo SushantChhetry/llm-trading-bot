@@ -13,20 +13,14 @@ import sys
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import Dict
-
 import colorama
-from colorama import Back, Fore, Style
-from rich import box
+from colorama import init as colorama_init
 from rich.console import Console
-from rich.live import Live
 from rich.panel import Panel
-from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.table import Table
-from rich.text import Text
 
 # Initialize colorama for cross-platform color support
-colorama.init(autoreset=True)
+colorama_init(autoreset=True)
 
 # Add project root to path for imports
 project_root = Path(__file__).parent.parent
@@ -212,10 +206,12 @@ class TradingBot:
             sharpe_ratio = portfolio.get("sharpe_ratio", 0.0)
             sharpe_color = "green" if sharpe_ratio > 1.0 else "yellow" if sharpe_ratio > 0.5 else "red"
 
-            self.console.print(
-                f"[bold]📊 Portfolio Value:[/bold] [bold {return_color}]${portfolio['total_value']:,.2f}[/bold {return_color}] "
+            portfolio_value_msg = (
+                f"[bold]📊 Portfolio Value:[/bold] "
+                f"[bold {return_color}]${portfolio['total_value']:,.2f}[/bold {return_color}] "
                 f"([{return_color}]{return_pct:+.2f}%[/{return_color}])"
             )
+            self.console.print(portfolio_value_msg)
             self.console.print(
                 f"[bold]📈 Sharpe Ratio:[/bold] [{sharpe_color}]{sharpe_ratio:.3f}[/{sharpe_color}] "
                 f"(Risk-Adjusted Return: {portfolio.get('risk_adjusted_return', 0.0):.3f})"
@@ -258,7 +254,8 @@ class TradingBot:
 [bold]Leverage:[/bold] {leverage:.1f}x
 [bold]Risk Assessment:[/bold] [{risk_color}]{risk_assessment.upper()}[/{risk_color}]
 [bold]Justification:[/bold] {justification}
-[bold]Exit Plan:[/bold] Profit Target: ${exit_plan.get('profit_target', 0):.2f}, Stop Loss: ${exit_plan.get('stop_loss', 0):.2f}
+[bold]Exit Plan:[/bold] Profit Target: ${exit_plan.get('profit_target', 0):.2f}, "
+                f"Stop Loss: ${exit_plan.get('stop_loss', 0):.2f}"
             """.strip()
 
             self.console.print(

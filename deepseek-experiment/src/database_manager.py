@@ -11,16 +11,14 @@ import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List
 
-import asyncpg
 import sqlalchemy as sa
 from sqlalchemy import JSON, Boolean, Column, DateTime, Float, Integer, String, Text
-from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import declarative_base, sessionmaker
 
-from .resilience import CircuitBreakerConfig, circuit_breaker, database_retry_handler
+from .resilience import CircuitBreakerConfig, circuit_breaker
 
 logger = logging.getLogger(__name__)
 
@@ -483,7 +481,7 @@ class DatabaseManager:
             return await self._get_positions_json()
 
         async with self.get_session() as session:
-            result = await session.execute(sa.select(Position).where(Position.is_active == True))
+            result = await session.execute(sa.select(Position).where(Position.is_active.is_(True)))
             positions = result.scalars().all()
 
             return {

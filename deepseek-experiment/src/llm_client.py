@@ -8,7 +8,7 @@ Includes a mock mode for testing without API calls and structured prompt templat
 import json
 import logging
 import re
-from typing import Dict, List, Optional
+from typing import Dict, Optional
 
 import requests
 
@@ -24,7 +24,6 @@ from .resilience import (
 from .security import (
     SecurityManager,
     rate_limit,
-    secure_api_key_required,
     validate_trading_inputs,
 )
 
@@ -133,7 +132,9 @@ class LLMClient:
         risk_adjusted_return = portfolio_state.get("risk_adjusted_return", 0.0) if portfolio_state else 0.0
 
         prompt = f"""
-You are a quantitative cryptocurrency trader in the Alpha Arena competition. Your goal is to maximize PnL through systematic analysis of numerical data only. You have $10,000 to trade perpetual futures with leverage.
+You are a quantitative cryptocurrency trader in the Alpha Arena competition.
+Your goal is to maximize PnL through systematic analysis of numerical data only.
+You have $10,000 to trade perpetual futures with leverage.
 
 IMPORTANT: Read all data carefully. Market data is presented in chronological order (oldest to newest). Account state shows current values.
 
@@ -197,7 +198,10 @@ RISK MANAGEMENT:
 
 REQUIRED RESPONSE FORMAT (Valid JSON only - no markdown, no code blocks):
 
-You MUST respond with ONLY valid JSON. Do NOT wrap it in markdown code blocks (no ```json or ```). Do NOT add any explanatory text before or after the JSON. All keys MUST be in double quotes.
+You MUST respond with ONLY valid JSON.
+Do NOT wrap it in markdown code blocks (no ```json or ```).
+Do NOT add any explanatory text before or after the JSON.
+All keys MUST be in double quotes.
 
 Format:
 {{
@@ -216,7 +220,10 @@ Format:
     "risk_assessment": "low|medium|high"
 }}
 
-CRITICAL: Respond with ONLY the raw JSON object above. Start with {{ and end with }}. All property names must be in double quotes (e.g., "action" not action). No markdown formatting, no code blocks, no extra text.
+CRITICAL: Respond with ONLY the raw JSON object above.
+Start with {{ and end with }}.
+All property names must be in double quotes (e.g., "action" not action).
+No markdown formatting, no code blocks, no extra text.
 """
         return prompt.strip()
 
@@ -422,7 +429,10 @@ CRITICAL: Respond with ONLY the raw JSON object above. Start with {{ and end wit
             "messages": [
                 {
                     "role": "system",
-                    "content": "You are a cryptocurrency trading assistant. Always respond with valid JSON in the exact format requested.",
+                    "content": (
+                        "You are a cryptocurrency trading assistant. "
+                        "Always respond with valid JSON in the exact format requested."
+                    ),
                 },
                 {"role": "user", "content": prompt},
             ],
@@ -459,8 +469,8 @@ CRITICAL: Respond with ONLY the raw JSON object above. Start with {{ and end wit
         except ValueError as e:
             # Re-raise our custom error messages
             raise
-        except Exception as e:
-            logger.error(f"DeepSeek API request failed: {e}")
+        except Exception:
+            logger.error("DeepSeek API request failed")
             raise
 
     def _make_openai_request(self, prompt: str) -> Dict:
@@ -472,7 +482,10 @@ CRITICAL: Respond with ONLY the raw JSON object above. Start with {{ and end wit
             "messages": [
                 {
                     "role": "system",
-                    "content": "You are a cryptocurrency trading assistant. Always respond with valid JSON in the exact format requested.",
+                    "content": (
+                        "You are a cryptocurrency trading assistant. "
+                        "Always respond with valid JSON in the exact format requested."
+                    ),
                 },
                 {"role": "user", "content": prompt},
             ],
@@ -490,13 +503,20 @@ CRITICAL: Respond with ONLY the raw JSON object above. Start with {{ and end wit
 
     def _make_anthropic_request(self, prompt: str) -> Dict:
         """Make API request to Anthropic Claude."""
-        headers = {"Content-Type": "application/json", "x-api-key": self.api_key, "anthropic-version": "2023-06-01"}
+        headers = {
+            "Content-Type": "application/json",
+            "x-api-key": self.api_key,
+            "anthropic-version": "2023-06-01",
+        }
 
         payload = {
             "model": self.model,
             "max_tokens": 500,
             "temperature": 0.7,
-            "system": "You are a cryptocurrency trading assistant. Always respond with valid JSON in the exact format requested.",
+            "system": (
+                "You are a cryptocurrency trading assistant. "
+                "Always respond with valid JSON in the exact format requested."
+            ),
             "messages": [{"role": "user", "content": prompt}],
         }
 
@@ -633,18 +653,23 @@ CRITICAL: Respond with ONLY the raw JSON object above. Start with {{ and end wit
                     error_str = str(api_error)
                     # Check for payment-related errors
                     if "402" in error_str or "Payment Required" in error_str or "payment required" in error_str.lower():
-                        logger.error(
-                            f"💳 DeepSeek API payment required. "
-                            f"The bot will continue in mock mode until payment is added. "
-                            f"To fix: 1) Add payment to your DeepSeek account at https://platform.deepseek.com, "
-                            f"or 2) Set LLM_PROVIDER=mock in Railway environment variables for testing."
+                        error_msg = (
+                            "💳 DeepSeek API payment required. "
+                            "The bot will continue in mock mode until payment is added. "
+                            "To fix: 1) Add payment to your DeepSeek account at "
+                            "https://platform.deepseek.com, "
+                            "or 2) Set LLM_PROVIDER=mock in Railway environment variables "
+                            "for testing."
                         )
+                        logger.error(error_msg)
                     elif "401" in error_str or "authentication failed" in error_str.lower():
-                        logger.error(
-                            f"🔑 DeepSeek API authentication failed. "
-                            f"The bot will continue in mock mode. "
-                            f"To fix: Verify your LLM_API_KEY is correct in Railway environment variables."
+                        error_msg = (
+                            "🔑 DeepSeek API authentication failed. "
+                            "The bot will continue in mock mode. "
+                            "To fix: Verify your LLM_API_KEY is correct in Railway "
+                            "environment variables."
                         )
+                        logger.error(error_msg)
                     else:
                         logger.error(f"API call failed: {api_error}")
                     logger.warning("🔄 Falling back to mock mode for this cycle")

@@ -126,7 +126,7 @@ class StartupValidator:
                 supabase = get_supabase_service()
 
                 # Test connection with a simple query
-                trades = supabase.get_trades(limit=1)
+                supabase.get_trades(limit=1)
                 logger.debug("Supabase connection validated successfully")
             except Exception as e:
                 self.errors.append(f"Supabase connection failed: {e}")

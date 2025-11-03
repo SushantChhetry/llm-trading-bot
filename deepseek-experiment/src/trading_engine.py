@@ -6,14 +6,11 @@ by modifying the execution methods (see config.TRADING_MODE).
 """
 
 import json
-import logging
 from datetime import datetime
-from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 from config import config
 
-from .database_manager import get_database_manager
 from .logger import get_logger
 from .resilience import CircuitBreakerConfig, RetryConfig, circuit_breaker, retry
 from .security import SecurityManager, validate_trading_inputs
@@ -638,7 +635,11 @@ class TradingEngine:
         }
 
     def _calculate_advanced_metrics(self) -> Dict[str, Any]:
-        """Calculate advanced trading metrics including Sharpe ratio and behavioral patterns for Alpha Arena analysis."""
+        """
+        Calculate advanced trading metrics including Sharpe ratio and behavioral patterns.
+
+        For Alpha Arena analysis.
+        """
         if not self.trades:
             return {
                 "win_rate": 0.0,

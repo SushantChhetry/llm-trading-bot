@@ -4,13 +4,11 @@ Comprehensive error handling utilities for the trading bot.
 Provides centralized error handling, logging, and recovery mechanisms.
 """
 
-import asyncio
 import logging
 import time
-import traceback
 from enum import Enum
 from functools import wraps
-from typing import Any, Callable, Dict, Optional, Type
+from typing import Any, Callable, Dict, Optional
 
 logger = logging.getLogger(__name__)
 

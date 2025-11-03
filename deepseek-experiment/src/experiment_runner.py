@@ -15,14 +15,12 @@ import random
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 import yaml
 
 from config import config
-from src.llm_client import LLMClient
 from src.main import TradingBot
-from src.trading_engine import TradingEngine
 
 logger = logging.getLogger(__name__)
 
@@ -459,7 +457,7 @@ Examples:
             if args.risk_sweep:
                 sweep_config["max_position_size"] = [float(x) for x in args.risk_sweep.split(",")]
 
-            results = runner.run_parameter_sweep(sweep_config, args.duration)
+            runner.run_parameter_sweep(sweep_config, args.duration)
         else:
             # Single experiment
             experiment_params = {}

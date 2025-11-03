@@ -7,9 +7,7 @@ import json
 import logging
 import logging.handlers
 import sys
-from datetime import datetime
 from pathlib import Path
-from typing import Optional
 
 
 class StructuredFormatter(logging.Formatter):
@@ -116,7 +114,7 @@ def configure_production_logging(
     root_logger.info(f"Application logging initialized - {app_name}")
     root_logger.info(f"Log level: {log_level}")
     root_logger.info(f"Log directory: {log_path.absolute()}")
-    root_logger.info(f"Environment: production")
+    root_logger.info("Environment: production")
     root_logger.info("=" * 80)
 
     return root_logger
