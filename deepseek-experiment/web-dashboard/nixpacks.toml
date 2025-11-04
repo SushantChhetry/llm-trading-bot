@@ -1,0 +1,14 @@
+[phases.setup]
+nixPkgs = ["nodejs_18", "python3"]
+
+[phases.install]
+cmds = [
+  "npm ci",
+  "python3 -m pip install -r requirements.txt"
+]
+
+[phases.build]
+cmds = ["npm run build"]
+
+[start]
+cmd = "python3 api_server_supabase.py"
