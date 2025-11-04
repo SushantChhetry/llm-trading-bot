@@ -145,7 +145,12 @@ class SupabaseService:
     def add_behavioral_metrics(self, metrics_data: Dict[str, Any]) -> bool:
         """Add behavioral metrics to Supabase"""
         try:
-            response = self.supabase.table("behavioral_metrics").insert(metrics_data).execute()
+            # Ensure fee_impact_pct has a value (database column is NOT NULL)
+            insert_data = metrics_data.copy()
+            if "fee_impact_pct" not in insert_data or insert_data.get("fee_impact_pct") is None:
+                insert_data["fee_impact_pct"] = 0.0
+
+            response = self.supabase.table("behavioral_metrics").insert(insert_data).execute()
             return len(response.data) > 0
         except Exception as e:
             print(f"Error adding behavioral metrics: {e}")

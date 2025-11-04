@@ -74,7 +74,13 @@ class TradingBot:
             live_mode: Override live trading setting from config
         """
         # Initialize colorful console
-        self.console = Console()
+        # Force output in Docker/non-TTY environments by using force_terminal
+        # This ensures Rich prints even when stdout is not a TTY
+        self.console = Console(
+            force_terminal=True,  # Force terminal output even in Docker
+            width=None,  # Auto-detect width
+            file=sys.stdout,  # Explicitly use stdout
+        )
 
         # Override config settings if provided
         if testnet_mode is not None:
@@ -167,7 +173,7 @@ class TradingBot:
 
                 # Fetch technical indicators for Alpha Arena-style trading
                 try:
-                    indicators = self.data_fetcher.get_technical_indicators(timeframe="3m", limit=100)
+                    indicators = self.data_fetcher.get_technical_indicators(timeframe="5m", limit=100)
                 except Exception as e:
                     logger.warning(f"Failed to fetch technical indicators: {e}. Using fallback values.")
                     indicators = {
@@ -254,8 +260,7 @@ class TradingBot:
 [bold]Leverage:[/bold] {leverage:.1f}x
 [bold]Risk Assessment:[/bold] [{risk_color}]{risk_assessment.upper()}[/{risk_color}]
 [bold]Justification:[/bold] {justification}
-[bold]Exit Plan:[/bold] Profit Target: ${exit_plan.get('profit_target', 0):.2f}, "
-                f"Stop Loss: ${exit_plan.get('stop_loss', 0):.2f}"
+[bold]Exit Plan:[/bold] Profit Target: ${exit_plan.get('profit_target', 0):.2f}, Stop Loss: ${exit_plan.get('stop_loss', 0):.2f}
             """.strip()
 
             self.console.print(
@@ -296,6 +301,7 @@ class TradingBot:
                     self.console.print(
                         f"[bold green]🟢 Executing BUY: ${trade_amount:.2f} with {leverage:.1f}x leverage[/bold green]"
                     )
+                    sys.stdout.flush()  # Ensure output appears immediately in Docker logs
                     trade = self.trading_engine.execute_buy(
                         config.SYMBOL, current_price, trade_amount, confidence, decision, leverage
                     )
@@ -335,6 +341,7 @@ class TradingBot:
                     self.console.print(
                         f"[bold red]🔴 Executing SHORT: ${trade_amount:.2f} with {leverage:.1f}x leverage[/bold red]"
                     )
+                    sys.stdout.flush()  # Ensure output appears immediately in Docker logs
                     trade = self.trading_engine.execute_short(
                         config.SYMBOL, current_price, trade_amount, confidence, decision, leverage
                     )
@@ -372,6 +379,7 @@ class TradingBot:
                                f"position_quantity={position_qty:.6f}")
 
                     self.console.print(f"[bold red]🔴 Executing SELL with {leverage:.1f}x leverage[/bold red]")
+                    sys.stdout.flush()  # Ensure output appears immediately in Docker logs
                     trade = self.trading_engine.execute_sell(
                         config.SYMBOL, current_price, confidence=confidence, llm_decision=decision, leverage=leverage
                     )
@@ -496,8 +504,23 @@ class TradingBot:
         try:
             while True:
                 self.run_cycle()
-                self.console.print(f"[dim]⏳ Waiting {config.RUN_INTERVAL_SECONDS} seconds until next cycle...[/dim]")
+                # Explicitly flush stdout to ensure output appears in Docker logs immediately
+                sys.stdout.flush()
+
+                # Show waiting message with timestamp
+                wait_start = datetime.now().strftime("%H:%M:%S")
+                self.console.print(
+                    f"[dim]⏳ Waiting {config.RUN_INTERVAL_SECONDS} seconds until next cycle... "
+                    f"(started at {wait_start})[/dim]"
+                )
+                sys.stdout.flush()  # Flush again after print
+
                 time.sleep(config.RUN_INTERVAL_SECONDS)
+
+                # Show that we're starting the next cycle
+                next_cycle_time = datetime.now().strftime("%H:%M:%S")
+                self.console.print(f"[cyan]⏰ Next cycle starting at {next_cycle_time}[/cyan]")
+                sys.stdout.flush()
 
         except KeyboardInterrupt:
             self.console.print("\n[bold yellow]🛑 Bot stopped by user[/bold yellow]")

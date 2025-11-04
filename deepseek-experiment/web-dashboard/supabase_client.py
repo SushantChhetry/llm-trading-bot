@@ -34,7 +34,7 @@ class SupabaseService:
             raise ValueError("SUPABASE_KEY environment variable is required")
 
         self.supabase: Client = create_client(self.supabase_url, self.supabase_key)
-    
+
     def get_trades(self, limit: int = 100) -> List[Dict[str, Any]]:
         """Get recent trades from Supabase"""
         try:
@@ -43,7 +43,7 @@ class SupabaseService:
         except Exception as e:
             print(f"Error fetching trades: {e}")
             return []
-    
+
     def add_trade(self, trade_data: Dict[str, Any]) -> bool:
         """Add a new trade to Supabase"""
         try:
@@ -52,7 +52,7 @@ class SupabaseService:
         except Exception as e:
             print(f"Error adding trade: {e}")
             return False
-    
+
     def get_portfolio(self) -> Optional[Dict[str, Any]]:
         """Get latest portfolio snapshot from Supabase"""
         try:
@@ -61,7 +61,7 @@ class SupabaseService:
         except Exception as e:
             print(f"Error fetching portfolio: {e}")
             return None
-    
+
     def update_portfolio(self, portfolio_data: Dict[str, Any]) -> bool:
         """Update portfolio snapshot in Supabase"""
         try:
@@ -70,7 +70,7 @@ class SupabaseService:
         except Exception as e:
             print(f"Error updating portfolio: {e}")
             return False
-    
+
     def get_positions(self) -> List[Dict[str, Any]]:
         """Get active positions from Supabase"""
         try:
@@ -79,25 +79,25 @@ class SupabaseService:
         except Exception as e:
             print(f"Error fetching positions: {e}")
             return []
-    
+
     def update_position(self, position_data: Dict[str, Any]) -> bool:
         """Update or create position in Supabase"""
         try:
             # Check if position exists
             existing = self.supabase.table("positions").select("id").eq("symbol", position_data["symbol"]).eq("is_active", True).execute()
-            
+
             if existing.data:
                 # Update existing position
                 response = self.supabase.table("positions").update(position_data).eq("id", existing.data[0]["id"]).execute()
             else:
                 # Create new position
                 response = self.supabase.table("positions").insert(position_data).execute()
-            
+
             return len(response.data) > 0
         except Exception as e:
             print(f"Error updating position: {e}")
             return False
-    
+
     def close_position(self, symbol: str) -> bool:
         """Close a position by setting is_active to False"""
         try:
@@ -106,7 +106,7 @@ class SupabaseService:
         except Exception as e:
             print(f"Error closing position: {e}")
             return False
-    
+
     def get_behavioral_metrics(self, limit: int = 50) -> List[Dict[str, Any]]:
         """Get behavioral metrics from Supabase"""
         try:
@@ -115,16 +115,21 @@ class SupabaseService:
         except Exception as e:
             print(f"Error fetching behavioral metrics: {e}")
             return []
-    
+
     def add_behavioral_metrics(self, metrics_data: Dict[str, Any]) -> bool:
         """Add behavioral metrics to Supabase"""
         try:
-            response = self.supabase.table("behavioral_metrics").insert(metrics_data).execute()
+            # Ensure fee_impact_pct has a value (database column is NOT NULL)
+            insert_data = metrics_data.copy()
+            if "fee_impact_pct" not in insert_data or insert_data.get("fee_impact_pct") is None:
+                insert_data["fee_impact_pct"] = 0.0
+
+            response = self.supabase.table("behavioral_metrics").insert(insert_data).execute()
             return len(response.data) > 0
         except Exception as e:
             print(f"Error adding behavioral metrics: {e}")
             return False
-    
+
     def get_bot_config(self) -> Dict[str, str]:
         """Get bot configuration from Supabase"""
         try:
@@ -133,7 +138,7 @@ class SupabaseService:
         except Exception as e:
             print(f"Error fetching bot config: {e}")
             return {}
-    
+
     def update_bot_config(self, key: str, value: str) -> bool:
         """Update bot configuration in Supabase"""
         try:

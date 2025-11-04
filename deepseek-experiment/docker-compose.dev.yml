@@ -42,7 +42,7 @@ services:
       - MAX_POSITION_SIZE=${MAX_POSITION_SIZE:-0.1}
       - STOP_LOSS_PERCENT=${STOP_LOSS_PERCENT:-2.0}
       - TAKE_PROFIT_PERCENT=${TAKE_PROFIT_PERCENT:-3.0}
-      - RUN_INTERVAL_SECONDS=${RUN_INTERVAL_SECONDS:-300}
+      - RUN_INTERVAL_SECONDS=${RUN_INTERVAL_SECONDS:-150}
       - LOG_LEVEL=${LOG_LEVEL:-DEBUG}
       - DATABASE_URL=postgresql://trading_user:trading_password@postgres:5432/trading_bot
       # CORS and API configuration for local debugging
@@ -111,7 +111,7 @@ services:
       - MAX_POSITION_SIZE=${MAX_POSITION_SIZE:-0.1}
       - STOP_LOSS_PERCENT=${STOP_LOSS_PERCENT:-2.0}
       - TAKE_PROFIT_PERCENT=${TAKE_PROFIT_PERCENT:-3.0}
-      - RUN_INTERVAL_SECONDS=${RUN_INTERVAL_SECONDS:-300}
+      - RUN_INTERVAL_SECONDS=${RUN_INTERVAL_SECONDS:-150}
       - LOG_LEVEL=${LOG_LEVEL:-DEBUG}
     volumes:
       - ./data:/app/data

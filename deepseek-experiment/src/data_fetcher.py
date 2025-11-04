@@ -280,7 +280,7 @@ class DataFetcher:
             logger.error(f"Error fetching orderbook: {e}")
             raise
 
-    def get_technical_indicators(self, timeframe: str = "3m", limit: int = 100) -> Dict[str, float]:
+    def get_technical_indicators(self, timeframe: str = "5m", limit: int = 100) -> Dict[str, float]:
         """
         Calculate technical indicators for Alpha Arena-style trading signals.
 
@@ -291,7 +291,7 @@ class DataFetcher:
         - ATR (Average True Range)
 
         Args:
-            timeframe: Candlestick timeframe (default "3m" for Alpha Arena)
+            timeframe: Candlestick timeframe (default "5m" - compatible with Kraken and most exchanges)
             limit: Number of candles to fetch for calculation (min 100)
 
         Returns:

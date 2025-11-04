@@ -23,19 +23,14 @@ interface TradingDataProviderProps {
 }
 
 export function TradingDataProvider({ children, value }: TradingDataProviderProps) {
-  // Memoize the context value using JSON.stringify for deep comparison
-  // This ensures we only update when actual data changes, not object references
-  const tradesString = JSON.stringify(value.trades);
-  const portfolioString = JSON.stringify(value.portfolio);
-  const pnlDataString = JSON.stringify(value.pnlData);
-  const botStatusString = JSON.stringify(value.botStatus);
-
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  // Memoize the context value to prevent unnecessary re-renders
+  // Since we're already doing deep comparison in useTradingData hook,
+  // we can use reference equality for the data objects
   const contextValue = useMemo(() => value, [
-    tradesString,
-    portfolioString,
-    pnlDataString,
-    botStatusString,
+    value.trades,
+    value.portfolio,
+    value.pnlData,
+    value.botStatus,
     value.isLoading,
     value.error,
     value.isConnected,

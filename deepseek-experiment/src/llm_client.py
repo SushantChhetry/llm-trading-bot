@@ -131,6 +131,17 @@ class LLMClient:
         max_drawdown = portfolio_state.get("max_drawdown", 0.0) if portfolio_state else 0.0
         risk_adjusted_return = portfolio_state.get("risk_adjusted_return", 0.0) if portfolio_state else 0.0
 
+        # Extract technical indicators
+        indicators = market_data.get("indicators", {}) if market_data else {}
+        ema_20 = indicators.get("ema_20", price)
+        ema_50 = indicators.get("ema_50", price)
+        macd = indicators.get("macd", 0.0)
+        macd_signal = indicators.get("macd_signal", 0.0)
+        macd_histogram = indicators.get("macd_histogram", 0.0)
+        rsi_7 = indicators.get("rsi_7", 50.0)
+        rsi_14 = indicators.get("rsi_14", 50.0)
+        atr = indicators.get("atr", 0.0)
+
         prompt = f"""
 You are a quantitative cryptocurrency trader in the Alpha Arena competition.
 Your goal is to maximize PnL through systematic analysis of numerical data only.
@@ -145,6 +156,16 @@ MARKET DATA (Quantitative Only - Chronological Order):
 - Current Price: ${price:.2f} (LATEST PRICE)
 - 24h Volume: {volume:,.0f}
 - 24h Change: {change_24h:.2f}% (from 24 hours ago to now)
+
+TECHNICAL INDICATORS (Time-Series Analysis - 5m candles):
+- EMA 20: ${ema_20:.2f} (20-period Exponential Moving Average)
+- EMA 50: ${ema_50:.2f} (50-period Exponential Moving Average)
+- MACD: {macd:.4f} (MACD line)
+- MACD Signal: {macd_signal:.4f} (Signal line)
+- MACD Histogram: {macd_histogram:.4f} (MACD - Signal, positive = bullish momentum)
+- RSI 7: {rsi_7:.2f} (7-period Relative Strength Index, >70 = overbought, <30 = oversold)
+- RSI 14: {rsi_14:.2f} (14-period Relative Strength Index, >70 = overbought, <30 = oversold)
+- ATR: ${atr:.2f} (14-period Average True Range - volatility measure)
 
 ACCOUNT STATE (Current Values):
 - Available Cash: ${balance:.2f} (FREE COLLATERAL - money available for new positions)

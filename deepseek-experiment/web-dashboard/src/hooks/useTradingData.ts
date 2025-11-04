@@ -21,6 +21,32 @@ const INITIAL_POLL_INTERVAL = 5000; // 5 seconds - matches UI promise
 // Vercel rewrites will handle /api/* requests, or use VITE_API_URL if set
 const API_BASE_URL = import.meta.env.VITE_API_URL || '';
 
+// Helper function to deep compare arrays/objects for equality
+// This prevents unnecessary re-renders when data hasn't actually changed
+function deepEqual(a: any, b: any): boolean {
+  if (a === b) return true;
+  if (a == null || b == null) return a === b;
+  if (typeof a !== 'object' || typeof b !== 'object') return false;
+
+  if (Array.isArray(a) && Array.isArray(b)) {
+    if (a.length !== b.length) return false;
+    for (let i = 0; i < a.length; i++) {
+      if (!deepEqual(a[i], b[i])) return false;
+    }
+    return true;
+  }
+
+  const keysA = Object.keys(a);
+  const keysB = Object.keys(b);
+  if (keysA.length !== keysB.length) return false;
+
+  for (const key of keysA) {
+    if (!keysB.includes(key)) return false;
+    if (!deepEqual(a[key], b[key])) return false;
+  }
+  return true;
+}
+
 // Helper function to build API URL
 const getApiUrl = (endpoint: string): string => {
   if (API_BASE_URL) {
@@ -77,7 +103,9 @@ export function useTradingData() {
         if (!isManualRetry && prev.retryCount >= MAX_RETRY_COUNT && prev.error) {
           return prev;
         }
-        return { ...prev, isLoading: prev.error === null };
+        // Only set isLoading on initial load, not during polling
+        // If we already have data (isConnected is true), don't show loading state
+        return { ...prev, isLoading: prev.isConnected === false && prev.error === null };
       });
 
       // Add cache-busting timestamp to ensure fresh data
@@ -117,62 +145,78 @@ export function useTradingData() {
         statusRes.json(),
       ]);
 
-      // Always update state to ensure UI reflects latest data
-      // The React reconciliation will minimize re-renders if data is truly unchanged
-      setData(() => {
-        // Generate PnL data points from trades (regenerate on each fetch to ensure accuracy)
-        const pnlData: PnLDataPoint[] = [];
-        const initialBalance = portfolio?.initial_balance && !isNaN(portfolio.initial_balance) ? portfolio.initial_balance : 10000;
-        const positionsValue = portfolio?.positions_value && !isNaN(portfolio.positions_value) ? portfolio.positions_value : 0;
-        let runningValue = initialBalance;
-        let runningReturn = 0;
-        let tradeCount = 0;
+      // Generate PnL data points from trades (regenerate on each fetch to ensure accuracy)
+      const pnlData: PnLDataPoint[] = [];
+      const initialBalance = portfolio?.initial_balance && !isNaN(portfolio.initial_balance) ? portfolio.initial_balance : 10000;
+      const positionsValue = portfolio?.positions_value && !isNaN(portfolio.positions_value) ? portfolio.positions_value : 0;
+      let runningValue = initialBalance;
+      let runningReturn = 0;
+      let tradeCount = 0;
 
-        // Add initial point
+      // Process trades chronologically
+      const sortedTrades = [...trades].sort((a, b) =>
+        new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+      );
+
+      // Add initial point only if we have trades
+      // Use the first trade's timestamp minus a small offset for consistent initial point
+      if (sortedTrades.length > 0) {
+        const firstTradeTime = new Date(sortedTrades[0].timestamp).getTime();
+        const initialTimestamp = new Date(firstTradeTime - 1000).toISOString(); // 1 second before first trade
         pnlData.push({
-          timestamp: new Date().toISOString(),
+          timestamp: initialTimestamp,
           total_value: runningValue,
           total_return: 0,
           total_return_pct: 0,
           trade_count: 0,
         });
+      }
 
-        // Process trades chronologically
-        const sortedTrades = [...trades].sort((a, b) =>
-          new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
-        );
+      for (const trade of sortedTrades) {
+        tradeCount++;
 
-        for (const trade of sortedTrades) {
-          tradeCount++;
-
-          if (trade.side === 'buy') {
-            const amount = trade.amount_usdt && !isNaN(trade.amount_usdt) ? trade.amount_usdt : 0;
-            runningValue -= amount;
-          } else if (trade.side === 'sell') {
-            const quantity = trade.quantity && !isNaN(trade.quantity) ? trade.quantity : 0;
-            const price = trade.price && !isNaN(trade.price) ? trade.price : 0;
-            const sellValue = quantity * price;
-            runningValue += sellValue;
-            if (trade.profit !== undefined && !isNaN(trade.profit)) {
-              runningReturn += trade.profit;
-            }
+        if (trade.side === 'buy') {
+          const amount = trade.amount_usdt && !isNaN(trade.amount_usdt) ? trade.amount_usdt : 0;
+          runningValue -= amount;
+        } else if (trade.side === 'sell') {
+          const quantity = trade.quantity && !isNaN(trade.quantity) ? trade.quantity : 0;
+          const price = trade.price && !isNaN(trade.price) ? trade.price : 0;
+          const sellValue = quantity * price;
+          runningValue += sellValue;
+          if (trade.profit !== undefined && !isNaN(trade.profit)) {
+            runningReturn += trade.profit;
           }
-
-          // Ensure all values are valid numbers
-          const totalValue = (runningValue + positionsValue) || 0;
-          const totalReturn = runningReturn || 0;
-          const totalReturnPct = initialBalance > 0 ? (totalReturn / initialBalance) * 100 : 0;
-
-          pnlData.push({
-            timestamp: trade.timestamp,
-            total_value: totalValue,
-            total_return: totalReturn,
-            total_return_pct: totalReturnPct,
-            trade_count: tradeCount,
-          });
         }
 
-        // Success - reset error state
+        // Ensure all values are valid numbers
+        const totalValue = (runningValue + positionsValue) || 0;
+        const totalReturn = runningReturn || 0;
+        const totalReturnPct = initialBalance > 0 ? (totalReturn / initialBalance) * 100 : 0;
+
+        pnlData.push({
+          timestamp: trade.timestamp,
+          total_value: totalValue,
+          total_return: totalReturn,
+          total_return_pct: totalReturnPct,
+          trade_count: tradeCount,
+        });
+      }
+
+      // Only update state if data actually changed - prevents unnecessary re-renders
+      setData(prev => {
+        // Check if data has actually changed
+        const tradesChanged = !deepEqual(prev.trades, trades);
+        const portfolioChanged = !deepEqual(prev.portfolio, portfolio);
+        const botStatusChanged = !deepEqual(prev.botStatus, botStatus);
+        const pnlDataChanged = !deepEqual(prev.pnlData, pnlData);
+
+        // If nothing changed, return previous state to prevent re-render
+        if (!tradesChanged && !portfolioChanged && !botStatusChanged && !pnlDataChanged &&
+            prev.error === null && prev.isConnected === true) {
+          return prev;
+        }
+
+        // Success - update state with new data
         return {
           trades,
           portfolio,
