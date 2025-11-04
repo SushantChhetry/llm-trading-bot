@@ -1,10 +1,11 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Trade, Portfolio, PnLDataPoint, BotStatus } from '@/types/trading';
+import { Trade, Portfolio, PnLDataPoint, BotStatus, PortfolioSnapshot } from '@/types/trading';
 
 interface TradingData {
   trades: Trade[];
   portfolio: Portfolio | null;
   pnlData: PnLDataPoint[];
+  portfolioSnapshots: PortfolioSnapshot[];
   botStatus: BotStatus | null;
   isLoading: boolean;
   error: string | null;
@@ -23,7 +24,7 @@ const API_BASE_URL = import.meta.env.VITE_API_URL || '';
 
 // Helper function to deep compare arrays/objects for equality
 // This prevents unnecessary re-renders when data hasn't actually changed
-function deepEqual(a: any, b: any): boolean {
+function deepEqual(a: unknown, b: unknown): boolean {
   if (a === b) return true;
   if (a == null || b == null) return a === b;
   if (typeof a !== 'object' || typeof b !== 'object') return false;
@@ -36,13 +37,13 @@ function deepEqual(a: any, b: any): boolean {
     return true;
   }
 
-  const keysA = Object.keys(a);
-  const keysB = Object.keys(b);
+  const keysA = Object.keys(a as Record<string, unknown>);
+  const keysB = Object.keys(b as Record<string, unknown>);
   if (keysA.length !== keysB.length) return false;
 
   for (const key of keysA) {
     if (!keysB.includes(key)) return false;
-    if (!deepEqual(a[key], b[key])) return false;
+    if (!deepEqual((a as Record<string, unknown>)[key], (b as Record<string, unknown>)[key])) return false;
   }
   return true;
 }
@@ -64,6 +65,7 @@ export function useTradingData() {
     trades: [],
     portfolio: null,
     pnlData: [],
+    portfolioSnapshots: [],
     botStatus: null,
     isLoading: true,
     error: null,
@@ -110,7 +112,7 @@ export function useTradingData() {
 
       // Add cache-busting timestamp to ensure fresh data
       const cacheBuster = `?t=${Date.now()}`;
-      const [tradesRes, portfolioRes, statusRes] = await Promise.all([
+      const [tradesRes, portfolioRes, statusRes, snapshotsRes] = await Promise.all([
         fetch(getApiUrl('/api/trades') + cacheBuster).catch(err => {
           throw new Error(`Failed to fetch trades: ${err.message}`);
         }),
@@ -120,9 +122,14 @@ export function useTradingData() {
         fetch(getApiUrl('/api/status') + cacheBuster).catch(err => {
           throw new Error(`Failed to fetch status: ${err.message}`);
         }),
+        fetch(getApiUrl('/api/portfolio/snapshots') + cacheBuster).catch(err => {
+          // Snapshots are optional, don't fail if they're not available
+          console.warn(`Failed to fetch portfolio snapshots: ${err.message}`);
+          return null;
+        }),
       ]);
 
-      // Check for HTTP errors
+      // Check for HTTP errors (snapshots are optional)
       const errors: string[] = [];
       if (!tradesRes.ok) {
         errors.push(`Trades: ${tradesRes.status} ${tradesRes.statusText}`);
@@ -139,10 +146,11 @@ export function useTradingData() {
         throw new Error(getErrorMessage(null, statusCode));
       }
 
-      const [trades, portfolio, botStatus] = await Promise.all([
+      const [trades, portfolio, botStatus, snapshots] = await Promise.all([
         tradesRes.json(),
         portfolioRes.json(),
         statusRes.json(),
+        snapshotsRes && snapshotsRes.ok ? snapshotsRes.json() : Promise.resolve([]),
       ]);
 
       // Generate PnL data points from trades (regenerate on each fetch to ensure accuracy)
@@ -209,9 +217,10 @@ export function useTradingData() {
         const portfolioChanged = !deepEqual(prev.portfolio, portfolio);
         const botStatusChanged = !deepEqual(prev.botStatus, botStatus);
         const pnlDataChanged = !deepEqual(prev.pnlData, pnlData);
+        const snapshotsChanged = !deepEqual(prev.portfolioSnapshots, snapshots);
 
         // If nothing changed, return previous state to prevent re-render
-        if (!tradesChanged && !portfolioChanged && !botStatusChanged && !pnlDataChanged &&
+        if (!tradesChanged && !portfolioChanged && !botStatusChanged && !pnlDataChanged && !snapshotsChanged &&
             prev.error === null && prev.isConnected === true) {
           return prev;
         }
@@ -221,6 +230,7 @@ export function useTradingData() {
           trades,
           portfolio,
           pnlData,
+          portfolioSnapshots: snapshots || [],
           botStatus,
           isLoading: false,
           error: null,

@@ -114,6 +114,20 @@ class SupabaseService:
                 print(f"Error updating portfolio: {e}")
             return False
 
+    def get_portfolio_snapshots(self, limit: int = 1000, order_by: str = "timestamp", desc: bool = True) -> List[Dict[str, Any]]:
+        """Get portfolio snapshots from Supabase"""
+        try:
+            query = self.supabase.table("portfolio_snapshots").select("*")
+            if desc:
+                query = query.order(order_by, desc=True)
+            else:
+                query = query.order(order_by, desc=False)
+            response = query.limit(limit).execute()
+            return response.data
+        except Exception as e:
+            print(f"Error fetching portfolio snapshots: {e}")
+            return []
+
     def get_positions(self) -> List[Dict[str, Any]]:
         """Get active positions from Supabase"""
         try:
@@ -214,6 +228,92 @@ class SupabaseService:
         except Exception as e:
             print(f"Error updating bot config: {e}")
             return False
+
+    def add_metric(
+        self,
+        service_name: str,
+        metric_name: str,
+        value: float,
+        metric_type: str = "gauge",
+        tags: Optional[Dict[str, Any]] = None,
+        unit: str = "",
+    ) -> bool:
+        """Add a metric to observability_metrics table"""
+        try:
+            metric_data = {
+                "timestamp": datetime.now().isoformat(),
+                "service_name": service_name,
+                "metric_name": metric_name,
+                "value": float(value),
+                "metric_type": metric_type,
+                "tags": tags or {},
+                "unit": unit,
+            }
+            response = self.supabase.table("observability_metrics").insert(metric_data).execute()
+            return len(response.data) > 0
+        except Exception as e:
+            print(f"Error adding metric: {e}")
+            return False
+
+    def add_health_check(
+        self, service_name: str, status: str, details: Optional[Dict[str, Any]] = None
+    ) -> bool:
+        """Add a health check snapshot to service_health table"""
+        try:
+            if status not in ["healthy", "degraded", "unhealthy"]:
+                raise ValueError(f"Invalid status: {status}. Must be 'healthy', 'degraded', or 'unhealthy'")
+
+            health_data = {
+                "timestamp": datetime.now().isoformat(),
+                "service_name": service_name,
+                "status": status,
+                "details": details or {},
+            }
+            response = self.supabase.table("service_health").insert(health_data).execute()
+            return len(response.data) > 0
+        except Exception as e:
+            print(f"Error adding health check: {e}")
+            return False
+
+    def get_metrics(
+        self,
+        service_name: Optional[str] = None,
+        metric_name: Optional[str] = None,
+        since: Optional[datetime] = None,
+        limit: int = 1000,
+    ) -> List[Dict[str, Any]]:
+        """Get metrics from observability_metrics table"""
+        try:
+            query = self.supabase.table("observability_metrics").select("*")
+
+            if service_name:
+                query = query.eq("service_name", service_name)
+
+            if metric_name:
+                query = query.eq("metric_name", metric_name)
+
+            if since:
+                query = query.gte("timestamp", since.isoformat())
+
+            response = query.order("timestamp", desc=True).limit(limit).execute()
+            return response.data
+        except Exception as e:
+            print(f"Error fetching metrics: {e}")
+            return []
+
+    def get_latest_health(self, service_name: Optional[str] = None) -> Optional[Dict[str, Any]]:
+        """Get the latest health check for a service (or all services)"""
+        try:
+            query = self.supabase.table("service_health").select("*")
+
+            if service_name:
+                query = query.eq("service_name", service_name)
+
+            response = query.order("timestamp", desc=True).limit(1).execute()
+            return response.data[0] if response.data else None
+        except Exception as e:
+            print(f"Error fetching latest health: {e}")
+            return None
 
 
 # Global instance

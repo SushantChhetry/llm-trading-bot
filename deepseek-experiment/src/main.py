@@ -30,6 +30,7 @@ from config import config  # noqa: E402
 from src.data_fetcher import DataFetcher  # noqa: E402
 from src.llm_client import LLMClient  # noqa: E402
 from src.logger import configure_production_logging, get_logger  # noqa: E402
+from src.monitoring import MonitoringService  # noqa: E402
 from src.startup_validator import validate_startup  # noqa: E402
 from src.trading_engine import TradingEngine  # noqa: E402
 
@@ -74,12 +75,16 @@ class TradingBot:
             live_mode: Override live trading setting from config
         """
         # Initialize colorful console
+        # Check if we're in an interactive terminal (TTY) or redirected output
+        self.is_interactive = sys.stdout.isatty()
         # Force output in Docker/non-TTY environments by using force_terminal
         # This ensures Rich prints even when stdout is not a TTY
+        # But disable spinners when not interactive to avoid log spam
         self.console = Console(
             force_terminal=True,  # Force terminal output even in Docker
             width=None,  # Auto-detect width
             file=sys.stdout,  # Explicitly use stdout
+            legacy_windows=False,  # Better compatibility
         )
 
         # Override config settings if provided
@@ -96,6 +101,12 @@ class TradingBot:
         self.data_fetcher = DataFetcher()
         self.llm_client = LLMClient()
         self.trading_engine = TradingEngine()
+        
+        # Initialize monitoring service
+        self.monitoring_service = MonitoringService()
+        self.monitoring_running = False
+        self.metrics_flush_interval = 60  # Write metrics to Supabase every 60 seconds
+        self.last_metrics_flush = time.time()
 
         # Create colorful status table
         status_table = Table(title="Bot Configuration", show_header=True, header_style="bold magenta")
@@ -162,6 +173,96 @@ class TradingBot:
         with open(hyperparams_file, "w") as f:
             json.dump({"timestamp": datetime.now().isoformat(), "hyperparameters": hyperparams}, f, indent=2)
 
+    def _flush_metrics_to_supabase(self):
+        """Flush metrics from monitoring service to Supabase"""
+        if not self.trading_engine.supabase_client:
+            return
+
+        try:
+            # Get metrics summary
+            metrics_summary = self.monitoring_service.get_metrics_summary()
+            
+            # Write counters
+            for name, value in metrics_summary.get("counters", {}).items():
+                self.trading_engine.supabase_client.add_metric(
+                    service_name="trading-bot",
+                    metric_name=name,
+                    value=float(value),
+                    metric_type="counter",
+                    tags={},
+                )
+
+            # Write gauges
+            for name, value in metrics_summary.get("gauges", {}).items():
+                self.trading_engine.supabase_client.add_metric(
+                    service_name="trading-bot",
+                    metric_name=name,
+                    value=float(value),
+                    metric_type="gauge",
+                    tags={},
+                )
+
+            # Write histogram stats
+            for name, stats in metrics_summary.get("histogram_stats", {}).items():
+                if stats and isinstance(stats, dict):
+                    # Write mean, min, max, p95, p99 as separate metrics
+                    for stat_name, stat_value in stats.items():
+                        if stat_value is not None:
+                            self.trading_engine.supabase_client.add_metric(
+                                service_name="trading-bot",
+                                metric_name=f"{name}.{stat_name}",
+                                value=float(stat_value),
+                                metric_type="histogram",
+                                tags={},
+                            )
+
+            # Write health status
+            health_status = metrics_summary.get("health_status", {})
+            overall_status = health_status.get("status", "unknown")
+            status_map = {"healthy": "healthy", "degraded": "degraded", "unhealthy": "unhealthy"}
+            supabase_status = status_map.get(overall_status, "degraded")
+            
+            self.trading_engine.supabase_client.add_health_check(
+                service_name="trading-bot",
+                status=supabase_status,
+                details=health_status,
+            )
+
+            logger.debug(f"Metrics flushed to Supabase: {len(metrics_summary.get('counters', {}))} counters, "
+                        f"{len(metrics_summary.get('gauges', {}))} gauges")
+        except Exception as e:
+            logger.error(f"Failed to flush metrics to Supabase: {e}", exc_info=True)
+
+    def _start_monitoring_background(self):
+        """Start monitoring service in background thread"""
+        import threading
+
+        def run_monitoring():
+            """Run monitoring in a separate thread"""
+            import asyncio
+
+            # Create new event loop for this thread
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+
+            try:
+                # Start monitoring service
+                loop.run_until_complete(self.monitoring_service.start())
+                self.monitoring_running = True
+                logger.info("Monitoring service started in background")
+
+                # Keep the loop running
+                loop.run_forever()
+            except Exception as e:
+                logger.error(f"Error in monitoring background thread: {e}", exc_info=True)
+            finally:
+                loop.close()
+
+        # Start monitoring in background thread
+        monitoring_thread = threading.Thread(target=run_monitoring, daemon=True)
+        monitoring_thread.start()
+        logger.info("Monitoring background thread started")
+
     def run_cycle(self):
         """
         Execute one complete trading cycle.
@@ -175,7 +276,37 @@ class TradingBot:
             )
 
             # 1. Fetch market data and technical indicators (Alpha Arena enhancement)
-            with self.console.status("[bold green]Fetching market data & technical indicators...", spinner="dots"):
+            if self.is_interactive:
+                # Use spinner only in interactive terminals
+                with self.console.status("[bold green]Fetching market data & technical indicators...", spinner="dots"):
+                    ticker = self.data_fetcher.get_ticker()
+                    current_price = float(ticker["last"])
+
+                    # Validate market data
+                    if current_price <= 0:
+                        logger.error("Invalid market price received")
+                        self.console.print("[bold red]❌ Invalid market data - skipping cycle[/bold red]")
+                        return
+
+                    # Fetch technical indicators for Alpha Arena-style trading
+                    try:
+                        indicators = self.data_fetcher.get_technical_indicators(timeframe="5m", limit=100)
+                    except Exception as e:
+                        logger.warning(f"Failed to fetch technical indicators: {e}. Using fallback values.")
+                        indicators = {
+                            "ema_20": current_price * 0.99,
+                            "ema_50": current_price * 0.98,
+                            "macd": 0.0,
+                            "macd_signal": 0.0,
+                            "macd_histogram": 0.0,
+                            "rsi_7": 50.0,
+                            "rsi_14": 50.0,
+                            "atr": current_price * 0.02,
+                            "current_price": current_price,
+                        }
+            else:
+                # Non-interactive: use simple log message
+                logger.info("Fetching market data & technical indicators...")
                 ticker = self.data_fetcher.get_ticker()
                 current_price = float(ticker["last"])
 
@@ -249,7 +380,13 @@ class TradingBot:
             )
 
             # 3. Get LLM decision with portfolio context
-            with self.console.status("[bold blue]🤖 Consulting AI for trading decision...", spinner="dots"):
+            if self.is_interactive:
+                # Use spinner only in interactive terminals
+                with self.console.status("[bold blue]🤖 Consulting AI for trading decision...", spinner="dots"):
+                    decision = self.llm_client.get_trading_decision(market_data, portfolio)
+            else:
+                # Non-interactive: use simple log message
+                logger.info("Consulting AI for trading decision...")
                 decision = self.llm_client.get_trading_decision(market_data, portfolio)
 
             action = decision.get("action", "hold").lower()
@@ -504,6 +641,9 @@ class TradingBot:
         Executes trading cycles at intervals defined by config.RUN_INTERVAL_SECONDS.
         Can be stopped with Ctrl+C.
         """
+        # Start monitoring service
+        self._start_monitoring_background()
+        
         # Colorful startup message
         self.console.print(
             Panel.fit(
@@ -518,6 +658,13 @@ class TradingBot:
         try:
             while True:
                 self.run_cycle()
+                
+                # Flush metrics to Supabase periodically
+                current_time = time.time()
+                if current_time - self.last_metrics_flush >= self.metrics_flush_interval:
+                    self._flush_metrics_to_supabase()
+                    self.last_metrics_flush = current_time
+                
                 # Explicitly flush stdout to ensure output appears in Docker logs immediately
                 sys.stdout.flush()
 
@@ -538,6 +685,24 @@ class TradingBot:
 
         except KeyboardInterrupt:
             self.console.print("\n[bold yellow]🛑 Bot stopped by user[/bold yellow]")
+            
+            # Stop monitoring service
+            if self.monitoring_running:
+                try:
+                    import asyncio
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                    loop.run_until_complete(self.monitoring_service.stop())
+                    loop.close()
+                    logger.info("Monitoring service stopped")
+                except Exception as e:
+                    logger.error(f"Error stopping monitoring service: {e}", exc_info=True)
+            
+            # Final metrics flush
+            try:
+                self._flush_metrics_to_supabase()
+            except Exception as e:
+                logger.error(f"Error in final metrics flush: {e}", exc_info=True)
 
             # Print final portfolio summary
             try:

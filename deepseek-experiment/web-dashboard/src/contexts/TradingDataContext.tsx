@@ -1,10 +1,11 @@
 import { createContext, useContext, useMemo, ReactNode } from 'react';
-import { Trade, Portfolio, PnLDataPoint, BotStatus } from '@/types/trading';
+import { Trade, Portfolio, PnLDataPoint, BotStatus, PortfolioSnapshot } from '@/types/trading';
 
 interface TradingDataState {
   trades: Trade[];
   portfolio: Portfolio | null;
   pnlData: PnLDataPoint[];
+  portfolioSnapshots: PortfolioSnapshot[];
   botStatus: BotStatus | null;
   isLoading: boolean;
   error: string | null;
@@ -30,6 +31,7 @@ export function TradingDataProvider({ children, value }: TradingDataProviderProp
     value.trades,
     value.portfolio,
     value.pnlData,
+    value.portfolioSnapshots,
     value.botStatus,
     value.isLoading,
     value.error,
@@ -74,6 +76,11 @@ export function useTrades() {
 export function usePnLData() {
   const { pnlData, isLoading, error } = useTradingDataContext();
   return useMemo(() => ({ pnlData, isLoading, error }), [pnlData, isLoading, error]);
+}
+
+export function usePortfolioSnapshots() {
+  const { portfolioSnapshots, isLoading, error } = useTradingDataContext();
+  return useMemo(() => ({ snapshots: portfolioSnapshots, isLoading, error }), [portfolioSnapshots, isLoading, error]);
 }
 
 export function useConnectionStatus() {

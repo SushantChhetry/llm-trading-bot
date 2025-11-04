@@ -923,80 +923,82 @@ class TradingEngine:
         sell_trades = [t for t in self.trades if t.get("side") == "sell"]
         profits = [t.get("profit", 0) for t in sell_trades]
 
-        if not profits:
-            return {
-                "win_rate": 0.0,
-                "avg_profit_per_trade": 0.0,
-                "max_drawdown": 0.0,
-                "sharpe_ratio": 0.0,
-                "volatility": 0.0,
-                "profit_factor": 0.0,
-                "avg_trade_duration_hours": 0.0,
-                "max_consecutive_wins": 0,
-                "max_consecutive_losses": 0,
-            }
+        # Initialize profit-based metrics (will be calculated if we have profits)
+        win_rate = 0.0
+        avg_profit = 0.0
+        max_drawdown = 0.0
+        sharpe_ratio = 0.0
+        volatility = 0.0
+        profit_factor = 0.0
+        avg_trade_duration = 0.0
+        max_consecutive_wins = 0
+        max_consecutive_losses = 0
+        excess_return = 0.0
+        risk_adjusted_return = 0.0
 
-        # Win rate
-        winning_trades = [p for p in profits if p > 0]
-        win_rate = (len(winning_trades) / len(profits) * 100) if profits else 0
+        # Calculate profit-based metrics only if we have closed trades
+        if profits:
+            # Win rate
+            winning_trades = [p for p in profits if p > 0]
+            win_rate = (len(winning_trades) / len(profits) * 100) if profits else 0
 
-        # Average profit per trade
-        avg_profit = sum(profits) / len(profits)
+            # Average profit per trade
+            avg_profit = sum(profits) / len(profits)
 
-        # Max drawdown
-        max_drawdown = self._calculate_max_drawdown(profits)
+            # Max drawdown
+            max_drawdown = self._calculate_max_drawdown(profits)
 
-        # Enhanced Sharpe ratio calculation (Alpha Arena style)
-        if len(profits) > 1:
-            mean_return = sum(profits) / len(profits)
-            variance = sum((p - mean_return) ** 2 for p in profits) / (len(profits) - 1)
-            volatility = variance**0.5
+            # Enhanced Sharpe ratio calculation (Alpha Arena style)
+            if len(profits) > 1:
+                mean_return = sum(profits) / len(profits)
+                variance = sum((p - mean_return) ** 2 for p in profits) / (len(profits) - 1)
+                volatility = variance**0.5
 
-            # Risk-free rate assumed to be 0 for crypto trading
-            risk_free_rate = 0.0
-            excess_return = mean_return - risk_free_rate
-            sharpe_ratio = excess_return / volatility if volatility > 0 else 0
+                # Risk-free rate assumed to be 0 for crypto trading
+                risk_free_rate = 0.0
+                excess_return = mean_return - risk_free_rate
+                sharpe_ratio = excess_return / volatility if volatility > 0 else 0
 
-            # Risk-adjusted return (excess return per unit of risk)
-            risk_adjusted_return = excess_return / max(volatility, 0.001)  # Avoid division by zero
-        else:
-            volatility = 0.0
-            sharpe_ratio = 0.0
-            excess_return = 0.0
-            risk_adjusted_return = 0.0
+                # Risk-adjusted return (excess return per unit of risk)
+                risk_adjusted_return = excess_return / max(volatility, 0.001)  # Avoid division by zero
+            else:
+                volatility = 0.0
+                sharpe_ratio = 0.0
+                excess_return = 0.0
+                risk_adjusted_return = 0.0
 
-        # Profit factor
-        gross_profit = sum(p for p in profits if p > 0)
-        gross_loss = abs(sum(p for p in profits if p < 0))
-        profit_factor = gross_profit / gross_loss if gross_loss > 0 else float("inf") if gross_profit > 0 else 0
+            # Profit factor
+            gross_profit = sum(p for p in profits if p > 0)
+            gross_loss = abs(sum(p for p in profits if p < 0))
+            profit_factor = gross_profit / gross_loss if gross_loss > 0 else float("inf") if gross_profit > 0 else 0
 
-        # Trade duration analysis
-        trade_durations = []
-        for trade in self.trades:
-            if "timestamp" in trade:
-                try:
-                    trade_time = datetime.fromisoformat(trade["timestamp"].replace("Z", "+00:00"))
-                    # Find corresponding buy trade for duration calculation
-                    if trade.get("side") == "sell":
-                        buy_trades = [
-                            t
-                            for t in self.trades
-                            if t.get("side") == "buy"
-                            and t.get("symbol") == trade.get("symbol")
-                            and t.get("timestamp") < trade.get("timestamp")
-                        ]
-                        if buy_trades:
-                            buy_time = datetime.fromisoformat(buy_trades[-1]["timestamp"].replace("Z", "+00:00"))
-                            duration = (trade_time - buy_time).total_seconds() / 3600  # hours
-                            trade_durations.append(duration)
-                except (ValueError, TypeError):
-                    continue
+            # Trade duration analysis
+            trade_durations = []
+            for trade in self.trades:
+                if "timestamp" in trade:
+                    try:
+                        trade_time = datetime.fromisoformat(trade["timestamp"].replace("Z", "+00:00"))
+                        # Find corresponding buy trade for duration calculation
+                        if trade.get("side") == "sell":
+                            buy_trades = [
+                                t
+                                for t in self.trades
+                                if t.get("side") == "buy"
+                                and t.get("symbol") == trade.get("symbol")
+                                and t.get("timestamp") < trade.get("timestamp")
+                            ]
+                            if buy_trades:
+                                buy_time = datetime.fromisoformat(buy_trades[-1]["timestamp"].replace("Z", "+00:00"))
+                                duration = (trade_time - buy_time).total_seconds() / 3600  # hours
+                                trade_durations.append(duration)
+                    except (ValueError, TypeError):
+                        continue
 
-        avg_trade_duration = sum(trade_durations) / len(trade_durations) if trade_durations else 0
+            avg_trade_duration = sum(trade_durations) / len(trade_durations) if trade_durations else 0
 
-        # Consecutive wins/losses
-        max_consecutive_wins = self._calculate_max_consecutive(profits, lambda x: x > 0)
-        max_consecutive_losses = self._calculate_max_consecutive(profits, lambda x: x < 0)
+            # Consecutive wins/losses
+            max_consecutive_wins = self._calculate_max_consecutive(profits, lambda x: x > 0)
+            max_consecutive_losses = self._calculate_max_consecutive(profits, lambda x: x < 0)
 
         # Alpha Arena behavioral pattern analysis
         behavioral_metrics = self._calculate_behavioral_metrics()
@@ -1099,14 +1101,13 @@ class TradingEngine:
 
         avg_holding_period = sum(holding_periods) / len(holding_periods) if holding_periods else 0.0
 
-        # Calculate trade frequency per day
+        # Calculate trade frequency per day (using time since first trade, not time between first and last)
         if self.trades:
             first_trade = min(self.trades, key=lambda x: x.get("timestamp", ""))
-            last_trade = max(self.trades, key=lambda x: x.get("timestamp", ""))
             try:
                 start_time = datetime.fromisoformat(first_trade["timestamp"].replace("Z", "+00:00"))
-                end_time = datetime.fromisoformat(last_trade["timestamp"].replace("Z", "+00:00"))
-                days_elapsed = (end_time - start_time).total_seconds() / (24 * 3600)
+                current_time = datetime.now(start_time.tzinfo) if start_time.tzinfo else datetime.now()
+                days_elapsed = (current_time - start_time).total_seconds() / (24 * 3600)
                 trade_frequency = len(self.trades) / max(days_elapsed, 0.001)  # Avoid division by zero
             except (ValueError, TypeError):
                 trade_frequency = 0.0

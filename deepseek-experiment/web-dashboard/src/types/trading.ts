@@ -84,3 +84,30 @@ export interface BotStatus {
   exchange: string;
   run_interval_seconds: number;
 }
+
+export interface PortfolioSnapshot {
+  id?: number;
+  timestamp: string;
+  balance: number;
+  positions_value: number;
+  total_value: number;
+  initial_balance?: number;
+  total_return: number;
+  total_return_pct: number;
+  total_trades: number;
+  unrealized_pnl?: number;
+  realized_pnl?: number;
+  total_fees?: number;
+  active_positions?: number;
+  sharpe_ratio?: number;
+  volatility?: number;
+  max_drawdown?: number;
+  win_rate?: number;
+  profit_factor?: number;
+  risk_adjusted_return?: number;
+  excess_return?: number;
+  avg_profit_per_trade?: number;
+  avg_trade_duration_hours?: number;
+  max_consecutive_wins?: number;
+  max_consecutive_losses?: number;
+}

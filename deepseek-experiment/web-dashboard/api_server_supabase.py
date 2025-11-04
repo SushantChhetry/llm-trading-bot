@@ -444,16 +444,39 @@ async def root():
 @app.get("/health")
 async def health():
     """
-    Simple health check endpoint for Railway.
-    Returns 200 if the service is running, regardless of dependency status.
-    This is a lightweight check that should always pass if the server is up.
+    Enhanced health check endpoint for Railway.
+    Returns 200 if the service is running, includes bot service health from Supabase.
     """
-    return {
+    health_data = {
         "status": "healthy",
         "service": "trading-bot-api",
         "version": "1.0.0",
-        "timestamp": datetime.now().isoformat()
+        "timestamp": datetime.now().isoformat(),
+        "supabase_connected": USE_SUPABASE
     }
+    
+    # Get bot service health from Supabase
+    if USE_SUPABASE and supabase:
+        try:
+            bot_health = supabase.get_latest_health(service_name="trading-bot")
+            if bot_health:
+                health_data["bot_service"] = {
+                    "status": bot_health.get("status", "unknown"),
+                    "last_check": bot_health.get("timestamp"),
+                    "details": bot_health.get("details", {})
+                }
+            else:
+                health_data["bot_service"] = {
+                    "status": "unknown",
+                    "message": "No health check data available"
+                }
+        except Exception as e:
+            health_data["bot_service"] = {
+                "status": "error",
+                "error": str(e)
+            }
+    
+    return health_data
 
 @app.get("/debug/supabase")
 async def debug_supabase():
@@ -569,6 +592,230 @@ async def stats():
 async def behavioral_metrics(limit: int = 50):
     """Get behavioral metrics."""
     return get_behavioral_metrics(limit)
+
+@app.get("/metrics")
+async def metrics(service_name: Optional[str] = None, metric_name: Optional[str] = None, limit: int = 1000):
+    """
+    Get metrics in Prometheus-style format (JSON).
+    Supports filtering by service_name and metric_name.
+    """
+    if not USE_SUPABASE or not supabase:
+        return {
+            "error": "Supabase not available",
+            "metrics": []
+        }
+    
+    try:
+        from datetime import timedelta
+        # Default to last 24 hours if no filter specified
+        since = datetime.now() - timedelta(hours=24) if not service_name and not metric_name else None
+        
+        metrics_data = supabase.get_metrics(
+            service_name=service_name,
+            metric_name=metric_name,
+            since=since,
+            limit=limit
+        )
+        
+        return {
+            "service": "trading-bot-api",
+            "timestamp": datetime.now().isoformat(),
+            "count": len(metrics_data),
+            "metrics": metrics_data
+        }
+    except Exception as e:
+        logger.error(f"Error fetching metrics: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/observability")
+async def observability():
+    """
+    Comprehensive observability endpoint.
+    Returns metrics, health status, and alerts for all services.
+    """
+    if not USE_SUPABASE or not supabase:
+        return {
+            "error": "Supabase not available",
+            "services": {}
+        }
+    
+    try:
+        from datetime import timedelta
+        
+        # Get metrics for all services (last hour)
+        since = datetime.now() - timedelta(hours=1)
+        all_metrics = supabase.get_metrics(since=since, limit=5000)
+        
+        # Get health status for all services
+        bot_health = supabase.get_latest_health(service_name="trading-bot")
+        api_health = {
+            "status": "healthy",
+            "service_name": "trading-bot-api",
+            "timestamp": datetime.now().isoformat(),
+            "details": {
+                "supabase_connected": USE_SUPABASE
+            }
+        }
+        
+        # Group metrics by service
+        services_metrics = {}
+        for metric in all_metrics:
+            svc_name = metric.get("service_name", "unknown")
+            if svc_name not in services_metrics:
+                services_metrics[svc_name] = []
+            services_metrics[svc_name].append(metric)
+        
+        # Aggregate metrics by type
+        metrics_summary = {}
+        for svc_name, metrics_list in services_metrics.items():
+            counters = {}
+            gauges = {}
+            histograms = {}
+            
+            for metric in metrics_list:
+                metric_name = metric.get("metric_name", "")
+                metric_type = metric.get("metric_type", "gauge")
+                value = metric.get("value", 0)
+                
+                if metric_type == "counter":
+                    counters[metric_name] = counters.get(metric_name, 0) + value
+                elif metric_type == "gauge":
+                    # For gauges, take the latest value
+                    if metric_name not in gauges or metric.get("timestamp", "") > gauges[metric_name].get("timestamp", ""):
+                        gauges[metric_name] = {
+                            "value": value,
+                            "timestamp": metric.get("timestamp", "")
+                        }
+                elif metric_type == "histogram":
+                    if metric_name not in histograms:
+                        histograms[metric_name] = []
+                    histograms[metric_name].append(value)
+            
+            metrics_summary[svc_name] = {
+                "counters": {k: v for k, v in counters.items()},
+                "gauges": {k: v.get("value") if isinstance(v, dict) else v for k, v in gauges.items()},
+                "histograms": {k: {"count": len(v), "min": min(v) if v else 0, "max": max(v) if v else 0, "avg": sum(v)/len(v) if v else 0} for k, v in histograms.items()}
+            }
+        
+        return {
+            "timestamp": datetime.now().isoformat(),
+            "services": {
+                "trading-bot": {
+                    "health": bot_health,
+                    "metrics": metrics_summary.get("trading-bot", {})
+                },
+                "trading-bot-api": {
+                    "health": api_health,
+                    "metrics": {}
+                }
+            },
+            "metrics_summary": metrics_summary
+        }
+    except Exception as e:
+        logger.error(f"Error fetching observability data: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/metrics/historical")
+async def metrics_historical(
+    service_name: Optional[str] = None,
+    metric_name: Optional[str] = None,
+    hours: int = 24,
+    limit: int = 10000
+):
+    """
+    Get historical metrics data for time-series analysis.
+    """
+    if not USE_SUPABASE or not supabase:
+        return {
+            "error": "Supabase not available",
+            "metrics": []
+        }
+    
+    try:
+        from datetime import timedelta
+        since = datetime.now() - timedelta(hours=hours)
+        
+        metrics_data = supabase.get_metrics(
+            service_name=service_name,
+            metric_name=metric_name,
+            since=since,
+            limit=limit
+        )
+        
+        # Group by metric name and create time series
+        time_series = {}
+        for metric in metrics_data:
+            name = metric.get("metric_name", "unknown")
+            if name not in time_series:
+                time_series[name] = []
+            time_series[name].append({
+                "timestamp": metric.get("timestamp", ""),
+                "value": metric.get("value", 0),
+                "type": metric.get("metric_type", "gauge")
+            })
+        
+        return {
+            "service": service_name or "all",
+            "metric": metric_name or "all",
+            "time_range_hours": hours,
+            "count": len(metrics_data),
+            "time_series": time_series,
+            "raw_metrics": metrics_data[:100]  # Include first 100 for reference
+        }
+    except Exception as e:
+        logger.error(f"Error fetching historical metrics: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/portfolio/snapshots")
+async def portfolio_snapshots(limit: int = 1000):
+    """Get portfolio snapshots history."""
+    if USE_SUPABASE and supabase:
+        try:
+            snapshots = supabase.get_portfolio_snapshots(limit)
+            logger.debug(f"Fetched {len(snapshots)} portfolio snapshots from Supabase")
+            return snapshots
+        except Exception as e:
+            logger.error(f"Error getting portfolio snapshots from Supabase: {e}")
+            return []
+    else:
+        # Fallback: generate snapshots from trades and current portfolio
+        logger.debug("Using fallback portfolio snapshots (Supabase not connected)")
+        portfolio = get_portfolio()
+        trades = get_trades(10000)
+        
+        if not trades:
+            return []
+        
+        # Generate snapshots from trades
+        snapshots = []
+        initial_balance = portfolio.get("initial_balance", config.INITIAL_BALANCE)
+        running_value = initial_balance
+        running_return = 0
+        
+        sorted_trades = sorted(trades, key=lambda t: t.get("timestamp", ""))
+        
+        for trade in sorted_trades:
+            if trade.get("side") == "buy":
+                running_value -= trade.get("amount_usdt", 0)
+            elif trade.get("side") == "sell":
+                running_value += trade.get("quantity", 0) * trade.get("price", 0)
+                if trade.get("profit"):
+                    running_return += trade.get("profit", 0)
+            
+            snapshots.append({
+                "timestamp": trade.get("timestamp", datetime.now().isoformat()),
+                "balance": running_value,
+                "total_value": running_value,
+                "positions_value": 0,
+                "total_return": running_return,
+                "total_return_pct": (running_return / initial_balance * 100) if initial_balance > 0 else 0,
+                "unrealized_pnl": 0,
+                "realized_pnl": running_return,
+                "total_fees": 0,
+                "active_positions": 0,
+            })
+        
+        return snapshots
 
 if __name__ == "__main__":
     import threading

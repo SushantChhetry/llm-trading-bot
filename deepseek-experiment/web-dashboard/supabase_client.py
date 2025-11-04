@@ -151,6 +151,24 @@ class SupabaseService:
             print(f"Error adding behavioral metrics: {e}")
             return False
 
+    def get_portfolio_snapshots(self, limit: int = 1000, order_by: str = "timestamp", desc: bool = True) -> List[Dict[str, Any]]:
+        """Get portfolio snapshots history from Supabase"""
+        try:
+            query = self.supabase.table("portfolio_snapshots").select("*")
+            if desc:
+                query = query.order(order_by, desc=True)
+            else:
+                query = query.order(order_by, desc=False)
+            response = query.limit(limit).execute()
+            if response.data:
+                # Reverse to get chronological order if desc was True
+                return list(reversed(response.data)) if desc else response.data
+            else:
+                return []
+        except Exception as e:
+            print(f"Error fetching portfolio snapshots: {e}")
+            return []
+
     def get_bot_config(self) -> Dict[str, str]:
         """Get bot configuration from Supabase"""
         try:

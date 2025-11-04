@@ -190,9 +190,43 @@ ALTER TABLE positions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE behavioral_metrics ENABLE ROW LEVEL SECURITY;
 ALTER TABLE bot_config ENABLE ROW LEVEL SECURITY;
 
+-- Create table for observability metrics
+CREATE TABLE IF NOT EXISTS observability_metrics (
+    id SERIAL PRIMARY KEY,
+    timestamp TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    service_name VARCHAR(50) NOT NULL,
+    metric_name VARCHAR(100) NOT NULL,
+    value DECIMAL(20, 8) NOT NULL,
+    metric_type VARCHAR(20) NOT NULL CHECK (metric_type IN ('counter', 'gauge', 'histogram')),
+    tags JSONB DEFAULT '{}'::jsonb,
+    unit VARCHAR(20) DEFAULT '',
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Create table for service health checks
+CREATE TABLE IF NOT EXISTS service_health (
+    id SERIAL PRIMARY KEY,
+    timestamp TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    service_name VARCHAR(50) NOT NULL,
+    status VARCHAR(20) NOT NULL CHECK (status IN ('healthy', 'degraded', 'unhealthy')),
+    details JSONB DEFAULT '{}'::jsonb,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Create indexes for observability tables
+CREATE INDEX IF NOT EXISTS idx_observability_metrics_timestamp ON observability_metrics(timestamp);
+CREATE INDEX IF NOT EXISTS idx_observability_metrics_service ON observability_metrics(service_name);
+CREATE INDEX IF NOT EXISTS idx_observability_metrics_name ON observability_metrics(metric_name);
+CREATE INDEX IF NOT EXISTS idx_observability_metrics_tags ON observability_metrics USING gin(tags);
+CREATE INDEX IF NOT EXISTS idx_service_health_timestamp ON service_health(timestamp);
+CREATE INDEX IF NOT EXISTS idx_service_health_service ON service_health(service_name);
+CREATE INDEX IF NOT EXISTS idx_service_health_status ON service_health(status);
+
 -- Create policies for public access (adjust based on your security needs)
 CREATE POLICY "Allow all operations on trades" ON trades FOR ALL USING (true);
 CREATE POLICY "Allow all operations on portfolio_snapshots" ON portfolio_snapshots FOR ALL USING (true);
 CREATE POLICY "Allow all operations on positions" ON positions FOR ALL USING (true);
 CREATE POLICY "Allow all operations on behavioral_metrics" ON behavioral_metrics FOR ALL USING (true);
 CREATE POLICY "Allow all operations on bot_config" ON bot_config FOR ALL USING (true);
+CREATE POLICY "Allow all operations on observability_metrics" ON observability_metrics FOR ALL USING (true);
+CREATE POLICY "Allow all operations on service_health" ON service_health FOR ALL USING (true);

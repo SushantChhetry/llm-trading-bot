@@ -173,6 +173,47 @@ async def get_stats():
         "total_return_pct": portfolio.get("total_return_pct", 0),
     }
 
+@app.get("/api/portfolio/snapshots")
+async def portfolio_snapshots(limit: int = 1000):
+    """Get portfolio snapshots history."""
+    # Fallback: generate snapshots from trades and current portfolio
+    portfolio = load_json_file(PORTFOLIO_FILE, {})
+    trades = load_json_file(TRADES_FILE, [])
+    
+    if not trades:
+        return []
+    
+    # Generate snapshots from trades
+    snapshots = []
+    initial_balance = float(portfolio.get("initial_balance", config.INITIAL_BALANCE))
+    running_value = initial_balance
+    running_return = 0
+    
+    sorted_trades = sorted(trades, key=lambda t: t.get("timestamp", ""))
+    
+    for trade in sorted_trades:
+        if trade.get("side") == "buy":
+            running_value -= trade.get("amount_usdt", 0)
+        elif trade.get("side") == "sell":
+            running_value += trade.get("quantity", 0) * trade.get("price", 0)
+            if trade.get("profit"):
+                running_return += trade.get("profit", 0)
+        
+        snapshots.append({
+            "timestamp": trade.get("timestamp", datetime.now().isoformat()),
+            "balance": running_value,
+            "total_value": running_value,
+            "positions_value": 0,
+            "total_return": running_return,
+            "total_return_pct": (running_return / initial_balance * 100) if initial_balance > 0 else 0,
+            "unrealized_pnl": 0,
+            "realized_pnl": running_return,
+            "total_fees": 0,
+            "active_positions": 0,
+        })
+    
+    return snapshots
+
 # WebSocket endpoint for real-time updates
 connected_clients = set()
 
