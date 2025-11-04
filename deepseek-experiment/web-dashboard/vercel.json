@@ -5,7 +5,7 @@
   "rewrites": [
     {
       "source": "/api/(.*)",
-      "destination": "https://llm-trading-bot-production.up.railway.app/api/$1"
+      "destination": "https://llm-trading-bot-production-4ede.up.railway.app/api/$1"
     }
   ],
   "headers": [

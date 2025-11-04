@@ -6,6 +6,10 @@ ALTER TABLE trades
 ADD COLUMN IF NOT EXISTS llm_provider VARCHAR(50),
 ADD COLUMN IF NOT EXISTS llm_model VARCHAR(100);
 
+-- Add llm_position_size_usdt to trades table
+ALTER TABLE trades
+ADD COLUMN IF NOT EXISTS llm_position_size_usdt DECIMAL(20, 8) DEFAULT 0.0;
+
 -- Ensure profit and profit_pct columns exist (they should, but adding IF NOT EXISTS for safety)
 ALTER TABLE trades
 ADD COLUMN IF NOT EXISTS profit DECIMAL(20, 8),
@@ -139,11 +143,21 @@ BEGIN
     END IF;
 END $$;
 
+-- Add avg_profit_per_trade to portfolio_snapshots table
+ALTER TABLE portfolio_snapshots
+ADD COLUMN IF NOT EXISTS avg_profit_per_trade DECIMAL(20, 8) DEFAULT 0.0;
+
 -- Verify the columns were added
 SELECT column_name, data_type
 FROM information_schema.columns
 WHERE table_name = 'trades'
-AND column_name IN ('llm_provider', 'llm_model', 'profit', 'profit_pct')
+AND column_name IN ('llm_provider', 'llm_model', 'llm_position_size_usdt', 'profit', 'profit_pct')
+ORDER BY column_name;
+
+SELECT column_name, data_type
+FROM information_schema.columns
+WHERE table_name = 'portfolio_snapshots'
+AND column_name = 'avg_profit_per_trade'
 ORDER BY column_name;
 
 SELECT column_name, data_type
