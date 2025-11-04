@@ -1,6 +1,6 @@
 # Production Dockerfile for API Server
-# Railway root should be set to: deepseek-experiment (parent directory)
-# This allows access to both web-dashboard and config directories
+# Railway root is set to: web-dashboard
+# This version works standalone from web-dashboard directory
 FROM python:3.13-slim
 
 # Set working directory
@@ -17,22 +17,48 @@ RUN apt-get update && apt-get install -y \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements from web-dashboard
-COPY web-dashboard/requirements.txt /tmp/requirements.txt
+# Copy requirements
+COPY requirements.txt /tmp/requirements.txt
 
 # Install Python dependencies
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r /tmp/requirements.txt
 
-# Copy API server files from web-dashboard
-COPY web-dashboard/api_server_supabase.py .
-COPY web-dashboard/supabase_client.py .
+# Copy API server files
+COPY api_server_supabase.py .
+COPY supabase_client.py .
 
-# Copy config directory (needed for imports)
-COPY config ./config
+# Create minimal config structure (since we can't access parent)
+# Create config directory and __init__.py
+RUN mkdir -p config && \
+    echo '"""Configuration module for the trading bot."""' > config/__init__.py
+
+# Create a proper config.py file
+RUN cat > config/config.py << 'EOF'
+"""Configuration settings for the trading bot."""
+import os
+from pathlib import Path
+from dotenv import load_dotenv
+
+load_dotenv()
+
+PROJECT_ROOT = Path("/app")
+DATA_DIR = PROJECT_ROOT / "data"
+LOG_DIR = DATA_DIR / "logs"
+
+DATA_DIR.mkdir(exist_ok=True)
+LOG_DIR.mkdir(exist_ok=True)
+
+# Minimal config class - most values come from environment variables
+class Config:
+    DATA_DIR = DATA_DIR
+    LOG_DIR = LOG_DIR
+
+config = Config()
+EOF
 
 # Create necessary directories
-RUN mkdir -p data/logs
+RUN mkdir -p data/logs config
 
 # Expose port (Railway sets PORT env var automatically)
 EXPOSE 8001

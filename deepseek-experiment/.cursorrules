@@ -10,10 +10,14 @@
 - ✅ **ALWAYS** follow the import patterns specified below
 - ✅ **ALWAYS** place files in the correct directories as specified
 - ✅ **ALWAYS** follow naming conventions (snake_case for files/functions, PascalCase for classes)
+- ✅ **ALWAYS** ensure files end with exactly one newline character
+- ✅ **ALWAYS** remove trailing whitespace from all lines
 - ✅ **NEVER** use blocking I/O in async contexts
 - ✅ **NEVER** create documentation files unless explicitly requested
 - ✅ **NEVER** commit code without type hints
 - ✅ **NEVER** use `SELECT *` in database queries
+- ✅ **NEVER** leave trailing whitespace at the end of lines
+- ✅ **NEVER** create files without a final newline
 
 When writing code, reference this file and ensure compliance with ALL sections.
 
@@ -113,6 +117,18 @@ When writing code, reference this file and ensure compliance with ALL sections.
   - Database failures should not stop trading cycles (log to file as backup)
 
 ## Code Quality Standards
+
+### File Formatting Rules
+- **Trailing Whitespace**: NEVER leave trailing whitespace at the end of lines
+  - ❌ NEVER: Lines ending with spaces or tabs
+  - ✅ ALWAYS: Lines end immediately after the last character
+  - This applies to ALL file types: Python, Markdown, JSON, YAML, TypeScript, etc.
+
+- **End of File**: ALL files MUST end with exactly one newline character
+  - ❌ NEVER: Files ending without a newline
+  - ❌ NEVER: Files ending with multiple newlines
+  - ✅ ALWAYS: Files end with exactly one newline (`\n`)
+  - This is required for pre-commit hooks and POSIX compliance
 
 ### Python Best Practices
 - **Type Hints**: ALL functions MUST have type hints. Code without type hints is INVALID.
@@ -456,6 +472,8 @@ async def save_trades_batch(self, trades: List[Dict[str, Any]]) -> None:
 6. ✅ Verify naming conventions are followed
 7. ✅ Run `black` and `isort` on all Python files
 8. ✅ Ensure code passes all linter checks
+9. ✅ Verify NO trailing whitespace on any lines (for ALL file types)
+10. ✅ Verify ALL files end with exactly one newline character
 
 **Remember**: This is a real-time trading system. Every millisecond counts. Optimize aggressively for the critical path (data fetch → LLM decision → trade execution).
 
