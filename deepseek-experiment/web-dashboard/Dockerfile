@@ -33,29 +33,8 @@ COPY supabase_client.py .
 RUN mkdir -p config && \
     echo '"""Configuration module for the trading bot."""' > config/__init__.py
 
-# Create a proper config.py file
-RUN cat > config/config.py << 'EOF'
-"""Configuration settings for the trading bot."""
-import os
-from pathlib import Path
-from dotenv import load_dotenv
-
-load_dotenv()
-
-PROJECT_ROOT = Path("/app")
-DATA_DIR = PROJECT_ROOT / "data"
-LOG_DIR = DATA_DIR / "logs"
-
-DATA_DIR.mkdir(exist_ok=True)
-LOG_DIR.mkdir(exist_ok=True)
-
-# Minimal config class - most values come from environment variables
-class Config:
-    DATA_DIR = DATA_DIR
-    LOG_DIR = LOG_DIR
-
-config = Config()
-EOF
+# Copy config.py file (created separately to avoid heredoc issues)
+COPY config_config.py config/config.py
 
 # Create necessary directories
 RUN mkdir -p data/logs config
