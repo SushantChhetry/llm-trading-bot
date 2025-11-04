@@ -83,16 +83,65 @@ class SupabaseService:
             response = self.supabase.table("trades").select("*").order("timestamp", desc=True).limit(limit).execute()
             return response.data
         except Exception as e:
-            print(f"Error fetching trades: {e}")
+            error_str = str(e)
+            if hasattr(e, 'message'):
+                error_str = str(e.message)
+            logger.error(f"Error fetching trades: {error_str}")
             return []
 
     def add_trade(self, trade_data: Dict[str, Any]) -> bool:
         """Add a new trade to Supabase"""
         try:
-            response = self.supabase.table("trades").insert(trade_data).execute()
+            # Create a copy to avoid modifying the original
+            insert_data = trade_data.copy()
+            
+            # Remove 'id' field if present - Supabase will auto-generate it
+            # The 'id' in trade_data is just a local counter, not a database ID
+            if "id" in insert_data:
+                del insert_data["id"]
+            
+            # Map any field name mismatches if needed
+            # The trade dict might have different field names than the schema expects
+            field_mapping = {
+                "fees": "trading_fee",  # Some trades might use 'fees' instead of 'trading_fee'
+            }
+            
+            # Rename fields if they exist with old names
+            for old_name, new_name in field_mapping.items():
+                if old_name in insert_data and new_name not in insert_data:
+                    insert_data[new_name] = insert_data.pop(old_name)
+            
+            # Filter out None values to avoid schema issues
+            filtered_data = {k: v for k, v in insert_data.items() if v is not None}
+            
+            response = self.supabase.table("trades").insert(filtered_data).execute()
             return len(response.data) > 0
         except Exception as e:
-            print(f"Error adding trade: {e}")
+            error_str = str(e)
+            
+            # Try to extract error message from Supabase exception
+            # Supabase exceptions may have a 'message' attribute or be wrapped
+            if hasattr(e, 'message'):
+                error_str = str(e.message)
+            elif hasattr(e, 'args') and len(e.args) > 0:
+                if isinstance(e.args[0], dict):
+                    # Error might be a dict with 'message' key
+                    error_str = e.args[0].get('message', error_str)
+                else:
+                    error_str = str(e.args[0])
+            
+            # Check for schema/column errors
+            if "PGRST204" in error_str or "PGRST205" in error_str or "column" in error_str.lower() or "schema cache" in error_str.lower():
+                logger.error(
+                    f"Error adding trade - schema issue: {error_str}\n"
+                    f"Trade data keys: {list(trade_data.keys())}\n"
+                    f"💡 Check if all required columns exist in Supabase. Run migration: scripts/supabase_schema.sql"
+                )
+            else:
+                logger.error(f"Error adding trade: {error_str}")
+                logger.debug(f"Trade data (first 10 keys): {list(trade_data.keys())[:10]}")
+                if hasattr(e, '__class__'):
+                    logger.debug(f"Exception type: {e.__class__.__name__}")
             return False
 
     def get_portfolio(self) -> Optional[Dict[str, Any]]:
