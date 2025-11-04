@@ -2,12 +2,15 @@
 Supabase client for trading bot database operations
 """
 
+import logging
 import os
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from supabase import Client, create_client
+
+logger = logging.getLogger(__name__)
 
 
 # Load environment variables from .env file
@@ -32,6 +35,12 @@ class SupabaseService:
         self.supabase_url = os.getenv("SUPABASE_URL")
         self.supabase_key = os.getenv("SUPABASE_KEY")  # Anon key (for reads)
         self.supabase_service_key = os.getenv("SUPABASE_SERVICE_KEY")  # Service role key (for writes)
+        
+        # Track if observability tables exist to avoid repeated error messages
+        self._observability_metrics_table_exists = True
+        self._service_health_table_exists = True
+        self._observability_error_logged = False
+        self._health_check_error_logged = False
 
         if not self.supabase_url:
             raise ValueError("SUPABASE_URL environment variable is required")
@@ -239,6 +248,10 @@ class SupabaseService:
         unit: str = "",
     ) -> bool:
         """Add a metric to observability_metrics table"""
+        # Skip if we know the table doesn't exist
+        if not self._observability_metrics_table_exists:
+            return False
+            
         try:
             metric_data = {
                 "timestamp": datetime.now().isoformat(),
@@ -252,13 +265,30 @@ class SupabaseService:
             response = self.supabase.table("observability_metrics").insert(metric_data).execute()
             return len(response.data) > 0
         except Exception as e:
-            print(f"Error adding metric: {e}")
+            error_str = str(e)
+            # Check if it's the "table not found" error (PGRST205)
+            if "PGRST205" in error_str or ("schema cache" in error_str.lower() and "observability_metrics" in error_str.lower()):
+                self._observability_metrics_table_exists = False
+                if not self._observability_error_logged:
+                    logger.warning(
+                        "observability_metrics table not found in Supabase. "
+                        "Metrics will not be saved. To enable metrics, run the schema migration: "
+                        "scripts/supabase_schema.sql in your Supabase SQL Editor."
+                    )
+                    self._observability_error_logged = True
+            else:
+                # Log other errors at debug level to reduce noise
+                logger.debug(f"Error adding metric: {e}")
             return False
 
     def add_health_check(
         self, service_name: str, status: str, details: Optional[Dict[str, Any]] = None
     ) -> bool:
         """Add a health check snapshot to service_health table"""
+        # Skip if we know the table doesn't exist
+        if not self._service_health_table_exists:
+            return False
+            
         try:
             if status not in ["healthy", "degraded", "unhealthy"]:
                 raise ValueError(f"Invalid status: {status}. Must be 'healthy', 'degraded', or 'unhealthy'")
@@ -272,7 +302,20 @@ class SupabaseService:
             response = self.supabase.table("service_health").insert(health_data).execute()
             return len(response.data) > 0
         except Exception as e:
-            print(f"Error adding health check: {e}")
+            error_str = str(e)
+            # Check if it's the "table not found" error (PGRST205)
+            if "PGRST205" in error_str or ("schema cache" in error_str.lower() and "service_health" in error_str.lower()):
+                self._service_health_table_exists = False
+                if not self._health_check_error_logged:
+                    logger.warning(
+                        "service_health table not found in Supabase. "
+                        "Health checks will not be saved. To enable health checks, run the schema migration: "
+                        "scripts/supabase_schema.sql in your Supabase SQL Editor."
+                    )
+                    self._health_check_error_logged = True
+            else:
+                # Log other errors at debug level to reduce noise
+                logger.debug(f"Error adding health check: {e}")
             return False
 
     def get_metrics(
