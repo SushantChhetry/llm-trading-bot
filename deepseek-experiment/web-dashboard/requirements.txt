@@ -5,16 +5,13 @@
 # FastAPI and server
 fastapi==0.104.1
 uvicorn[standard]==0.24.0
-websockets==12.0
+websockets>=13.0  # Latest version compatible with Python 3.13
 python-multipart==0.0.6
 
-# Database - Using known compatible versions to avoid proxy argument error
-# These versions are known to work together
-# Let supabase manage its sub-dependencies to avoid conflicts
-supabase==2.8.1
-gotrue==2.8.1
-httpx==0.24.1
-# postgrest, storage3, realtime will be installed automatically by supabase
+# Database - Using latest versions compatible with Python 3.13
+# We don't use realtime features, so we can use newer versions
+supabase>=2.9.0
+# Let supabase manage its sub-dependencies (gotrue, httpx, postgrest, storage3, realtime)
 
 # Configuration
 python-dotenv>=1.0.0

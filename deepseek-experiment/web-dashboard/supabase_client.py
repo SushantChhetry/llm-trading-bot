@@ -41,16 +41,15 @@ class SupabaseService:
 
         try:
             self.supabase: Client = create_client(self.supabase_url, self.supabase_key)
-        except TypeError as e:
+        except (TypeError, ImportError, ModuleNotFoundError) as e:
             error_msg = str(e)
-            if "proxy" in error_msg.lower():
-                # Compatibility issue: supabase-py version mismatch with gotrue/httpx
+            # Compatibility issues with supabase-py dependencies
+            if "proxy" in error_msg.lower() or "websockets" in error_msg.lower() or "realtime" in error_msg.lower():
                 raise ValueError(
-                    f"Supabase client initialization failed due to version compatibility issue: {error_msg}\n"
-                    "Please upgrade supabase-py to version >=2.9.0:\n"
-                    "  pip install --upgrade 'supabase>=2.9.0'\n"
-                    "Or install compatible versions:\n"
-                    "  pip install 'supabase==2.8.1' 'gotrue==2.8.1' 'httpx==0.24.1'"
+                    f"Supabase client initialization failed due to dependency compatibility issue: {error_msg}\n"
+                    "Please ensure you're using supabase-py >=2.9.0 with compatible dependencies:\n"
+                    "  pip install --upgrade 'supabase>=2.9.0' 'websockets>=13.0'\n"
+                    "Or check your Python version (Python 3.13 requires latest package versions)"
                 ) from e
             raise
 
