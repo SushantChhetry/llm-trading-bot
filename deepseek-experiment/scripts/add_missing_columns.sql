@@ -147,6 +147,18 @@ END $$;
 ALTER TABLE portfolio_snapshots
 ADD COLUMN IF NOT EXISTS avg_profit_per_trade DECIMAL(20, 8) DEFAULT 0.0;
 
+-- Add avg_trade_duration_hours to portfolio_snapshots table
+ALTER TABLE portfolio_snapshots
+ADD COLUMN IF NOT EXISTS avg_trade_duration_hours DECIMAL(8, 2);
+
+-- Add max_consecutive_wins to portfolio_snapshots table
+ALTER TABLE portfolio_snapshots
+ADD COLUMN IF NOT EXISTS max_consecutive_wins INTEGER;
+
+-- Add max_consecutive_losses to portfolio_snapshots table
+ALTER TABLE portfolio_snapshots
+ADD COLUMN IF NOT EXISTS max_consecutive_losses INTEGER;
+
 -- Verify the columns were added
 SELECT column_name, data_type
 FROM information_schema.columns
@@ -157,7 +169,7 @@ ORDER BY column_name;
 SELECT column_name, data_type
 FROM information_schema.columns
 WHERE table_name = 'portfolio_snapshots'
-AND column_name = 'avg_profit_per_trade'
+AND column_name IN ('avg_profit_per_trade', 'avg_trade_duration_hours', 'max_consecutive_wins', 'max_consecutive_losses')
 ORDER BY column_name;
 
 SELECT column_name, data_type

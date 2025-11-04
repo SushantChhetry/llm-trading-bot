@@ -37,7 +37,20 @@ class SupabaseService:
         if not self.supabase_key:
             raise ValueError("SUPABASE_KEY environment variable is required")
 
-        self.supabase: Client = create_client(self.supabase_url, self.supabase_key)
+        try:
+            self.supabase: Client = create_client(self.supabase_url, self.supabase_key)
+        except TypeError as e:
+            error_msg = str(e)
+            if "proxy" in error_msg.lower():
+                # Compatibility issue: supabase-py version mismatch with gotrue/httpx
+                raise ValueError(
+                    f"Supabase client initialization failed due to version compatibility issue: {error_msg}\n"
+                    "Please upgrade supabase-py to version >=2.9.0:\n"
+                    "  pip install --upgrade 'supabase>=2.9.0'\n"
+                    "Or install compatible versions:\n"
+                    "  pip install 'supabase==2.8.1' 'gotrue==2.8.1' 'httpx==0.24.1'"
+                ) from e
+            raise
 
     def get_trades(self, limit: int = 100) -> List[Dict[str, Any]]:
         """Get recent trades from Supabase"""
@@ -71,10 +84,18 @@ class SupabaseService:
     def update_portfolio(self, portfolio_data: Dict[str, Any]) -> bool:
         """Update portfolio snapshot in Supabase"""
         try:
-            response = self.supabase.table("portfolio_snapshots").insert(portfolio_data).execute()
+            # Filter out None values to avoid schema issues
+            filtered_data = {k: v for k, v in portfolio_data.items() if v is not None}
+            response = self.supabase.table("portfolio_snapshots").insert(filtered_data).execute()
             return len(response.data) > 0
         except Exception as e:
-            print(f"Error updating portfolio: {e}")
+            error_msg = str(e)
+            # Check if it's a schema error (missing column)
+            if "PGRST204" in error_msg or "column" in error_msg.lower() and "schema cache" in error_msg.lower():
+                print(f"Error updating portfolio - missing column in database schema: {e}")
+                print("💡 Run the migration script: scripts/add_missing_columns.sql in your Supabase SQL Editor")
+            else:
+                print(f"Error updating portfolio: {e}")
             return False
 
     def get_positions(self) -> List[Dict[str, Any]]:

@@ -39,7 +39,20 @@ class SupabaseService:
         if not self.supabase_key:
             raise ValueError("SUPABASE_KEY environment variable is required")
 
-        self.supabase: Client = create_client(self.supabase_url, self.supabase_key)
+        try:
+            self.supabase: Client = create_client(self.supabase_url, self.supabase_key)
+        except TypeError as e:
+            error_msg = str(e)
+            if "proxy" in error_msg.lower():
+                # Compatibility issue: supabase-py version mismatch with gotrue/httpx
+                raise ValueError(
+                    f"Supabase client initialization failed due to version compatibility issue: {error_msg}\n"
+                    "Please upgrade supabase-py to version >=2.9.0:\n"
+                    "  pip install --upgrade 'supabase>=2.9.0'\n"
+                    "Or install compatible versions:\n"
+                    "  pip install 'supabase==2.8.1' 'gotrue==2.8.1' 'httpx==0.24.1'"
+                ) from e
+            raise
 
     def get_trades(self, limit: int = 100) -> List[Dict[str, Any]]:
         """Get recent trades from Supabase"""
