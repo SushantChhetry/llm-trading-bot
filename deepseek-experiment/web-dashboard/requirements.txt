@@ -8,8 +8,14 @@ uvicorn[standard]==0.24.0
 websockets==12.0
 python-multipart==0.0.6
 
-# Database
-supabase>=2.9.0
+# Database - Using known compatible versions to avoid proxy argument error
+# These versions are known to work together
+supabase==2.8.1
+gotrue==2.8.1
+httpx==0.24.1
+postgrest==0.16.5
+storage3==0.7.4
+realtime==2.4.2
 
 # Configuration
 python-dotenv>=1.0.0
