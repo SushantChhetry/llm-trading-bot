@@ -45,10 +45,13 @@ class SupabaseService:
         """Get recent trades from Supabase"""
         try:
             response = self.supabase.table("trades").select("*").order("timestamp", desc=True).limit(limit).execute()
-            return response.data
+            if response.data:
+                return response.data
+            else:
+                return []
         except Exception as e:
             print(f"Error fetching trades: {e}")
-            return []
+            raise  # Re-raise to see the actual error
 
     def add_trade(self, trade_data: Dict[str, Any]) -> bool:
         """Add a new trade to Supabase"""

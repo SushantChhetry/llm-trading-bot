@@ -141,14 +141,24 @@ else:
 # Initialize Supabase service
 supabase = None
 USE_SUPABASE = False
+SUPABASE_ERROR = None
 try:
     supabase = get_supabase_service()
-    USE_SUPABASE = True
-    logger.info("Connected to Supabase database")
+    # Test the connection by trying to get trades
+    try:
+        test_trades = supabase.get_trades(limit=1)
+        USE_SUPABASE = True
+        logger.info(f"Connected to Supabase database (test query returned {len(test_trades)} trades)")
+    except Exception as test_e:
+        logger.warning(f"Supabase connection test failed: {test_e}")
+        USE_SUPABASE = False
+        SUPABASE_ERROR = str(test_e)
+        supabase = None
 except Exception as e:
     logger.warning(f"Supabase connection failed: {e}")
     logger.info("Falling back to JSON file storage")
     USE_SUPABASE = False
+    SUPABASE_ERROR = str(e)
     supabase = None
 
 # Fallback data file paths
@@ -201,11 +211,16 @@ def get_trades(limit: int = 100) -> List[Dict[str, Any]]:
     """Get recent trades."""
     if USE_SUPABASE and supabase:
         try:
-            return supabase.get_trades(limit)
+            trades = supabase.get_trades(limit)
+            logger.debug(f"Fetched {len(trades)} trades from Supabase")
+            return trades
         except Exception as e:
-            logger.error(f"Error getting trades from Supabase: {e}")
-            return []
+            logger.error(f"Error getting trades from Supabase: {e}", exc_info=True)
+            # Fallback to JSON file on error
+            trades = load_json_file(TRADES_FILE, [])
+            return trades[-limit:] if trades else []
     else:
+        logger.debug("Using JSON file storage (Supabase not connected)")
         trades = load_json_file(TRADES_FILE, [])
         return trades[-limit:] if trades else []
 
@@ -418,7 +433,13 @@ def start_websocket_server():
 @app.get("/")
 async def root():
     """Root endpoint."""
-    return {"message": "Trading Bot API Server", "version": "1.0.0", "database": "Supabase" if USE_SUPABASE else "JSON"}
+    return {
+        "message": "Trading Bot API Server",
+        "version": "1.0.0",
+        "database": "Supabase" if USE_SUPABASE else "JSON",
+        "supabase_connected": USE_SUPABASE,
+        "supabase_error": SUPABASE_ERROR if SUPABASE_ERROR else None
+    }
 
 @app.get("/health")
 async def health():
@@ -433,6 +454,30 @@ async def health():
         "version": "1.0.0",
         "timestamp": datetime.now().isoformat()
     }
+
+@app.get("/debug/supabase")
+async def debug_supabase():
+    """Debug endpoint to check Supabase connection status."""
+    debug_info = {
+        "supabase_connected": USE_SUPABASE,
+        "supabase_error": SUPABASE_ERROR,
+        "has_supabase_client": supabase is not None,
+        "supabase_url": os.getenv("SUPABASE_URL", "NOT SET")[:50] + "..." if os.getenv("SUPABASE_URL") else "NOT SET",
+        "supabase_key_set": bool(os.getenv("SUPABASE_KEY")),
+        "supabase_key_length": len(os.getenv("SUPABASE_KEY", ""))
+    }
+
+    if USE_SUPABASE and supabase:
+        try:
+            test_trades = supabase.get_trades(limit=1)
+            debug_info["test_query_success"] = True
+            debug_info["test_trades_count"] = len(test_trades)
+            debug_info["test_trades_sample"] = test_trades[0] if test_trades else None
+        except Exception as e:
+            debug_info["test_query_success"] = False
+            debug_info["test_query_error"] = str(e)
+
+    return debug_info
 
 @app.get("/ready")
 async def ready():
