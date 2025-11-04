@@ -30,11 +30,15 @@ COPY supabase_client.py .
 
 # Create minimal config structure (since we can't access parent)
 # Create config directory and __init__.py
-RUN mkdir -p config && \
-    echo '"""Configuration module for the trading bot."""' > config/__init__.py
+RUN mkdir -p config
 
 # Copy config.py file (created separately to avoid heredoc issues)
 COPY config_config.py config/config.py
+
+# Create __init__.py that exports config
+# We need to import from .config to avoid circular import issues
+RUN echo '"""Configuration module for the trading bot."""' > config/__init__.py && \
+    echo 'from .config import config' >> config/__init__.py
 
 # Create necessary directories
 RUN mkdir -p data/logs config
