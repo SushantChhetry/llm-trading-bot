@@ -9,6 +9,10 @@ LLM_PROVIDER="deepseek"
 LLM_API_KEY="sk-your-deepseek-api-key-here"
 LLM_MODEL="deepseek-chat"
 TRADING_MODE="paper"
+# ⚠️  CRITICAL: To enable live trading, you MUST also set:
+# TRADING_MODE_LIVE_CONFIRMED="yes"
+# This prevents accidental real money trading
+# NEVER set TRADING_MODE="live" without TRADING_MODE_LIVE_CONFIRMED="yes"
 USE_TESTNET="true"
 # Note: With Kraken, USE_TESTNET has limited effect as Kraken doesn't provide a testnet environment
 # Paper trading is controlled by TRADING_MODE=paper, not by testnet settings
@@ -126,6 +130,9 @@ LLM_PROVIDER="deepseek"
 LLM_API_KEY="sk-your-deepseek-api-key-here"
 LLM_MODEL="deepseek-chat"
 TRADING_MODE="live"
+# ⚠️  CRITICAL: Must also set TRADING_MODE_LIVE_CONFIRMED="yes" to enable live trading
+# This prevents accidental real money trading
+TRADING_MODE_LIVE_CONFIRMED="yes"
 USE_TESTNET="false"
 EXCHANGE="kraken"
 SYMBOL="BTC/USDT"

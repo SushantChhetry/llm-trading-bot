@@ -30,15 +30,31 @@ load_env_file()
 class SupabaseService:
     def __init__(self):
         self.supabase_url = os.getenv("SUPABASE_URL")
-        self.supabase_key = os.getenv("SUPABASE_KEY")
+        self.supabase_key = os.getenv("SUPABASE_KEY")  # Anon key (for reads)
+        self.supabase_service_key = os.getenv("SUPABASE_SERVICE_KEY")  # Service role key (for writes)
 
         if not self.supabase_url:
             raise ValueError("SUPABASE_URL environment variable is required")
-        if not self.supabase_key:
-            raise ValueError("SUPABASE_KEY environment variable is required")
+        
+        # Use service key if available (for writes), fall back to anon key (for reads only)
+        # Service role key bypasses RLS, anon key is subject to RLS policies
+        key_to_use = self.supabase_service_key or self.supabase_key
+        
+        if not key_to_use:
+            raise ValueError("SUPABASE_KEY or SUPABASE_SERVICE_KEY environment variable is required")
+        
+        # Warn if using anon key for writes (will fail with proper RLS)
+        if not self.supabase_service_key and self.supabase_key:
+            import warnings
+            warnings.warn(
+                "⚠️  Using SUPABASE_KEY (anon key) for all operations. "
+                "Set SUPABASE_SERVICE_KEY for write operations to work with RLS policies. "
+                "Write operations may fail once database RLS is properly configured.",
+                UserWarning
+            )
 
         try:
-            self.supabase: Client = create_client(self.supabase_url, self.supabase_key)
+            self.supabase: Client = create_client(self.supabase_url, key_to_use)
         except TypeError as e:
             error_msg = str(e)
             if "proxy" in error_msg.lower():

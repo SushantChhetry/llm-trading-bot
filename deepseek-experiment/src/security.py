@@ -172,6 +172,23 @@ class SecurityManager:
         """Hash sensitive data for logging/storage."""
         return hashlib.sha256(data.encode()).hexdigest()[:16]
 
+    @staticmethod
+    def mask_api_key(key: str) -> str:
+        """
+        Mask API key for logging (show only first 8 and last 4 chars).
+        
+        Args:
+            key: API key to mask
+            
+        Returns:
+            Masked key string (e.g., "sk-12345...xyz")
+        """
+        if not key or len(key) < 8:
+            return "***"
+        if len(key) <= 12:
+            return f"{key[:4]}...{key[-4:]}"
+        return f"{key[:8]}...{key[-4:]}"
+
 
 def secure_api_key_required(provider: str):
     """

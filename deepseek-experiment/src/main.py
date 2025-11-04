@@ -117,6 +117,20 @@ class TradingBot:
 
         self.console.print(status_table)
 
+        # CRITICAL: Display live trading warning if in live mode
+        if config.TRADING_MODE == "live":
+            self.console.print(
+                Panel.fit(
+                    "[bold red]🚨 LIVE TRADING MODE - REAL MONEY AT RISK![/bold red]\n"
+                    "[yellow]Ensure you have tested thoroughly in paper mode![/yellow]\n"
+                    "[dim]Starting bot in 5 seconds...[/dim]",
+                    border_style="red",
+                    padding=(1, 2),
+                )
+            )
+            # Add 5-second delay for operator awareness
+            time.sleep(5)
+
         # Log hyperparameters for experiment tracking
         self._log_hyperparameters()
 

@@ -156,12 +156,54 @@ class StartupValidator:
             if max_position_size > 0.5:
                 self.warnings.append(f"MAX_POSITION_SIZE ({max_position_size}) exceeds recommended limit (0.5)")
 
-            trading_mode = os.getenv("TRADING_MODE", "paper")
+            trading_mode = os.getenv("TRADING_MODE", "paper").lower()
+            
+            # CRITICAL: Validate live trading mode with confirmation requirement
             if trading_mode == "live":
+                # Require explicit confirmation to prevent accidental live trading
+                confirmation = os.getenv("TRADING_MODE_LIVE_CONFIRMED", "").lower()
+                if confirmation != "yes":
+                    self.errors.append(
+                        "🚨 LIVE TRADING MODE DETECTED BUT NOT CONFIRMED!\n"
+                        "   To enable live trading, set: TRADING_MODE_LIVE_CONFIRMED=yes\n"
+                        "   This prevents accidental real money trading.\n"
+                        "   ⚠️  WARNING: Live trading uses real money - ensure you have tested thoroughly!"
+                    )
+                    return  # Exit early - don't proceed with other validations
+                
+                # Additional checks for live mode
+                llm_provider = os.getenv("LLM_PROVIDER", "").lower()
+                llm_api_key = os.getenv("LLM_API_KEY", "")
+                
+                if llm_provider == "mock" or not llm_api_key:
+                    self.errors.append(
+                        "Live trading requires real LLM API key. "
+                        f"Current LLM_PROVIDER={llm_provider}, LLM_API_KEY={'SET' if llm_api_key else 'NOT SET'}"
+                    )
+                
                 exchange_api_key = os.getenv("EXCHANGE_API_KEY")
                 exchange_api_secret = os.getenv("EXCHANGE_API_SECRET")
                 if not exchange_api_key or not exchange_api_secret:
-                    self.errors.append("EXCHANGE_API_KEY and EXCHANGE_API_SECRET required for live trading")
+                    self.errors.append(
+                        "EXCHANGE_API_KEY and EXCHANGE_API_SECRET required for live trading"
+                    )
+                
+                # Log warning about live trading
+                logger.warning("=" * 60)
+                logger.warning("🚨 LIVE TRADING MODE ENABLED - REAL MONEY AT RISK!")
+                logger.warning("=" * 60)
+                logger.warning("Ensure you have:")
+                logger.warning("  1. Tested extensively in paper mode")
+                logger.warning("  2. Verified all risk management settings")
+                logger.warning("  3. Confirmed API keys are correct")
+                logger.warning("  4. Set up monitoring and alerts")
+                logger.warning("=" * 60)
+                
+            elif trading_mode not in ["paper", "live"]:
+                self.errors.append(
+                    f"Invalid TRADING_MODE: {trading_mode}. Must be 'paper' or 'live'"
+                )
+                
         except ValueError as e:
             self.errors.append(f"Invalid configuration value: {e}")
 
