@@ -67,14 +67,14 @@ function PnLChartComponent({ className }: PnLChartProps) {
                           })}
                         </p>
                         <p className="text-sm">
-                          <span className="text-muted-foreground">Value: </span>
-                          <span className="font-medium">{formatCurrency(totalValue)}</span>
-                        </p>
-                        <p className="text-sm">
                           <span className="text-muted-foreground">Return: </span>
                           <span className={`font-medium ${getProfitColor(totalReturnPct)}`}>
                             {formatCurrency(totalReturn)} ({formatPercentage(totalReturnPct)})
                           </span>
+                        </p>
+                        <p className="text-sm">
+                          <span className="text-muted-foreground">Total Value: </span>
+                          <span className="font-medium">{formatCurrency(totalValue)}</span>
                         </p>
                         <p className="text-sm">
                           <span className="text-muted-foreground">Trades: </span>
@@ -89,7 +89,7 @@ function PnLChartComponent({ className }: PnLChartProps) {
               <ReferenceLine y={0} stroke="#666" strokeDasharray="2 2" />
               <Line
                 type="monotone"
-                dataKey="total_value"
+                dataKey="total_return"
                 stroke={isPositive ? "#10b981" : "#ef4444"}
                 strokeWidth={2}
                 dot={{ fill: isPositive ? "#10b981" : "#ef4444", strokeWidth: 2, r: 4 }}

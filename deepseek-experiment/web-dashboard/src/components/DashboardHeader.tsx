@@ -1,26 +1,43 @@
 import { memo } from 'react';
 import { Activity } from 'lucide-react';
-import { useConnectionStatus } from '@/contexts/TradingDataContext';
+import { useConnectionStatus, usePortfolio } from '@/contexts/TradingDataContext';
+import { formatCurrency, formatPercentage, getProfitColor } from '@/lib/utils';
 
 export const DashboardHeader = memo(function DashboardHeader() {
   const { isConnected, error } = useConnectionStatus();
+  const { portfolio } = usePortfolio();
+  
+  const totalValue = portfolio?.total_value ?? 0;
+  const totalReturnPct = portfolio?.total_return_pct ?? 0;
 
   return (
     <header className="border-b bg-card">
-      <div className="container mx-auto px-4 py-6">
-        <div className="flex items-center justify-between">
+      <div className="container mx-auto px-4 py-4">
+        <div className="flex items-center justify-between flex-wrap gap-4">
           <div className="flex items-center gap-3">
             <Activity className="h-8 w-8 text-primary" />
             <div>
               <h1 className="text-2xl font-bold">Trading Bot Dashboard</h1>
-              <p className="text-muted-foreground">Real-time portfolio monitoring</p>
+              <p className="text-muted-foreground text-sm">
+                {portfolio ? (
+                  <>
+                    Portfolio: <span className="font-medium">{formatCurrency(totalValue)}</span>
+                    {' • '}
+                    Return: <span className={`font-medium ${getProfitColor(totalReturnPct)}`}>
+                      {formatPercentage(totalReturnPct)}
+                    </span>
+                  </>
+                ) : (
+                  'Real-time portfolio monitoring'
+                )}
+              </p>
             </div>
           </div>
           <div className="flex items-center gap-2">
             {isConnected ? (
               <>
                 <div className="h-2 w-2 bg-green-500 rounded-full animate-pulse"></div>
-                <span className="text-sm text-muted-foreground">Live</span>
+                <span className="text-sm text-muted-foreground">Connected</span>
               </>
             ) : error ? (
               <>
