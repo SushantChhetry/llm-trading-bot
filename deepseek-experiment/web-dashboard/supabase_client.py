@@ -28,6 +28,12 @@ class SupabaseService:
         self.supabase_url = os.getenv("SUPABASE_URL")
         self.supabase_key = os.getenv("SUPABASE_KEY")
 
+        # Strip quotes if present (Railway sometimes includes them)
+        if self.supabase_url:
+            self.supabase_url = self.supabase_url.strip('"\'')
+        if self.supabase_key:
+            self.supabase_key = self.supabase_key.strip('"\'')
+
         if not self.supabase_url:
             raise ValueError("SUPABASE_URL environment variable is required")
         if not self.supabase_key:
