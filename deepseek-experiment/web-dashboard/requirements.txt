@@ -1,3 +1,7 @@
+# API Server Dependencies
+# This file includes all dependencies needed for the API server
+# When Railway root is set to web-dashboard, this file is used
+
 # FastAPI and server
 fastapi==0.104.1
 uvicorn[standard]==0.24.0
@@ -11,5 +15,9 @@ supabase==2.3.4
 python-dotenv>=1.0.0
 pyyaml>=6.0
 
-# Note: Railway will build from deepseek-experiment root,
-# so it will use the main requirements.txt which includes all dependencies
+# Shared dependencies (from parent requirements.txt)
+# These are needed because api_server_supabase.py imports from parent (config, supabase_client)
+requests>=2.31.0
+psutil>=5.9.0
+rich>=13.0.0
+colorama>=0.4.6
