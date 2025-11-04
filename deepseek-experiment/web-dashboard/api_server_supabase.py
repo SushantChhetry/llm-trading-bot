@@ -422,82 +422,17 @@ async def root():
 
 @app.get("/health")
 async def health():
-    """Enhanced health check with dependency validation."""
-    from fastapi import Response
-
-    checks = {
-        "api_server": "healthy",
-        "database": None,
-        "file_system": None,
+    """
+    Simple health check endpoint for Railway.
+    Returns 200 if the service is running, regardless of dependency status.
+    This is a lightweight check that should always pass if the server is up.
+    """
+    return {
+        "status": "healthy",
+        "service": "trading-bot-api",
+        "version": "1.0.0",
+        "timestamp": datetime.now().isoformat()
     }
-    overall_status = "healthy"
-    status_code = 200
-
-    try:
-        # Check file system accessibility
-        try:
-            DATA_DIR.mkdir(parents=True, exist_ok=True)
-            (DATA_DIR / "logs").mkdir(parents=True, exist_ok=True)
-            test_file = DATA_DIR / ".healthcheck"
-            test_file.write_text("test")
-            test_file.unlink()
-            checks["file_system"] = "healthy"
-        except Exception as e:
-            checks["file_system"] = f"unhealthy: {str(e)}"
-            overall_status = "degraded"
-
-        # Check database connectivity
-        if USE_SUPABASE and supabase:
-            try:
-                supabase.get_trades(limit=1)
-                portfolio = supabase.get_portfolio()
-                checks["database"] = {
-                    "status": "healthy",
-                    "type": "supabase",
-                    "readable": True,
-                    "writable": True
-                }
-            except Exception as e:
-                checks["database"] = {
-                    "status": f"unhealthy: {str(e)}",
-                    "type": "supabase",
-                    "readable": False,
-                    "writable": False
-                }
-                overall_status = "degraded"
-        else:
-            checks["database"] = {
-                "status": "healthy",
-                "type": "file_based",
-                "readable": TRADES_FILE.exists() or True,
-                "writable": os.access(DATA_DIR, os.W_OK)
-            }
-
-        if overall_status == "degraded":
-            status_code = 503
-
-        return Response(
-            content=json.dumps({
-                "status": overall_status,
-                "timestamp": datetime.now().isoformat(),
-                "service": "trading-bot-api",
-                "version": "1.0.0",
-                "environment": os.getenv("ENVIRONMENT", "development"),
-                "checks": checks
-            }, indent=2),
-            status_code=status_code,
-            media_type="application/json"
-        )
-    except Exception as e:
-        return Response(
-            content=json.dumps({
-                "status": "unhealthy",
-                "error": str(e),
-                "timestamp": datetime.now().isoformat()
-            }),
-            status_code=503,
-            media_type="application/json"
-        )
 
 @app.get("/ready")
 async def ready():
