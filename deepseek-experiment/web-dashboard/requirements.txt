@@ -1,7 +1,15 @@
+# FastAPI and server
 fastapi==0.104.1
 uvicorn[standard]==0.24.0
 websockets==12.0
 python-multipart==0.0.6
+
+# Database
 supabase==2.3.4
+
+# Configuration
 python-dotenv>=1.0.0
 pyyaml>=6.0
+
+# Note: Railway will build from deepseek-experiment root,
+# so it will use the main requirements.txt which includes all dependencies
