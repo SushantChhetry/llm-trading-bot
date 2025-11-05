@@ -15,7 +15,11 @@ export const DashboardHeader = memo(function DashboardHeader() {
       <div className="container mx-auto px-4 py-4">
         <div className="flex items-center justify-between flex-wrap gap-4">
           <div className="flex items-center gap-3">
-            <Activity className="h-8 w-8 text-primary" />
+            <img 
+              src="/logos/DeepSeek_logo.svg" 
+              alt="DeepSeek Logo" 
+              className="h-8 w-8"
+            />
             <div>
               <h1 className="text-2xl font-bold">Trading Bot Dashboard</h1>
               <p className="text-muted-foreground text-sm">

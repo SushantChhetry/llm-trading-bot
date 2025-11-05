@@ -111,11 +111,25 @@ function PortfolioOverviewComponent({ className }: PortfolioOverviewProps) {
             </div>
             <div className="space-y-2">
               <p className="text-sm font-medium">LLM Provider</p>
-              <Badge variant="outline">{llmProvider.toUpperCase()}</Badge>
+              <Badge variant="outline" className="flex items-center gap-2 w-fit">
+                <img 
+                  src="/logos/DeepSeek_logo.svg" 
+                  alt="DeepSeek" 
+                  className="h-4 w-4"
+                />
+                {llmProvider.toUpperCase()}
+              </Badge>
             </div>
             <div className="space-y-2">
               <p className="text-sm font-medium">Exchange</p>
-              <Badge variant="outline">{exchange.toUpperCase()}</Badge>
+              <Badge variant="outline" className="flex items-center gap-2 w-fit">
+                <img 
+                  src="/logos/kraken-logo.jpg" 
+                  alt="Kraken" 
+                  className="h-4 w-4 rounded"
+                />
+                {exchange.toUpperCase()}
+              </Badge>
             </div>
             <div className="space-y-2">
               <p className="text-sm font-medium">Run Interval</p>
