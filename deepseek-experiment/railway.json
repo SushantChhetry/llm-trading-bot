@@ -5,6 +5,7 @@
     "dockerfilePath": "Dockerfile.bot"
   },
   "deploy": {
+    "startCommand": "bash scripts/start_with_risk_service.sh",
     "restartPolicyType": "ON_FAILURE",
     "restartPolicyMaxRetries": 10,
     "healthcheckPath": "/health",
