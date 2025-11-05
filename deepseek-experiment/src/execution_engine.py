@@ -10,6 +10,7 @@ Provides execution quality controls:
 """
 
 import logging
+import threading
 from typing import Dict, Optional, Tuple
 from dataclasses import dataclass
 from enum import Enum
@@ -101,8 +102,9 @@ class ExecutionEngine:
             )
         }
         
-        # Rate limiting tracking
+        # Rate limiting tracking (thread-safe)
         self.order_counts: Dict[str, Dict[str, int]] = {}  # venue -> {second: count, minute: count}
+        self.order_counts_lock = threading.Lock()  # Lock for thread-safe order counting
         
         logger.info(f"Execution Engine initialized with {len(self.venue_configs)} venues")
     
@@ -192,63 +194,65 @@ class ExecutionEngine:
         venue_config = self.get_venue_config(venue)
         current_time = time.time()
         
-        if venue not in self.order_counts:
-            self.order_counts[venue] = {
-                "second": 0,
-                "second_timestamp": current_time,
-                "minute": 0,
-                "minute_timestamp": current_time
-            }
-        
-        counts = self.order_counts[venue]
-        
-        # Reset counters if time window passed
-        if current_time - counts["second_timestamp"] >= 1.0:
-            counts["second"] = 0
-            counts["second_timestamp"] = current_time
-        
-        if current_time - counts["minute_timestamp"] >= 60.0:
-            counts["minute"] = 0
-            counts["minute_timestamp"] = current_time
-        
-        # Check limits
-        can_place = True
-        delay = 0.0
-        
-        if counts["second"] >= venue_config.max_orders_per_second:
-            can_place = False
-            delay = 1.0 - (current_time - counts["second_timestamp"])
-        
-        if counts["minute"] >= venue_config.max_orders_per_minute:
-            can_place = False
-            delay = max(delay, 60.0 - (current_time - counts["minute_timestamp"]))
+        with self.order_counts_lock:
+            if venue not in self.order_counts:
+                self.order_counts[venue] = {
+                    "second": 0,
+                    "second_timestamp": current_time,
+                    "minute": 0,
+                    "minute_timestamp": current_time
+                }
+            
+            counts = self.order_counts[venue]
+            
+            # Reset counters if time window passed
+            if current_time - counts["second_timestamp"] >= 1.0:
+                counts["second"] = 0
+                counts["second_timestamp"] = current_time
+            
+            if current_time - counts["minute_timestamp"] >= 60.0:
+                counts["minute"] = 0
+                counts["minute_timestamp"] = current_time
+            
+            # Check limits
+            can_place = True
+            delay = 0.0
+            
+            if counts["second"] >= venue_config.max_orders_per_second:
+                can_place = False
+                delay = 1.0 - (current_time - counts["second_timestamp"])
+            
+            if counts["minute"] >= venue_config.max_orders_per_minute:
+                can_place = False
+                delay = max(delay, 60.0 - (current_time - counts["minute_timestamp"]))
         
         return can_place, delay
     
     def record_order(self, venue: str):
         """Record an order placement for rate limiting."""
-        if venue not in self.order_counts:
-            self.order_counts[venue] = {
-                "second": 0,
-                "second_timestamp": time.time(),
-                "minute": 0,
-                "minute_timestamp": time.time()
-            }
-        
-        counts = self.order_counts[venue]
-        current_time = time.time()
-        
-        # Reset if needed
-        if current_time - counts["second_timestamp"] >= 1.0:
-            counts["second"] = 0
-            counts["second_timestamp"] = current_time
-        
-        if current_time - counts["minute_timestamp"] >= 60.0:
-            counts["minute"] = 0
-            counts["minute_timestamp"] = current_time
-        
-        counts["second"] += 1
-        counts["minute"] += 1
+        with self.order_counts_lock:
+            if venue not in self.order_counts:
+                self.order_counts[venue] = {
+                    "second": 0,
+                    "second_timestamp": time.time(),
+                    "minute": 0,
+                    "minute_timestamp": time.time()
+                }
+            
+            counts = self.order_counts[venue]
+            current_time = time.time()
+            
+            # Reset if needed
+            if current_time - counts["second_timestamp"] >= 1.0:
+                counts["second"] = 0
+                counts["second_timestamp"] = current_time
+            
+            if current_time - counts["minute_timestamp"] >= 60.0:
+                counts["minute"] = 0
+                counts["minute_timestamp"] = current_time
+            
+            counts["second"] += 1
+            counts["minute"] += 1
     
     def normalize_order_params(
         self,

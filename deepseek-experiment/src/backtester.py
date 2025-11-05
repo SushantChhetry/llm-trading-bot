@@ -227,7 +227,8 @@ class RealisticBacktester:
         self.balance = self.config.initial_balance
         self.positions = {}
         self.trades = []
-        self.equity_curve = [(historical_data.iloc[0]['timestamp'], self.balance)]
+        self.last_funding_time = historical_data.iloc[0]['timestamp'] if len(historical_data) > 0 else None
+        self.equity_curve = [(historical_data.iloc[0]['timestamp'], self.balance)] if len(historical_data) > 0 else []
         
         # Iterate through historical data
         for idx, row in historical_data.iterrows():
@@ -253,16 +254,21 @@ class RealisticBacktester:
             
             # Check for liquidations
             for symbol in list(self.positions.keys()):
-                if self.check_liquidation(symbol, current_price, decision.get("leverage", 1.0)):
+                if self.check_liquidation(symbol, current_price, decision.get("leverage", 1.0) if decision else 1.0):
                     self._liquidate_position(symbol, current_price, current_time)
             
             # Update equity curve
             portfolio_value = self._calculate_portfolio_value(current_price)
             self.equity_curve.append((current_time, portfolio_value))
             
-            # Apply funding costs (every 8 hours)
-            if idx % 288 == 0:  # Approximate 8 hours (if 1-minute data)
-                self._apply_funding_costs(current_time)
+            # Apply funding costs (every 8 hours = 28800 seconds)
+            if self.last_funding_time:
+                time_since_funding = (current_time - self.last_funding_time).total_seconds()
+                if time_since_funding >= 28800:  # 8 hours
+                    self._apply_funding_costs(current_time)
+                    self.last_funding_time = current_time
+            else:
+                self.last_funding_time = current_time
         
         # Calculate results
         return self._calculate_results()
@@ -456,16 +462,65 @@ class RealisticBacktester:
         drawdowns = running_max - cumulative
         max_drawdown = float(np.max(drawdowns)) if len(drawdowns) > 0 else 0.0
         
-        # Trade statistics
+        # Trade statistics - track P&L properly
         closed_trades = [t for t in self.trades if t.side == "sell"]
         liquidations = len([t for t in self.trades if t.side == "liquidation"])
         
+        # Calculate actual P&L from trades
         profits = []
-        for trade in closed_trades:
-            # Calculate P&L (simplified)
-            if trade.side == "sell":
-                # Would need entry price from position
-                profits.append(0.0)  # Simplified
+        position_tracker = {}  # Track entry prices for each position
+        
+        for trade in self.trades:
+            symbol = trade.symbol
+            if trade.side == "buy":
+                # Record entry price
+                if symbol not in position_tracker:
+                    position_tracker[symbol] = {
+                        "entry_price": trade.fill_price,
+                        "quantity": trade.filled_quantity,
+                        "entry_time": trade.timestamp
+                    }
+                else:
+                    # Average in
+                    old_qty = position_tracker[symbol]["quantity"]
+                    old_price = position_tracker[symbol]["entry_price"]
+                    new_qty = trade.filled_quantity
+                    new_price = trade.fill_price
+                    total_qty = old_qty + new_qty
+                    avg_price = (old_price * old_qty + new_price * new_qty) / total_qty if total_qty > 0 else new_price
+                    position_tracker[symbol] = {
+                        "entry_price": avg_price,
+                        "quantity": total_qty,
+                        "entry_time": position_tracker[symbol]["entry_time"]
+                    }
+            elif trade.side == "sell":
+                # Calculate P&L
+                if symbol in position_tracker:
+                    entry_price = position_tracker[symbol]["entry_price"]
+                    entry_qty = position_tracker[symbol]["quantity"]
+                    exit_price = trade.fill_price
+                    exit_qty = min(trade.filled_quantity, entry_qty)
+                    
+                    # P&L = (exit_price - entry_price) * quantity - fees
+                    pnl = (exit_price - entry_price) * exit_qty - trade.trading_fee
+                    profits.append(pnl)
+                    
+                    # Update position
+                    position_tracker[symbol]["quantity"] -= exit_qty
+                    if position_tracker[symbol]["quantity"] <= 0:
+                        del position_tracker[symbol]
+            elif trade.side == "liquidation":
+                # Liquidated position - calculate P&L
+                if symbol in position_tracker:
+                    entry_price = position_tracker[symbol]["entry_price"]
+                    entry_qty = position_tracker[symbol]["quantity"]
+                    exit_price = trade.fill_price
+                    
+                    # P&L = (exit_price - entry_price) * quantity - fees
+                    pnl = (exit_price - entry_price) * entry_qty - trade.trading_fee
+                    profits.append(pnl)
+                    
+                    del position_tracker[symbol]
         
         win_rate = len([p for p in profits if p > 0]) / len(profits) if profits else 0.0
         

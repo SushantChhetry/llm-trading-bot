@@ -8,7 +8,8 @@ WORKDIR /app
 # Set environment variables
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PYTHONPATH=/app
+    PYTHONPATH=/app \
+    RISK_SERVICE_PORT=8003
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
@@ -35,9 +36,13 @@ RUN mkdir -p data/logs
 EXPOSE 8003
 
 # Health check - Use /health endpoint
+# Note: Risk service uses RISK_SERVICE_PORT (8003) which takes precedence over Railway's PORT
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
     CMD curl -f http://localhost:8003/health || exit 1
 
 # Run the risk service
+# RISK_SERVICE_PORT is set as ENV above (defaults to 8003)
+# This takes precedence over Railway's automatically-set PORT environment variable
+# Railway's PORT is ignored - risk service always uses RISK_SERVICE_PORT (8003)
 CMD ["python", "services/risk_service.py"]
 

@@ -1,3 +1,4 @@
+# Trading Bot Dockerfile - Combined with Risk Service
 # Use Python 3.13 slim image
 FROM python:3.13-slim
 
@@ -7,7 +8,8 @@ WORKDIR /app
 # Set environment variables
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PYTHONPATH=/app
+    PYTHONPATH=/app \
+    RISK_SERVICE_PORT=8003
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
@@ -27,12 +29,19 @@ COPY . .
 # Create data and logs directories
 RUN mkdir -p data/logs
 
-# Expose port (for health checks)
-EXPOSE 8000
+# Make startup script executable
+RUN chmod +x scripts/start_with_risk_service.sh
 
-# Health check - Validate startup and basic functionality
+# Expose ports
+# - 8003: Risk service (internal)
+# - Railway's PORT: Not used (trading bot doesn't expose HTTP)
+EXPOSE 8003
+
+# Health check - Check risk service health endpoint
+# Note: Trading bot doesn't expose HTTP, so we check risk service instead
 HEALTHCHECK --interval=60s --timeout=10s --start-period=60s --retries=3 \
-    CMD python -c "from src.startup_validator import validate_startup; import sys; sys.exit(0 if validate_startup() else 1)" || exit 1
+    CMD curl -f http://localhost:8003/health || exit 1
 
-# Run the trading bot
-CMD ["python", "-m", "src.main"]
+# Run both risk service and trading bot using startup script
+# This script handles process management and ensures risk service starts first
+CMD ["bash", "scripts/start_with_risk_service.sh"]

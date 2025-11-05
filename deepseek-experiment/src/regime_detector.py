@@ -125,6 +125,22 @@ class RegimeDetector:
         # Convert to pandas Series for easier calculations
         price_series = pd.Series(prices)
         
+        # Validate data quality
+        if price_series.isna().any() or np.isinf(price_series).any():
+            logger.warning("Invalid price data (NaN/Inf) detected")
+            return RegimeState(
+                regime_type=RegimeType.UNKNOWN,
+                volatility_regime=VolatilityRegime.MEDIUM,
+                confidence=0.0,
+                adx=0.0,
+                atr=0.0,
+                atr_pct=0.0,
+                realized_vol=0.0,
+                trend_strength=0.0,
+                momentum=0.0,
+                funding_rate=funding_rate
+            )
+        
         # Calculate ADX (Average Directional Index)
         adx, trend_strength = self._calculate_adx(price_series)
         
