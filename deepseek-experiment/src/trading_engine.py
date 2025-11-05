@@ -8,6 +8,7 @@ by modifying the execution methods (see config.TRADING_MODE).
 from __future__ import annotations
 
 import json
+import os
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
@@ -16,6 +17,7 @@ from config import config
 from .logger import get_logger
 from .resilience import CircuitBreakerConfig, RetryConfig, circuit_breaker, retry
 from .security import SecurityManager, validate_trading_inputs
+from .risk_client import RiskClient, OrderValidationResult
 
 logger = get_logger(__name__)
 
@@ -63,6 +65,24 @@ class TradingEngine:
             logger.warning(f"Supabase client not available: {e}")
         except Exception as e:
             logger.warning(f"Failed to initialize Supabase client: {e}")
+
+        # Initialize risk client (optional - will fail gracefully if service unavailable)
+        self.risk_client = None
+        try:
+            risk_service_url = os.getenv("RISK_SERVICE_URL", "http://localhost:8003")
+            self.risk_client = RiskClient(risk_service_url=risk_service_url)
+            logger.info(f"Risk client initialized: {risk_service_url}")
+        except Exception as e:
+            logger.warning(f"Risk client not available (service may be down): {e}")
+
+        # Initialize event logger (optional)
+        self.event_logger = None
+        try:
+            from .event_logger import EventLogger
+            self.event_logger = EventLogger()
+            logger.info("Event logger initialized")
+        except Exception as e:
+            logger.warning(f"Event logger not available: {e}")
 
         # Load existing trades if file exists
         self._load_trades()
@@ -436,6 +456,11 @@ class TradingEngine:
                        f"entry_price={price:.2f} margin_used={required_margin:.2f} "
                        f"notional_value={quantity * price:.2f}")
 
+            # Store stop-loss and take-profit from exit plan
+            exit_plan = llm_decision.get("exit_plan", {}) if llm_decision else {}
+            stop_loss = exit_plan.get("stop_loss", 0)
+            take_profit = exit_plan.get("profit_target", 0)
+            
             self.positions[symbol] = {
                 "side": "long",
                 "quantity": quantity,
@@ -444,6 +469,9 @@ class TradingEngine:
                 "leverage": leverage,
                 "margin_used": required_margin,
                 "notional_value": quantity * price,
+                "stop_loss": stop_loss,
+                "take_profit": take_profit,
+                "exit_plan": exit_plan,
             }
 
         logger.debug(f"TRADE_PERSISTENCE_START symbol={symbol} trade_id={trade['id']}")
@@ -455,6 +483,20 @@ class TradingEngine:
         self._save_portfolio_state()
         logger.debug(f"PORTFOLIO_STATE_SAVED symbol={symbol} balance={self.balance:.2f} "
                     f"positions={len(self.positions)}")
+
+        # Update risk service with portfolio state
+        if self.risk_client:
+            try:
+                current_nav = self.get_portfolio_value(price)
+                daily_loss_pct = None  # Would calculate from daily tracking
+                self.risk_client.update_portfolio(
+                    nav=current_nav,
+                    positions=self.positions,
+                    daily_loss_pct=daily_loss_pct
+                )
+                logger.debug(f"Risk service updated with portfolio state: nav={current_nav:.2f}")
+            except Exception as e:
+                logger.warning(f"Failed to update risk service: {e}")
 
         # Save to Supabase if available (synchronous call - CRITICAL FIX)
         if self.supabase_client:
@@ -477,6 +519,31 @@ class TradingEngine:
                    f"quantity={quantity:.6f} price={price:.2f} amount_usdt={amount_usdt:.2f} "
                    f"leverage={leverage:.1f} margin_used={required_margin:.2f} fee={trading_fee:.2f} "
                    f"balance_remaining={self.balance:.2f} total_positions={len(self.positions)}")
+        
+        # Log order fill event
+        if self.event_logger:
+            try:
+                self.event_logger.log_order_fill(
+                    order_intent={
+                        "symbol": symbol,
+                        "side": "buy",
+                        "quantity": quantity,
+                        "price": price,
+                        "leverage": leverage
+                    },
+                    fill={
+                        "trade_id": trade['id'],
+                        "price": price,
+                        "quantity": quantity,
+                        "amount_usdt": amount_usdt,
+                        "fee": trading_fee,
+                        "margin_used": required_margin
+                    },
+                    venue=config.EXCHANGE
+                )
+            except Exception as e:
+                logger.debug(f"Error logging order fill: {e}")
+        
         return trade
 
     @validate_trading_inputs
@@ -659,6 +726,31 @@ class TradingEngine:
                    f"profit={profit:.2f} profit_pct={profit_pct:.2f} fee={trading_fee:.2f} "
                    f"margin_returned={margin_returned:.2f} balance_remaining={self.balance:.2f} "
                    f"total_positions={len(self.positions)}")
+        
+        # Log order fill event
+        if self.event_logger:
+            try:
+                self.event_logger.log_order_fill(
+                    order_intent={
+                        "symbol": symbol,
+                        "side": "sell",
+                        "quantity": sell_quantity,
+                        "price": price
+                    },
+                    fill={
+                        "trade_id": trade['id'],
+                        "price": price,
+                        "quantity": sell_quantity,
+                        "amount_usdt": amount_usdt,
+                        "fee": trading_fee,
+                        "profit": profit
+                    },
+                    pnl_attrib={"profit": profit, "fee_impact": trading_fee},
+                    venue=config.EXCHANGE
+                )
+            except Exception as e:
+                logger.debug(f"Error logging order fill: {e}")
+        
         return trade
 
     @validate_trading_inputs

@@ -63,6 +63,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      risk-service:
+        condition: service_healthy
 
   # React Frontend - Development mode with hot reload
   frontend:
@@ -123,7 +125,10 @@ services:
     profiles:
       - bot  # Start with: docker-compose -f docker-compose.dev.yml --profile bot up -d trading-bot
     depends_on:
-      - api
+      api:
+        condition: service_healthy
+      risk-service:
+        condition: service_healthy
 
 networks:
   trading-network:

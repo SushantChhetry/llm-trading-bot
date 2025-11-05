@@ -83,6 +83,55 @@ class LLMClient:
 
         logger.info(f"LLM Client initialized: {self.provider.upper()} {'(MOCK)' if self.mock_mode else '(LIVE)'}")
 
+    def _get_regime_guidance_text(
+        self,
+        regime: str,
+        volatility_regime: str,
+        trend_strength: float,
+        market_structure: str
+    ) -> str:
+        """Generate regime-based trading guidance text."""
+        if regime in ['trending_bullish', 'trending_bearish']:
+            regime_status = "✅ TRENDING MARKET DETECTED"
+            strategy_focus = "- Focus on MOMENTUM strategies"
+            if trend_strength > 0.7:
+                leverage_guidance = "- Consider higher leverage (up to 3x)"
+            else:
+                leverage_guidance = "- Use moderate leverage (≤2.5x)"
+        elif regime in ['mean_reverting', 'choppy']:
+            regime_status = "⚠️ MEAN-REVERTING/CHOPPY MARKET"
+            strategy_focus = "- Focus on MEAN REVERSION strategies"
+            leverage_guidance = "- Use lower leverage (≤2x)"
+        else:
+            regime_status = "❓ REGIME UNCLEAR"
+            strategy_focus = "- Use conservative position sizing"
+            leverage_guidance = "- Use moderate leverage (≤2.5x)"
+        
+        volatility_text = f"- Volatility is {volatility_regime.upper()}" if volatility_regime else ""
+        
+        size_adjustment = ""
+        if volatility_regime in ['high', 'extreme']:
+            size_adjustment = "- Reduce position sizes by 30-40%"
+        
+        structure_text = ""
+        if market_structure != 'unknown':
+            structure_text = f"- Market structure shows {market_structure.replace('_', ' ').upper()}"
+        
+        lines = [
+            f"{regime_status}: {regime.upper()}",
+            strategy_focus,
+            leverage_guidance
+        ]
+        
+        if volatility_text:
+            lines.append(volatility_text)
+        if size_adjustment:
+            lines.append(size_adjustment)
+        if structure_text:
+            lines.append(structure_text)
+        
+        return "\n".join(lines)
+    
     def _format_trading_prompt(self, market_data: Dict, portfolio_state: Dict) -> str:
         """
         Format a structured prompt for trading decisions.
@@ -141,6 +190,15 @@ class LLMClient:
         rsi_7 = indicators.get("rsi_7", 50.0)
         rsi_14 = indicators.get("rsi_14", 50.0)
         atr = indicators.get("atr", 0.0)
+        
+        # Extract regime information (if available)
+        regime = indicators.get("regime", "unknown")
+        volatility_regime = indicators.get("volatility_regime", "medium")
+        regime_confidence = indicators.get("regime_confidence", 0.0)
+        adx = indicators.get("adx", 0.0)
+        trend_strength = indicators.get("trend_strength", 0.0)
+        momentum = indicators.get("momentum", 0.0)
+        market_structure = indicators.get("market_structure", "unknown")
 
         prompt = f"""
 You are a quantitative cryptocurrency trader in the Alpha Arena competition.
@@ -166,6 +224,18 @@ TECHNICAL INDICATORS (Time-Series Analysis - 5m candles):
 - RSI 7: {rsi_7:.2f} (7-period Relative Strength Index, >70 = overbought, <30 = oversold)
 - RSI 14: {rsi_14:.2f} (14-period Relative Strength Index, >70 = overbought, <30 = oversold)
 - ATR: ${atr:.2f} (14-period Average True Range - volatility measure)
+
+MARKET REGIME DETECTION (Adaptive Strategy Selection):
+- Current Regime: {regime} (trending_bullish/trending_bearish/mean_reverting/choppy)
+- Volatility Regime: {volatility_regime} (low/medium/high/extreme)
+- Regime Confidence: {regime_confidence:.2f} (0.0-1.0, higher = more confident in regime)
+- ADX: {adx:.2f} (Average Directional Index, >25 = strong trend)
+- Trend Strength: {trend_strength:.2f} (0.0-1.0, higher = stronger trend)
+- Price Momentum: {momentum:.2f}% (recent price change)
+- Market Structure: {market_structure} (higher_highs/lower_lows/choppy)
+
+REGIME-BASED TRADING GUIDANCE:
+{self._get_regime_guidance_text(regime, volatility_regime, trend_strength, market_structure)}
 
 ACCOUNT STATE (Current Values):
 - Available Cash: ${balance:.2f} (FREE COLLATERAL - money available for new positions)

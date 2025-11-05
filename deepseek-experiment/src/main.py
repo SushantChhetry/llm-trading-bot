@@ -102,6 +102,46 @@ class TradingBot:
         self.llm_client = LLMClient()
         self.trading_engine = TradingEngine()
         
+        # Initialize regime controller (optional)
+        self.regime_controller = None
+        try:
+            from .regime_detector import RegimeDetector
+            from .regime_controller import RegimeController
+            if self.data_fetcher.regime_detector:
+                self.regime_controller = RegimeController(
+                    regime_detector=self.data_fetcher.regime_detector
+                )
+                logger.info("Regime controller initialized")
+        except Exception as e:
+            logger.warning(f"Regime controller not available: {e}")
+        
+        # Initialize data quality manager
+        self.data_quality = None
+        try:
+            from .data_quality import DataQualityManager
+            self.data_quality = DataQualityManager()
+            logger.info("Data quality manager initialized")
+        except Exception as e:
+            logger.warning(f"Data quality manager not available: {e}")
+        
+        # Initialize funding/carry manager
+        self.funding_carry = None
+        try:
+            from .funding_carry import FundingCarryManager
+            self.funding_carry = FundingCarryManager()
+            logger.info("Funding/carry manager initialized")
+        except Exception as e:
+            logger.warning(f"Funding/carry manager not available: {e}")
+        
+        # Initialize execution engine
+        self.execution_engine = None
+        try:
+            from .execution_engine import ExecutionEngine
+            self.execution_engine = ExecutionEngine()
+            logger.info("Execution engine initialized")
+        except Exception as e:
+            logger.warning(f"Execution engine not available: {e}")
+        
         # Initialize monitoring service
         self.monitoring_service = MonitoringService()
         self.monitoring_running = False
@@ -288,6 +328,20 @@ class TradingBot:
                         self.console.print("[bold red]❌ Invalid market data - skipping cycle[/bold red]")
                         return
 
+                    # Check data quality before proceeding
+                    if self.data_quality:
+                        quality_report = self.data_quality.get_quality_report()
+                        if quality_report.overall_status.value == "critical":
+                            logger.error(f"Data quality CRITICAL: {quality_report}")
+                            self.console.print("[bold red]❌ Data quality critical - skipping cycle[/bold red]")
+                            return
+                        elif quality_report.overall_status.value == "warning":
+                            logger.warning(f"Data quality warning: {quality_report}")
+                    
+                    # Update data timestamp
+                    if self.data_quality:
+                        self.data_quality.update_data_timestamp()
+                    
                     # Fetch technical indicators for Alpha Arena-style trading
                     try:
                         indicators = self.data_fetcher.get_technical_indicators(timeframe="5m", limit=100)
@@ -304,6 +358,17 @@ class TradingBot:
                             "atr": current_price * 0.02,
                             "current_price": current_price,
                         }
+                    
+                    # Check price triangulation
+                    if self.data_quality:
+                        triangulation = self.data_quality.check_price_triangulation(
+                            venue_price=current_price,
+                            symbol=config.SYMBOL
+                        )
+                        if triangulation.status.value == "critical":
+                            logger.error(f"Price triangulation critical: {triangulation.divergence_bps:.2f} bps")
+                            self.console.print("[bold red]❌ Price divergence too large - skipping cycle[/bold red]")
+                            return
             else:
                 # Non-interactive: use simple log message
                 logger.info("Fetching market data & technical indicators...")
@@ -378,6 +443,30 @@ class TradingBot:
                 f"Freq: {portfolio.get('trade_frequency_per_day', 0):.1f}/day | "
                 f"Fees: ${portfolio.get('total_trading_fees', 0):.2f}"
             )
+            
+            # Display regime information if available
+            if indicators.get("regime"):
+                regime = indicators.get("regime", "unknown")
+                volatility_regime = indicators.get("volatility_regime", "medium")
+                regime_confidence = indicators.get("regime_confidence", 0.0)
+                regime_color = "green" if regime_confidence > 0.7 else "yellow" if regime_confidence > 0.4 else "red"
+                self.console.print(
+                    f"[bold]📈 Market Regime:[/bold] "
+                    f"[{regime_color}]{regime.upper()}[/{regime_color}] "
+                    f"(confidence: {regime_confidence:.2f}, volatility: {volatility_regime.upper()})"
+                )
+                
+                # Get regime guidance
+                if self.regime_controller and indicators.get("regime") != "unknown":
+                    try:
+                        regime_state = self.data_fetcher.regime_detector.regime_history[-1] if self.data_fetcher.regime_detector.regime_history else None
+                        if regime_state:
+                            guidance = self.regime_controller.get_regime_guidance(regime_state)
+                            self.console.print(
+                                f"[dim]💡 Strategy Guidance: {guidance.get('guidance', '')}[/dim]"
+                            )
+                    except Exception as e:
+                        logger.debug(f"Could not get regime guidance: {e}")
 
             # 3. Get LLM decision with portfolio context
             if self.is_interactive:
@@ -444,6 +533,19 @@ class TradingBot:
                             f"max_allowed={available_balance * config.MAX_POSITION_SIZE:.2f}")
 
                 if available_balance > 0 and position_size_usdt > 0:
+                    # Check funding/carry costs before trading
+                    if self.funding_carry:
+                        # Estimate expected edge (simplified - would use actual signal strength)
+                        expected_edge_bps = confidence * 100  # Simplified estimate
+                        should_avoid, reason = self.funding_carry.should_avoid_perp(
+                            symbol=config.SYMBOL,
+                            expected_edge_bps=expected_edge_bps
+                        )
+                        if should_avoid:
+                            logger.warning(f"Trade avoided due to carry costs: {reason}")
+                            self.console.print(f"[bold yellow]⚠️ Trade avoided: {reason}[/bold yellow]")
+                            return
+                    
                     # Use LLM's calculated position size
                     trade_amount = min(position_size_usdt, available_balance * config.MAX_POSITION_SIZE)
                     logger.info(f"TRADE_EXECUTION_START action=buy symbol={config.SYMBOL} "
@@ -453,8 +555,37 @@ class TradingBot:
                         f"[bold green]🟢 Executing BUY: ${trade_amount:.2f} with {leverage:.1f}x leverage[/bold green]"
                     )
                     sys.stdout.flush()  # Ensure output appears immediately in Docker logs
+                    
+                    # Use execution engine for order optimization if available
+                    execution_price = current_price
+                    if self.execution_engine:
+                        try:
+                            # Get spread and volatility for order selection
+                            spread_bps = 10.0  # Would get from orderbook
+                            volatility_bps = indicators.get("atr", 0) / current_price * 10000 if current_price > 0 else 20.0
+                            edge_bps = confidence * 100
+                            
+                            order_type = self.execution_engine.select_order_type(
+                                venue=config.EXCHANGE,
+                                spread_bps=spread_bps,
+                                volatility_bps=volatility_bps,
+                                edge_bps=edge_bps,
+                                urgency="normal"
+                            )
+                            
+                            # Calculate limit offset if needed
+                            if order_type.value in ["limit", "post_only"]:
+                                offset_bps = self.execution_engine.calculate_limit_offset(
+                                    order_type, spread_bps, volatility_bps, "buy"
+                                )
+                                execution_price = current_price * (1 + offset_bps / 10000)
+                            
+                            logger.debug(f"Order type selected: {order_type.value}, price={execution_price:.2f}")
+                        except Exception as e:
+                            logger.debug(f"Execution engine error: {e}, using market price")
+                    
                     trade = self.trading_engine.execute_buy(
-                        config.SYMBOL, current_price, trade_amount, confidence, decision, leverage
+                        config.SYMBOL, execution_price, trade_amount, confidence, decision, leverage
                     )
                     if trade:
                         trade_executed = True

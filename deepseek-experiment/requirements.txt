@@ -31,6 +31,13 @@ websockets>=12.0
 rich>=13.0.0
 colorama>=0.4.6
 
+# Risk Service dependencies
+flask>=3.0.0
+flask-cors>=4.0.0
+
+# Data quality dependencies
+ntplib>=0.4.0
+
 # Database dependencies
 asyncpg>=0.29.0
 sqlalchemy[asyncio]>=2.0.0

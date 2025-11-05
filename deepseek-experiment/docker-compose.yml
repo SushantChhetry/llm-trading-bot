@@ -61,6 +61,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      risk-service:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
       interval: 30s
@@ -88,6 +90,31 @@ services:
       retries: 3
       start_period: 40s
 
+  # Risk Service (Out-of-process risk management)
+  risk-service:
+    build:
+      context: .
+      dockerfile: services/Dockerfile
+    container_name: trading-bot-risk-service
+    ports:
+      - "8003:8003"
+    environment:
+      - PORT=${RISK_SERVICE_PORT:-8003}
+      - RISK_SERVICE_PORT=${RISK_SERVICE_PORT:-8003}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+    networks:
+      - trading-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8003/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
   # Trading Bot (Optional - for running the actual bot)
   trading-bot:
     build:
@@ -98,6 +125,7 @@ services:
       - TRADING_MODE=${TRADING_MODE:-paper}
       - USE_TESTNET=${USE_TESTNET:-true}
       - LLM_PROVIDER=${LLM_PROVIDER:-mock}
+      - RISK_SERVICE_URL=http://risk-service:8003
       - LLM_API_KEY=${LLM_API_KEY:-}
       - LLM_MODEL=${LLM_MODEL:-}
       - EXCHANGE=${EXCHANGE:-kraken}
@@ -117,7 +145,10 @@ services:
     profiles:
       - bot  # Only start when explicitly requested
     depends_on:
-      - api
+      api:
+        condition: service_healthy
+      risk-service:
+        condition: service_healthy
 
 networks:
   trading-network:

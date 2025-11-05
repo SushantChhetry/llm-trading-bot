@@ -1,14 +1,18 @@
 # Railway Deployment Configuration
 
-This project uses **two separate Railway services** that share the same root directory but run different commands.
+This project uses **three separate Railway services** that share the same root directory but run different commands.
 
 ## Service Architecture
 
 ```
-deepseek-experiment/          (Root directory for both services)
+deepseek-experiment/          (Root directory for all services)
 ├── railway.json              (Trading Bot service config)
 ├── src/
 │   └── main.py              (Trading bot entry point)
+├── services/
+│   ├── railway.json         (Risk Service config)
+│   ├── risk_service.py       (Risk service entry point)
+│   └── risk_daemon.py        (Risk daemon - optional background process)
 └── web-dashboard/
     ├── railway.json         (API Server service config)
     └── api_server_supabase.py (API server entry point)
@@ -65,7 +69,20 @@ deepseek-experiment/          (Root directory for both services)
 4. Add environment variables
 5. Deploy
 
-### 2. Create API Server Service
+### 2. Create Risk Service
+1. Railway Dashboard → Same Project → + New → GitHub Repo
+2. Root Directory: `deepseek-experiment` (same as trading bot)
+3. Override Start Command: `python services/risk_service.py`
+   - Or Railway will use `services/railway.json` if detected
+4. Add environment variables:
+   - `RISK_SERVICE_PORT=8003` (optional, defaults to 8003)
+   - No other required variables (uses defaults)
+5. Generate Public Domain (optional, for external access)
+6. Deploy
+
+**Note**: The trading bot will connect to the risk service using the `RISK_SERVICE_URL` environment variable (defaults to `http://localhost:8003`). If deployed separately, use Railway's private networking or set the public URL.
+
+### 3. Create API Server Service
 1. Railway Dashboard → Same Project → + New → GitHub Repo
 2. Root Directory: `deepseek-experiment` (same as trading bot)
 3. Override Start Command: `python web-dashboard/api_server_supabase.py`
@@ -74,13 +91,23 @@ deepseek-experiment/          (Root directory for both services)
 5. Generate Public Domain
 6. Deploy
 
-### 3. Configure CORS
+### 4. Configure Risk Service Connection
+In Trading Bot service variables:
+```
+RISK_SERVICE_URL=http://risk-service.railway.internal:8003
+```
+Or if using public domain:
+```
+RISK_SERVICE_URL=https://your-risk-service.up.railway.app
+```
+
+### 5. Configure CORS
 In API Server service variables:
 ```
 CORS_ORIGINS=https://your-frontend.vercel.app
 ```
 
-### 4. Update Vercel
+### 6. Update Vercel
 In `web-dashboard/vercel.json`, set rewrites destination to API Server's Railway URL.
 
 ## Why This Structure?
