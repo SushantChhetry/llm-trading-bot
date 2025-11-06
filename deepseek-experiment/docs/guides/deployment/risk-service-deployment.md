@@ -8,12 +8,15 @@ The risk service can be deployed in two ways on Railway, depending on your needs
 
 ### Setup
 1. Create a new Railway service in your existing project
-2. Root Directory: `deepseek-experiment`
-3. Railway will auto-detect `services/railway.json`
-4. Set environment variable in Trading Bot service:
+2. **Service Name**: `risk-service` (important - this becomes the hostname for private networking)
+3. **Root Directory**: `deepseek-experiment`
+4. **Builder**: Set to **Railpack** (or leave as default) - remove any Dockerfile configuration
+5. Railway will auto-detect `services/railway.json` in the subdirectory
+6. Set environment variable in Trading Bot service:
    ```
    RISK_SERVICE_URL=http://risk-service.railway.internal:8003
    ```
+   **Important**: The service name (`risk-service`) must match the hostname in the URL.
 
 ### Pros
 - ✅ **Complete isolation** - Risk service failures don't affect trading bot
@@ -30,16 +33,14 @@ The risk service can be deployed in two ways on Railway, depending on your needs
 
 **Best for:** Cost-conscious deployments where you're okay with shared resources.
 
-### Setup
+**Note**: This option is not recommended with Railpack. If you need combined deployment, you would need to use a custom startup script, but separate services are strongly recommended for reliability.
+
+### Setup (Not Recommended with Railpack)
 1. Update Trading Bot service start command to:
    ```
    bash scripts/start_with_risk_service.sh
    ```
-2. Or use the provided `railway.json.with-risk-service`:
-   ```bash
-   cp railway.json.with-risk-service railway.json
-   ```
-3. Set environment variables:
+2. Set environment variables:
    ```
    RISK_SERVICE_URL=http://localhost:8003
    RISK_SERVICE_PORT=8003
@@ -64,12 +65,23 @@ The risk service can be deployed in two ways on Railway, depending on your needs
 
 ## Migration Path
 
-You can start with Option B and migrate to Option A later if needed:
+If you're currently using Option B (combined) and want to migrate to Option A (separate service):
 
-1. Create the new risk service
-2. Update `RISK_SERVICE_URL` to point to the new service
-3. Remove the startup script from trading bot
-4. Revert to original `railway.json`
+1. Create the new risk service with **Railpack** builder
+2. Service Name: `risk-service`
+3. Root Directory: `deepseek-experiment`
+4. Railway auto-detects `services/railway.json`
+5. Update `RISK_SERVICE_URL` in Trading Bot service to: `http://risk-service.railway.internal:8003`
+6. Remove the startup script from trading bot (if using combined approach)
+7. Update trading bot `railway.json` to use standalone start command: `python -m src.main`
 
 The risk client is designed to handle both scenarios gracefully.
+
+## Builder Configuration
+
+Both services use **Railpack** (Railway's default builder) which:
+- ✅ Auto-detects Python projects
+- ✅ Uses `requirements.txt` automatically
+- ✅ No Dockerfile needed
+- ✅ Eliminates Dockerfile path configuration issues
 
