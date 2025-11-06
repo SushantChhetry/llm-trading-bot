@@ -581,12 +581,33 @@ def volatility_targeted_size():
 
 
 if __name__ == '__main__':
-    # Run on port 8003 (separate from trading bot and API server)
-    # Prioritize RISK_SERVICE_PORT over PORT to avoid Railway's automatically-set PORT variable
-    # Railway sets PORT automatically, but we always want risk service on 8003
+    # Port configuration: Railway sets PORT automatically for healthchecks
+    # Prioritize PORT (Railway's port) over RISK_SERVICE_PORT when PORT is set
+    # This ensures Railway's healthcheck can reach the service
+    # Falls back to RISK_SERVICE_PORT if PORT not set (local development)
     import os
-    # RISK_SERVICE_PORT takes precedence - set this explicitly in startup script
-    # Falls back to PORT only if RISK_SERVICE_PORT not set (shouldn't happen in production)
-    port = int(os.getenv('RISK_SERVICE_PORT', os.getenv('PORT', 8003)))
-    logger.info(f"Risk service starting on port {port} (RISK_SERVICE_PORT={os.getenv('RISK_SERVICE_PORT')}, PORT={os.getenv('PORT')})")
+    
+    def get_port_value(env_var):
+        """Get port value from environment variable, stripping quotes if present."""
+        value = os.getenv(env_var)
+        if value:
+            # Strip quotes if Railway added them (though they shouldn't be there)
+            value = value.strip('"\'')
+            return int(value) if value else None
+        return None
+    
+    railway_port = get_port_value('PORT')
+    risk_service_port = get_port_value('RISK_SERVICE_PORT')
+    
+    # Use Railway's PORT if set (for healthchecks), otherwise use RISK_SERVICE_PORT or default
+    if railway_port:
+        port = railway_port
+        logger.info(f"Risk service starting on Railway PORT: {port} (PORT={os.getenv('PORT')}, RISK_SERVICE_PORT={os.getenv('RISK_SERVICE_PORT')})")
+    elif risk_service_port:
+        port = risk_service_port
+        logger.info(f"Risk service starting on RISK_SERVICE_PORT: {port} (RISK_SERVICE_PORT={os.getenv('RISK_SERVICE_PORT')}, PORT={os.getenv('PORT')})")
+    else:
+        port = 8003
+        logger.info(f"Risk service starting on default port: {port} (no PORT or RISK_SERVICE_PORT set)")
+    
     app.run(host='0.0.0.0', port=port, debug=False)
