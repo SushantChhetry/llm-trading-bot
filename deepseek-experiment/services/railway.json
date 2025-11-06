@@ -9,6 +9,7 @@
     "restartPolicyMaxRetries": 10,
     "healthcheckPath": "/health",
     "healthcheckTimeout": 30,
+    "healthcheckStartPeriod": 60,
     "sleepApplication": false,
     "numReplicas": 1
   }
