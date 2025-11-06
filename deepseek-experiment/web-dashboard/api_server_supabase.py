@@ -22,9 +22,12 @@ from starlette.middleware.base import BaseHTTPMiddleware
 import uvicorn
 import time
 
-# Add project root to path
-project_root = Path(__file__).parent.parent
-sys.path.insert(0, str(project_root))
+# Add project root to path (for container compatibility)
+# In container: /app/api_server_supabase.py -> /app is already in PYTHONPATH
+# But we add it explicitly to ensure it works in all environments
+project_root = Path(__file__).parent
+if str(project_root) not in sys.path:
+    sys.path.insert(0, str(project_root))
 
 from config import config
 from supabase_client import get_supabase_service

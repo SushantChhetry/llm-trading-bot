@@ -11,7 +11,7 @@
     ]
   },
   "deploy": {
-    "startCommand": "python api_server_supabase.py",
+    "startCommand": "python3 setup_config.py && python3 api_server_supabase.py",
     "restartPolicyType": "ON_FAILURE",
     "restartPolicyMaxRetries": 10,
     "healthcheckPath": "/health",

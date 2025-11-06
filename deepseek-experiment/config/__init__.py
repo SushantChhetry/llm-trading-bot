@@ -1,13 +1,20 @@
 """Configuration module for the trading bot."""
 from types import SimpleNamespace
-import importlib.util
+import sys
 from pathlib import Path
 
-# Load config.py as a module to avoid circular import issues
-_config_file = Path(__file__).parent / "config.py"
-spec = importlib.util.spec_from_file_location("_config_module", _config_file)
-_config_module = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(_config_module)
+# Import config.py module directly
+# We need to handle this carefully to avoid circular imports
+_config_py_path = Path(__file__).parent / "config.py"
+
+# Load the config.py file as a module
+if _config_py_path.exists():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("config.config", _config_py_path)
+    _config_module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(_config_module)
+else:
+    raise ImportError(f"config.py not found at {_config_py_path}")
 
 # Create a config object that wraps all module-level variables
 # This allows imports like: from config import config

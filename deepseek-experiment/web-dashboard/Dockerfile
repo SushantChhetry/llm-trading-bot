@@ -28,16 +28,16 @@ RUN pip install --no-cache-dir --upgrade pip && \
 COPY api_server_supabase.py .
 COPY supabase_client.py .
 
-# Create minimal config structure (since we can't access parent)
-# Create config directory
+# Create config structure from config_config.py
+# Railway build context is web-dashboard, so we can't access parent config/
+# We use config_config.py as a standalone config file
 RUN mkdir -p config
 
-# Copy config.py file (created separately to avoid heredoc issues)
+# Copy config_config.py to config/config.py
 COPY config_config.py config/config.py
 
 # Create __init__.py that exports config from config.config
-RUN echo '"""Configuration module for the trading bot."""' > config/__init__.py && \
-    echo 'from .config import config' >> config/__init__.py
+RUN python3 -c "with open('config/__init__.py', 'w') as f: f.write('\"\"\"Configuration module for the trading bot.\"\"\"\\nfrom .config import config\\n')"
 
 # Create necessary directories
 RUN mkdir -p data/logs config
