@@ -156,7 +156,7 @@ export function DocumentationPage() {
               <p className="text-sm leading-7">
                 This is an <strong>Alpha Arena Trading Bot</strong> - a sophisticated cryptocurrency trading system 
                 that uses Large Language Models (LLMs) to make autonomous trading decisions. The bot simulates 
-                the Alpha Arena competition methodology where AI agents are given $10,000 to trade perpetual 
+                the <a href="https://nof1.ai/" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline font-medium">Alpha Arena</a> competition methodology where AI agents are given $10,000 to trade perpetual 
                 futures with zero human intervention.
               </p>
               
@@ -205,25 +205,59 @@ export function DocumentationPage() {
               <CardTitle>2. Who am I</CardTitle>
               <CardDescription>About the creator</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <p className="text-sm leading-7">
-                Hi! I'm <strong>Sushant Chhetry</strong>, the creator of this LLM-powered trading bot project. 
-                This project represents an exploration into the intersection of artificial intelligence and 
-                quantitative trading, specifically implementing the Alpha Arena competition methodology.
-              </p>
-              
-              <p className="text-sm leading-7">
-                The goal is to demonstrate how modern language models can be used for systematic trading 
-                decisions, combining quantitative analysis with the flexibility and reasoning capabilities 
-                of LLMs.
-              </p>
+            <CardContent className="space-y-6">
+              <div>
+                <h3 className="text-base font-semibold mb-3 text-foreground">
+                  AI-First Product Manager | 0→1 → Scale | Unlocking User & Business Value with Modern Product and GenAI Methods
+                </h3>
+                <p className="text-sm leading-7 text-muted-foreground">
+                  Hi! I'm <strong className="text-foreground">Sushant Chhetry</strong>, the creator of this LLM-powered trading bot project. 
+                  I specialize in building and scaling products at the intersection of AI and real-world user problems.
+                </p>
+              </div>
 
-              <div className="flex items-center gap-2">
+              <div>
+                <h4 className="text-sm font-semibold mb-2 text-foreground">What makes me different</h4>
+                <p className="text-sm leading-7 text-muted-foreground">
+                  I blend classical product rigor (discovery, prioritization, clear roadmaps) with hands-on AI prototyping and rapid experimentation. 
+                  At SmartWiz, I architected modular GenAI solutions that empowered teams to ship faster and validate features with real users—cutting 
+                  prototyping time by <strong className="text-foreground">3x</strong> and reducing onboarding friction by <strong className="text-foreground">40%</strong>.
+                </p>
+                <p className="text-sm leading-7 text-muted-foreground mt-3">
+                  I've led <strong className="text-foreground">50+ user interviews</strong>, run iterative design partner programs, and orchestrated beta launches 
+                  that moved metrics (activation, retention, TTFT). My superpower? Translating messy feedback and ambiguous "AI opportunity" into clear 
+                  product wins—always putting user value first but leveraging the best of what GenAI brings.
+                </p>
+                <p className="text-sm leading-7 text-muted-foreground mt-3">
+                  I work best in teams obsessed with impact, data, and velocity, where AI is not just a badge but a business driver.
+                </p>
+              </div>
+
+              <div>
+                <h4 className="text-sm font-semibold mb-3 text-foreground">Core strengths</h4>
+                <ul className="list-disc list-inside space-y-2 text-sm text-muted-foreground">
+                  <li>Zero-to-one product launches in AI/B2B SaaS</li>
+                  <li>User research and signal-to-bets prioritization</li>
+                  <li>Modular GenAI integration (prompting, RAG, LLM evals)</li>
+                  <li>Metrics-driven iteration and GTM collaboration</li>
+                </ul>
+              </div>
+
+              <div className="p-4 bg-muted rounded-lg border border-border">
+                <p className="text-sm leading-7 text-muted-foreground">
+                  <strong className="text-foreground">Actively open to:</strong> Senior PM/Product Lead roles in high-growth SaaS, AI/ML, or B2B startups.
+                </p>
+                <p className="text-sm leading-7 text-muted-foreground mt-2 italic">
+                  Let's accelerate product impact in the AI era. DM or connect if you're building!
+                </p>
+              </div>
+
+              <div className="flex items-center gap-3 pt-2">
                 <a
                   href="https://www.linkedin.com/in/sushantchhetry/"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors"
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors font-medium text-sm"
                 >
                   Connect on LinkedIn
                   <ExternalLink className="h-4 w-4" />
@@ -243,7 +277,7 @@ export function DocumentationPage() {
                 <h3 className="text-base font-semibold mb-2">Primary Objectives</h3>
                 <ul className="list-disc list-inside space-y-2 text-muted-foreground">
                   <li><strong>Maximize PnL:</strong> The bot's primary goal is to generate consistent profits through systematic trading</li>
-                  <li><strong>Zero Human Intervention:</strong> Fully autonomous operation following Alpha Arena methodology</li>
+                  <li><strong>Zero Human Intervention:</strong> Fully autonomous operation following <a href="https://nof1.ai/" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Alpha Arena</a> methodology</li>
                   <li><strong>Quantitative Analysis Only:</strong> Decisions based purely on numerical data - no news or narratives</li>
                   <li><strong>Risk-Adjusted Returns:</strong> Optimize for Sharpe ratio, not just raw profits</li>
                   <li><strong>Behavioral Pattern Learning:</strong> Track and adapt trading style based on performance</li>
@@ -251,9 +285,11 @@ export function DocumentationPage() {
               </div>
 
               <div>
-                <h3 className="text-base font-semibold mb-2">Alpha Arena Methodology</h3>
+                <h3 className="text-base font-semibold mb-2">
+                  <a href="https://nof1.ai/" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Alpha Arena</a> Methodology
+                </h3>
                 <p className="text-sm leading-7 text-muted-foreground mb-2">
-                  The bot implements the Alpha Arena competition framework:
+                  The bot implements the <a href="https://nof1.ai/" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline font-medium">Alpha Arena</a> competition framework:
                 </p>
                 <ul className="list-disc list-inside space-y-2 text-muted-foreground">
                   <li><strong>$10,000 Starting Capital:</strong> Simulated trading account</li>
@@ -354,7 +390,7 @@ export function DocumentationPage() {
                   <li>
                     <strong>Format LLM Prompt:</strong> Market data, portfolio state, technical indicators, and trading 
                     parameters are formatted into a structured prompt. The prompt includes risk management guidelines, 
-                    fee awareness, and Alpha Arena objectives.
+                    fee awareness, and <a href="https://nof1.ai/" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Alpha Arena</a> objectives.
                   </li>
                   <li>
                     <strong>LLM Decision Generation:</strong> The language model analyzes all the data and generates a 
@@ -549,10 +585,119 @@ export function DocumentationPage() {
             </CardContent>
           </Card>
 
-          {/* Section 7: Nice to know terms */}
+          {/* Section 7: Limitations and Considerations */}
           <Card>
             <CardHeader>
-              <CardTitle>7. Nice to know terms</CardTitle>
+              <CardTitle>7. Limitations and Considerations</CardTitle>
+              <CardDescription>Understanding the trade-offs and challenges of LLM-based trading</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <p className="text-sm leading-7 text-muted-foreground">
+                While LLMs offer significant advantages for trading, it's important to understand their limitations 
+                and the considerations that come with using them in a financial context.
+              </p>
+
+              <div>
+                <h3 className="text-base font-semibold mb-3">Key Limitations</h3>
+                <div className="space-y-4">
+                  <div className="p-4 bg-muted rounded-lg border border-border">
+                    <h4 className="font-semibold mb-2 text-foreground">Non-Deterministic Behavior</h4>
+                    <p className="text-sm text-muted-foreground">
+                      LLMs can produce different outputs for the same input, making it challenging to achieve 
+                      perfectly reproducible results. This variability requires robust validation and fallback 
+                      mechanisms to ensure consistent trading behavior.
+                    </p>
+                  </div>
+
+                  <div className="p-4 bg-muted rounded-lg border border-border">
+                    <h4 className="font-semibold mb-2 text-foreground">Latency and Response Time</h4>
+                    <p className="text-sm text-muted-foreground">
+                      API calls to LLM providers introduce latency (typically 1-5 seconds), which can be 
+                      problematic in fast-moving markets. While acceptable for the 2.5-minute trading cycles 
+                      used here, this may limit applicability to high-frequency trading strategies.
+                    </p>
+                  </div>
+
+                  <div className="p-4 bg-muted rounded-lg border border-border">
+                    <h4 className="font-semibold mb-2 text-foreground">API Dependency and Reliability</h4>
+                    <p className="text-sm text-muted-foreground">
+                      Trading decisions depend on external LLM API availability. Network issues, rate limits, 
+                      or service outages could interrupt trading. This project includes fallback mechanisms, 
+                      but complete independence from external services isn't possible.
+                    </p>
+                  </div>
+
+                  <div className="p-4 bg-muted rounded-lg border border-border">
+                    <h4 className="font-semibold mb-2 text-foreground">Hallucination and Incorrect Decisions</h4>
+                    <p className="text-sm text-muted-foreground">
+                      LLMs can "hallucinate" or generate plausible-sounding but incorrect reasoning. While 
+                      structured JSON outputs and validation help mitigate this, there's always a risk of 
+                      the model making a decision based on flawed logic that appears valid.
+                    </p>
+                  </div>
+
+                  <div className="p-4 bg-muted rounded-lg border border-border">
+                    <h4 className="font-semibold mb-2 text-foreground">Limited Backtesting Capabilities</h4>
+                    <p className="text-sm text-muted-foreground">
+                      Traditional algorithmic strategies can be backtested deterministically. LLM-based strategies 
+                      are harder to backtest accurately because the model's responses may vary between runs, 
+                      making it difficult to validate historical performance with certainty.
+                    </p>
+                  </div>
+
+                  <div className="p-4 bg-muted rounded-lg border border-border">
+                    <h4 className="font-semibold mb-2 text-foreground">Token Limits and Context Constraints</h4>
+                    <p className="text-sm text-muted-foreground">
+                      LLMs have context window limitations. While sufficient for current use cases, incorporating 
+                      extensive historical data or complex multi-asset analysis may require careful prompt 
+                      engineering or model selection to fit within token limits.
+                    </p>
+                  </div>
+
+                  <div className="p-4 bg-muted rounded-lg border border-border">
+                    <h4 className="font-semibold mb-2 text-foreground">Cost Scaling</h4>
+                    <p className="text-sm text-muted-foreground">
+                      While costs are reasonable at current usage levels (~$0.03/day with DeepSeek), scaling 
+                      to higher-frequency trading or multiple concurrent strategies could significantly increase 
+                      expenses. Traditional algorithms have minimal marginal costs once developed.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <Separator />
+
+              <div>
+                <h3 className="text-base font-semibold mb-3">Risk Mitigation Strategies</h3>
+                <p className="text-sm leading-7 text-muted-foreground mb-3">
+                  This project implements several strategies to address these limitations:
+                </p>
+                <ul className="list-disc list-inside space-y-2 text-sm text-muted-foreground">
+                  <li><strong className="text-foreground">Structured Output Validation:</strong> JSON schema validation ensures responses meet required format and constraints</li>
+                  <li><strong className="text-foreground">Confidence Thresholds:</strong> Only executing trades above minimum confidence levels (0.6) filters out uncertain decisions</li>
+                  <li><strong className="text-foreground">Risk Management Layer:</strong> Independent risk checks validate all trades before execution, regardless of LLM decision</li>
+                  <li><strong className="text-foreground">Fallback Mechanisms:</strong> Graceful degradation when API calls fail, with hold decisions as default</li>
+                  <li><strong className="text-foreground">Position Limits:</strong> Maximum position constraints prevent over-leveraging from any single decision</li>
+                  <li><strong className="text-foreground">Behavioral Monitoring:</strong> Continuous tracking of trading patterns helps identify and correct problematic behaviors</li>
+                  <li><strong className="text-foreground">Paper Trading First:</strong> Extensive testing in simulated environments before considering live trading</li>
+                </ul>
+              </div>
+
+              <div className="p-4 bg-muted/50 rounded-lg border border-border">
+                <p className="text-sm leading-7 text-muted-foreground">
+                  <strong className="text-foreground">Important Note:</strong> This project is designed for research 
+                  and educational purposes. LLM-based trading systems should be thoroughly tested and validated 
+                  before any real capital deployment. Always start with paper trading and understand the risks 
+                  involved in algorithmic trading.
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Section 8: Nice to know terms */}
+          <Card>
+            <CardHeader>
+              <CardTitle>8. Nice to know terms</CardTitle>
               <CardDescription>Glossary of trading and technical terminology</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
