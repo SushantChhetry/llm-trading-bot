@@ -1,5 +1,4 @@
 import { memo } from 'react';
-import { Activity } from 'lucide-react';
 import { useConnectionStatus, usePortfolio } from '@/contexts/TradingDataContext';
 import { formatCurrency, formatPercentage, getProfitColor } from '@/lib/utils';
 

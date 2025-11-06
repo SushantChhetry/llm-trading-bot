@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components */
 import { createContext, useContext, useMemo, ReactNode } from 'react';
 import { Trade, Portfolio, PnLDataPoint, BotStatus, PortfolioSnapshot } from '@/types/trading';
 
@@ -27,18 +28,7 @@ export function TradingDataProvider({ children, value }: TradingDataProviderProp
   // Memoize the context value to prevent unnecessary re-renders
   // Since we're already doing deep comparison in useTradingData hook,
   // we can use reference equality for the data objects
-  const contextValue = useMemo(() => value, [
-    value.trades,
-    value.portfolio,
-    value.pnlData,
-    value.portfolioSnapshots,
-    value.botStatus,
-    value.isLoading,
-    value.error,
-    value.isConnected,
-    value.retryCount,
-    value.refetch,
-  ]);
+  const contextValue = useMemo(() => value, [value]);
 
   return (
     <TradingDataContext.Provider value={contextValue}>
