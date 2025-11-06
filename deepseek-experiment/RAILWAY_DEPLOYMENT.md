@@ -1,16 +1,26 @@
 # Railway Deployment Configuration
 
-This project uses **three separate Railway services** that share the same root directory but run different commands.
+This project uses **three separate Railway services** that share the same root directory but run different commands. All services use **Railpack** (Railway's default builder) which auto-detects Python projects and eliminates Dockerfile complexity.
+
+## How Railway Differentiates Services
+
+**Key Point**: Railway differentiates services by the **location** of their `railway.json` files, even when both share the same root directory.
+
+- **Trading Bot**: Uses `deepseek-experiment/railway.json` (root level)
+- **Risk Service**: Uses `deepseek-experiment/services/railway.json` (subdirectory)
+- **API Server**: Uses `deepseek-experiment/web-dashboard/railway.json` (subdirectory)
+
+Both services can have the same root directory (`deepseek-experiment`) because Railway automatically finds the correct config file based on its location.
 
 ## Service Architecture
 
 ```
 deepseek-experiment/          (Root directory for all services)
-├── railway.json              (Trading Bot service config)
+├── railway.json              (Trading Bot service config - uses Railpack)
 ├── src/
 │   └── main.py              (Trading bot entry point)
 ├── services/
-│   ├── railway.json         (Risk Service config)
+│   ├── railway.json         (Risk Service config - uses Railpack)
 │   ├── risk_service.py       (Risk service entry point)
 │   └── risk_daemon.py        (Risk daemon - optional background process)
 └── web-dashboard/
@@ -23,16 +33,29 @@ deepseek-experiment/          (Root directory for all services)
 **Purpose**: Runs the trading bot logic
 
 **Railway Configuration**:
+- **Service Name**: `trading-bot` (or your preferred name)
 - **Root Directory**: `deepseek-experiment`
+- **Builder**: **Railpack** (default) - auto-detects Python project
+- **Config File**: Railway auto-detects `deepseek-experiment/railway.json` (root level)
 - **Start Command**: `python -m src.main` (from root `railway.json`)
 - **Port**: Not exposed (internal service)
-- **Environment Variables**: See `RAILWAY_ENV_VARS_FORMATTED.txt`
+- **Environment Variables**: 
+  - `RISK_SERVICE_URL=http://risk-service.railway.internal:8003` (for private networking)
+  - See `RAILWAY_ENV_VARS_FORMATTED.txt` for other variables
 
 **railway.json** (root):
 ```json
 {
+  "$schema": "https://railway.app/railway.schema.json",
+  "build": {
+    "builder": "RAILPACK"
+  },
   "deploy": {
-    "startCommand": "python -m src.main"
+    "startCommand": "python -m src.main",
+    "restartPolicyType": "ON_FAILURE",
+    "restartPolicyMaxRetries": 10,
+    "sleepApplication": false,
+    "numReplicas": 1
   }
 }
 ```
@@ -64,23 +87,28 @@ deepseek-experiment/          (Root directory for all services)
 
 ### 1. Create Trading Bot Service
 1. Railway Dashboard → New Project → GitHub Repo
-2. Root Directory: `deepseek-experiment`
-3. Railway auto-detects `railway.json` with start command
-4. Add environment variables
-5. Deploy
+2. **Service Name**: `trading-bot` (important for service discovery)
+3. **Root Directory**: `deepseek-experiment`
+4. **Builder**: Set to **Railpack** (or leave as default) - remove any Dockerfile configuration
+5. Railway auto-detects `railway.json` in root with start command
+6. **Environment Variables**: 
+   - `RISK_SERVICE_URL=http://risk-service.railway.internal:8003` (service name must match!)
+   - Add other required variables (see `RAILWAY_ENV_VARS_FORMATTED.txt`)
+7. Deploy
 
 ### 2. Create Risk Service
 1. Railway Dashboard → Same Project → + New → GitHub Repo
-2. Root Directory: `deepseek-experiment` (same as trading bot)
-3. Override Start Command: `python services/risk_service.py`
-   - Or Railway will use `services/railway.json` if detected
-4. Add environment variables:
+2. **Service Name**: `risk-service` (must match hostname in RISK_SERVICE_URL)
+3. **Root Directory**: `deepseek-experiment` (same as trading bot!)
+4. **Builder**: Set to **Railpack** (or leave as default) - remove any Dockerfile configuration
+5. Railway auto-detects `services/railway.json` in subdirectory
+6. **Environment Variables**:
    - `RISK_SERVICE_PORT=8003` (optional, defaults to 8003)
    - No other required variables (uses defaults)
-5. Generate Public Domain (optional, for external access)
-6. Deploy
+7. Generate Public Domain (optional, for external access)
+8. Deploy
 
-**Note**: The trading bot will connect to the risk service using the `RISK_SERVICE_URL` environment variable (defaults to `http://localhost:8003`). If deployed separately, use Railway's private networking or set the public URL.
+**Note**: The trading bot connects to the risk service using the `RISK_SERVICE_URL` environment variable. When deployed as separate services, use Railway's private networking: `http://risk-service.railway.internal:8003`. The service name (`risk-service`) becomes the hostname for private networking.
 
 ### 3. Create API Server Service
 1. Railway Dashboard → Same Project → + New → GitHub Repo
@@ -92,11 +120,14 @@ deepseek-experiment/          (Root directory for all services)
 6. Deploy
 
 ### 4. Configure Risk Service Connection
-In Trading Bot service variables:
+In Trading Bot service environment variables:
 ```
 RISK_SERVICE_URL=http://risk-service.railway.internal:8003
 ```
-Or if using public domain:
+
+**Important**: The service name in Railway (`risk-service`) becomes the hostname for private networking. Make sure the service name matches the hostname in the URL.
+
+If using public domain instead of private networking:
 ```
 RISK_SERVICE_URL=https://your-risk-service.up.railway.app
 ```
@@ -116,10 +147,30 @@ In `web-dashboard/vercel.json`, set rewrites destination to API Server's Railway
 - ✅ Both can import shared modules (`config`, `supabase_client`)
 - ✅ Clear separation of concerns
 - ✅ Easy to maintain and deploy
+- ✅ No Dockerfile needed - Railpack auto-detects Python projects
+- ✅ Simpler configuration - just `railway.json` files
+
+## Why Railpack?
+
+- ✅ Railway's **default** app builder (recommended, not deprecated)
+- ✅ Auto-detects Python projects and uses `requirements.txt`
+- ✅ No Dockerfile needed - eliminates path configuration issues
+- ✅ Better integration with Railway's platform
+- ✅ More reliable builds without Dockerfile complexity
 
 ## Notes
 
-- Both services use the same `requirements.txt` (root level)
+- All services use the same `requirements.txt` (root level)
 - API server imports from parent: `from config import config`
-- Railway supports per-service start command overrides
+- Railway automatically finds the correct `railway.json` based on file location
 - Each service can have different environment variables
+- Service names in Railway become hostnames for private networking (e.g., `risk-service` → `http://risk-service.railway.internal:8003`)
+
+## Optional: Watch Paths for Optimization
+
+To prevent unnecessary rebuilds, you can configure watch paths in Railway:
+- **Trading Bot**: Watch `["src/**", "railway.json", "requirements.txt"]`
+- **Risk Service**: Watch `["services/**", "requirements.txt"]`
+- **API Server**: Watch `["web-dashboard/**", "requirements.txt"]`
+
+This ensures each service only rebuilds when its relevant code changes.
