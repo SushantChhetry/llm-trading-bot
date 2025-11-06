@@ -16,6 +16,16 @@ module.exports = {
       },
     },
     extend: {
+      fontFamily: {
+        sans: ['Inter', 'system-ui', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'sans-serif'],
+      },
+      letterSpacing: {
+        tighter: '-0.02em',
+        tight: '-0.01em',
+        normal: '0',
+        wide: '0.01em',
+        wider: '0.02em',
+      },
       colors: {
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",

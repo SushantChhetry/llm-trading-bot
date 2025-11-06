@@ -1,8 +1,10 @@
+import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { PnLChart } from './components/PnLChart';
 import { PortfolioOverview } from './components/PortfolioOverview';
 import { RecentTrades } from './components/RecentTrades';
 import { DashboardHeader } from './components/DashboardHeader';
 import { ErrorBanner } from './components/ErrorBanner';
+import { DocumentationPage } from './components/DocumentationPage';
 import { useTradingData } from './hooks/useTradingData';
 import { TradingDataProvider } from './contexts/TradingDataContext';
 import { Separator } from './components/ui/separator';
@@ -102,9 +104,14 @@ function App() {
   const tradingData = useTradingData();
 
   return (
-    <TradingDataProvider value={tradingData}>
-      <DashboardContent />
-    </TradingDataProvider>
+    <BrowserRouter>
+      <TradingDataProvider value={tradingData}>
+        <Routes>
+          <Route path="/" element={<DashboardContent />} />
+          <Route path="/docs" element={<DocumentationPage />} />
+        </Routes>
+      </TradingDataProvider>
+    </BrowserRouter>
   );
 }
 

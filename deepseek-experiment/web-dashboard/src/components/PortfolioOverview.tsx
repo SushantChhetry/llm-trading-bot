@@ -39,7 +39,7 @@ function PortfolioOverviewComponent({ className }: PortfolioOverviewProps) {
           <DollarSign className="h-4 w-4 text-muted-foreground" />
         </CardHeader>
         <CardContent>
-          <div className="text-2xl font-bold">{formatCurrency(totalValue)}</div>
+          <div className="text-2xl font-semibold tracking-tight">{formatCurrency(totalValue)}</div>
           <p className="text-xs text-muted-foreground">
             Balance: {formatCurrency(balance)}
           </p>
@@ -53,7 +53,7 @@ function PortfolioOverviewComponent({ className }: PortfolioOverviewProps) {
           <TrendIcon className={`h-4 w-4 ${getProfitColor(totalReturnPct)}`} />
         </CardHeader>
         <CardContent>
-          <div className={`text-2xl font-bold ${getProfitColor(totalReturnPct)}`}>
+          <div className={`text-2xl font-semibold tracking-tight ${getProfitColor(totalReturnPct)}`}>
             {formatCurrency(totalReturn)}
           </div>
           <p className={`text-xs ${getProfitColor(totalReturnPct)}`}>
@@ -69,7 +69,7 @@ function PortfolioOverviewComponent({ className }: PortfolioOverviewProps) {
           <Target className="h-4 w-4 text-muted-foreground" />
         </CardHeader>
         <CardContent>
-          <div className="text-2xl font-bold">{openPositions}</div>
+          <div className="text-2xl font-semibold tracking-tight">{openPositions}</div>
           <p className="text-xs text-muted-foreground">
             Value: {formatCurrency(positionsValue)}
           </p>
@@ -83,7 +83,7 @@ function PortfolioOverviewComponent({ className }: PortfolioOverviewProps) {
           <Activity className="h-4 w-4 text-muted-foreground" />
         </CardHeader>
         <CardContent>
-          <div className="text-2xl font-bold">{totalTrades}</div>
+          <div className="text-2xl font-semibold tracking-tight">{totalTrades}</div>
           <p className="text-xs text-muted-foreground">
             Since start
           </p>

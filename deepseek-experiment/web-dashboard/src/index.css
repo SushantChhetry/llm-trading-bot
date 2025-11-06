@@ -55,6 +55,58 @@
   }
   body {
     @apply bg-background text-foreground;
+    font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+  }
+  
+  /* Improved typography defaults */
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-semibold tracking-tight;
+    letter-spacing: -0.01em;
+    line-height: 1.2;
+  }
+  
+  h1 {
+    @apply text-3xl;
+    letter-spacing: -0.02em;
+    line-height: 1.1;
+  }
+  
+  h2 {
+    @apply text-2xl;
+    letter-spacing: -0.015em;
+    line-height: 1.25;
+  }
+  
+  h3 {
+    @apply text-xl;
+    line-height: 1.3;
+  }
+  
+  p {
+    @apply leading-7;
+    letter-spacing: 0;
+  }
+  
+  /* Better default text rendering */
+  * {
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  
+  /* Improved button and interactive text */
+  button, a {
+    letter-spacing: 0;
+  }
+  
+  /* Better number display */
+  .font-mono, code, pre {
+    font-feature-settings: normal;
+    letter-spacing: 0;
   }
 }
 
