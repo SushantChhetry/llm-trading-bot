@@ -1,2 +1,2 @@
-web: python api_server_supabase.py
+web: python3 setup_config.py && python3 api_server_supabase.py
 
