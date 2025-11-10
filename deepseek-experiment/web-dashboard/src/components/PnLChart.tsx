@@ -195,6 +195,14 @@ function PnLChartComponent({ className }: PnLChartProps) {
             dot={false}
             activeDot={{ r: 4 }}
           />
+          <Line
+            type="monotone"
+            dataKey="total_value"
+            stroke={isPositive ? "#10b981" : "#ef4444"}
+            strokeWidth={isPositive ? 3 : 2}
+            dot={false}
+            activeDot={{ r: 4 }}
+          />
         </AreaChart>
       );
     }
