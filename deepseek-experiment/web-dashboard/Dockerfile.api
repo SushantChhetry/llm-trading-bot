@@ -32,12 +32,16 @@ COPY src ./src
 # Create data directory
 RUN mkdir -p data/logs
 
+# Set PYTHONPATH to include both /app and parent for imports
+ENV PYTHONPATH=/app
+
 # Expose port
 EXPOSE 8001
 
 # Health check - Use /live for liveness, /ready for readiness
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
-    CMD curl -f http://localhost:8001/live || exit 1
+    CMD curl -f http://localhost:${PORT:-8001}/live || exit 1
 
 # Run the API server
+# The server reads PORT from environment variable automatically
 CMD ["python", "api_server_supabase.py"]

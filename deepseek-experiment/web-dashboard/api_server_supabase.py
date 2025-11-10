@@ -24,10 +24,25 @@ import time
 
 # Add project root to path (for container compatibility)
 # In container: /app/api_server_supabase.py -> /app is already in PYTHONPATH
-# But we add it explicitly to ensure it works in all environments
+# In local dev: web-dashboard/api_server_supabase.py -> need parent for config
 project_root = Path(__file__).parent
+parent_root = project_root.parent
+
+# Add current directory to path
 if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
+
+# Add parent directory only if:
+# 1. We're not in a container (where config is already in /app)
+# 2. Parent directory has a config module
+# 3. Current directory doesn't have config (web-dashboard scenario)
+is_container = str(project_root) == Path('/app')
+has_parent_config = (parent_root / "config" / "__init__.py").exists()
+has_local_config = (project_root / "config" / "__init__.py").exists()
+
+if not is_container and has_parent_config and not has_local_config:
+    if str(parent_root) not in sys.path:
+        sys.path.insert(0, str(parent_root))
 
 from config import config
 from supabase_client import get_supabase_service

@@ -2,7 +2,7 @@
   "$schema": "https://railway.app/railway.schema.json",
   "build": {
     "builder": "DOCKERFILE",
-    "dockerfilePath": "deepseek-experiment/web-dashboard/Dockerfile",
+    "dockerfilePath": "web-dashboard/Dockerfile.api",
     "watch": [
       "web-dashboard/**",
       "config/**",
@@ -11,7 +11,7 @@
     ]
   },
   "deploy": {
-    "startCommand": "python3 setup_config.py && python3 api_server_supabase.py",
+    "startCommand": "python api_server_supabase.py",
     "restartPolicyType": "ON_FAILURE",
     "restartPolicyMaxRetries": 10,
     "healthcheckPath": "/health",
