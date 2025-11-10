@@ -369,6 +369,36 @@ class ConfigProxy:
     def USE_TESTNET(self, value):
         self._config["exchange"]["use_testnet"] = value
 
+    @property
+    def EXCHANGE_API_KEY(self):
+        """Get exchange API key from environment variable."""
+        # Read directly from environment (not stored in config for security)
+        api_key = os.getenv("EXCHANGE_API_KEY", "")
+        # Use testnet key if in testnet mode and testnet key is available
+        if self.USE_TESTNET and os.getenv("TESTNET_API_KEY"):
+            return os.getenv("TESTNET_API_KEY", "")
+        return api_key
+
+    @property
+    def EXCHANGE_API_SECRET(self):
+        """Get exchange API secret from environment variable."""
+        # Read directly from environment (not stored in config for security)
+        api_secret = os.getenv("EXCHANGE_API_SECRET", "")
+        # Use testnet secret if in testnet mode and testnet secret is available
+        if self.USE_TESTNET and os.getenv("TESTNET_API_SECRET"):
+            return os.getenv("TESTNET_API_SECRET", "")
+        return api_secret
+
+    @property
+    def TESTNET_API_KEY(self):
+        """Get testnet API key from environment variable."""
+        return os.getenv("TESTNET_API_KEY", "")
+
+    @property
+    def TESTNET_API_SECRET(self):
+        """Get testnet API secret from environment variable."""
+        return os.getenv("TESTNET_API_SECRET", "")
+
     # Trading configuration
     @property
     def TRADING_MODE(self):
