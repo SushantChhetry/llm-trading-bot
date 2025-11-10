@@ -875,6 +875,76 @@ async def portfolio_snapshots(limit: int = 1000):
         return snapshots
 
 # Configuration Management Endpoints
+
+def transform_flat_config_to_nested(flat_config: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Transform flat config format (from old bot_config table) to nested format.
+    
+    Old format: {"llm_provider": "mock", "max_leverage": "10.0", ...}
+    New format: {"llm": {"provider": "mock"}, "trading": {"max_leverage": 10.0}, ...}
+    """
+    # Check if config is already in nested format
+    if "llm" in flat_config and isinstance(flat_config["llm"], dict):
+        # Already nested, return as-is
+        return flat_config
+    
+    # Transform from flat to nested
+    nested_config = {}
+    
+    # LLM section
+    nested_config["llm"] = {
+        "provider": flat_config.get("llm_provider", "mock"),
+        "api_key": flat_config.get("llm_api_key", ""),
+        "api_url": flat_config.get("llm_api_url", ""),
+        "model": flat_config.get("llm_model", ""),
+        "temperature": float(flat_config.get("llm_temperature", 0.7)),
+        "max_tokens": int(flat_config.get("llm_max_tokens", 500)),
+        "timeout": int(flat_config.get("llm_timeout", 30))
+    }
+    
+    # Exchange section
+    nested_config["exchange"] = {
+        "name": flat_config.get("exchange", "kraken"),
+        "symbol": flat_config.get("symbol", "BTC/USDT"),
+        "use_testnet": flat_config.get("use_testnet", True) if isinstance(flat_config.get("use_testnet"), bool) else str(flat_config.get("use_testnet", "true")).lower() == "true"
+    }
+    
+    # Trading section
+    nested_config["trading"] = {
+        "mode": flat_config.get("trading_mode", "paper"),
+        "initial_balance": float(flat_config.get("initial_balance", 10000.0)),
+        "max_position_size": float(flat_config.get("max_position_size", 0.1)),
+        "max_leverage": float(flat_config.get("max_leverage", 10.0)),
+        "default_leverage": float(flat_config.get("default_leverage", 1.0)),
+        "trading_fee_percent": float(flat_config.get("trading_fee_percent", 0.05)),
+        "max_risk_per_trade": float(flat_config.get("max_risk_per_trade", 2.0)),
+        "stop_loss_percent": float(flat_config.get("stop_loss_percent", 2.0)),
+        "take_profit_percent": float(flat_config.get("take_profit_percent", 3.0)),
+        "max_active_positions": int(flat_config.get("max_active_positions", 6)),
+        "min_confidence_threshold": float(flat_config.get("min_confidence_threshold", 0.6)),
+        "fee_impact_warning_threshold": float(flat_config.get("fee_impact_warning_threshold", 20.0)),
+        "run_interval_seconds": int(flat_config.get("run_interval_seconds", 150))
+    }
+    
+    # Position management section
+    nested_config["position_management"] = {
+        "enable_position_monitoring": flat_config.get("enable_position_monitoring", True) if isinstance(flat_config.get("enable_position_monitoring"), bool) else str(flat_config.get("enable_position_monitoring", "true")).lower() == "true",
+        "portfolio_profit_target_pct": float(flat_config.get("portfolio_profit_target_pct", 10.0)),
+        "enable_trailing_stop_loss": flat_config.get("enable_trailing_stop_loss", True) if isinstance(flat_config.get("enable_trailing_stop_loss"), bool) else str(flat_config.get("enable_trailing_stop_loss", "true")).lower() == "true",
+        "trailing_stop_distance_pct": float(flat_config.get("trailing_stop_distance_pct", 1.0)),
+        "trailing_stop_activation_pct": float(flat_config.get("trailing_stop_activation_pct", 0.5)),
+        "enable_partial_profit_taking": flat_config.get("enable_partial_profit_taking", True) if isinstance(flat_config.get("enable_partial_profit_taking"), bool) else str(flat_config.get("enable_partial_profit_taking", "true")).lower() == "true",
+        "partial_profit_percent": float(flat_config.get("partial_profit_percent", 50.0)),
+        "partial_profit_target_pct": float(flat_config.get("partial_profit_target_pct", 1.5))
+    }
+    
+    # Logging section
+    nested_config["logging"] = {
+        "level": flat_config.get("log_level", "INFO")
+    }
+    
+    return nested_config
+
 @app.get("/api/config/current")
 async def get_current_config():
     """Get the currently active configuration from Supabase."""
@@ -896,6 +966,8 @@ async def get_current_config():
         if active_config:
             # Extract config_json and metadata
             config_json = active_config.get("config_json", {})
+            # Transform flat config to nested format if needed
+            config_json = transform_flat_config_to_nested(config_json)
             return {
                 "config": config_json,
                 "source": "supabase",
@@ -928,8 +1000,11 @@ async def get_default_config():
         if USE_SUPABASE and supabase:
             supabase_default = supabase.get_default_configuration()
             if supabase_default:
+                config_json = supabase_default.get("config_json", default_config)
+                # Transform flat config to nested format if needed
+                config_json = transform_flat_config_to_nested(config_json)
                 return {
-                    "config": supabase_default.get("config_json", default_config),
+                    "config": config_json,
                     "source": "supabase_default",
                     "is_default": True,
                     "version": supabase_default.get("version"),

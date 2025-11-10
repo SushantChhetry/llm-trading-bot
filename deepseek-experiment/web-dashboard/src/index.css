@@ -4,6 +4,30 @@
 
 @layer base {
   :root {
+    /* Dark mode - using the actual palette colors as default */
+    --background: 92 40% 9%;
+    --foreground: 0 0% 98%;
+    --card: 97 34% 16%;
+    --card-foreground: 0 0% 98%;
+    --popover: 97 34% 16%;
+    --popover-foreground: 0 0% 98%;
+    --primary: 153 60% 30%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 139 43% 25%;
+    --secondary-foreground: 0 0% 98%;
+    --muted: 97 30% 20%;
+    --muted-foreground: 92 15% 70%;
+    --accent: 153 55% 35%;
+    --accent-foreground: 0 0% 98%;
+    --destructive: 0 62.8% 50%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 139 35% 30%;
+    --input: 97 30% 20%;
+    --ring: 153 60% 30%;
+    --radius: 0.5rem;
+  }
+
+  .light {
     /* Light mode - using lightened variants of the palette for readability */
     --background: 92 20% 98%;
     --foreground: 92 40% 9%;
@@ -23,30 +47,6 @@
     --destructive-foreground: 0 0% 100%;
     --border: 92 20% 85%;
     --input: 92 20% 90%;
-    --ring: 153 60% 30%;
-    --radius: 0.5rem;
-  }
-
-  .dark {
-    /* Dark mode - using the actual palette colors */
-    --background: 92 40% 9%;
-    --foreground: 0 0% 98%;
-    --card: 97 34% 16%;
-    --card-foreground: 0 0% 98%;
-    --popover: 97 34% 16%;
-    --popover-foreground: 0 0% 98%;
-    --primary: 153 60% 30%;
-    --primary-foreground: 0 0% 100%;
-    --secondary: 139 43% 25%;
-    --secondary-foreground: 0 0% 98%;
-    --muted: 97 30% 20%;
-    --muted-foreground: 92 15% 70%;
-    --accent: 153 55% 35%;
-    --accent-foreground: 0 0% 98%;
-    --destructive: 0 62.8% 50%;
-    --destructive-foreground: 0 0% 100%;
-    --border: 139 35% 30%;
-    --input: 97 30% 20%;
     --ring: 153 60% 30%;
   }
 }

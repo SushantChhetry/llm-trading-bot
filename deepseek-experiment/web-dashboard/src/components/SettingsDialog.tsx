@@ -162,6 +162,9 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
 
   const validateConfig = (): string | null => {
     if (!config) return 'Configuration is missing';
+    if (!config.llm) return 'LLM configuration is missing';
+    if (!config.trading) return 'Trading configuration is missing';
+    if (!config.exchange) return 'Exchange configuration is missing';
     
     // Validate LLM
     if (!config.llm.provider) return 'LLM provider is required';
@@ -286,22 +289,27 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Loading Configuration...</DialogTitle>
+            <DialogDescription>Please wait while we load your configuration...</DialogDescription>
           </DialogHeader>
         </DialogContent>
       </Dialog>
     );
   }
 
-  if (!config) {
+  if (!config || !config.llm || !config.trading || !config.exchange) {
     return (
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Error</DialogTitle>
-            <DialogDescription>{error || 'Failed to load configuration'}</DialogDescription>
+            <DialogDescription>{error || 'Failed to load configuration. The configuration structure is invalid.'}</DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button onClick={() => onOpenChange(false)}>Close</Button>
+            <Button onClick={loadDefaultConfig} variant="outline">
+              <RotateCcw className="h-4 w-4 mr-2" />
+              Load Default Config
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
