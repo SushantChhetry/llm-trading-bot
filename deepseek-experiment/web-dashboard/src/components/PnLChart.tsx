@@ -16,6 +16,22 @@ import { formatCurrency, formatPercentage, getProfitColor } from '@/lib/utils';
 import { usePnLData, usePortfolioSnapshots } from '@/contexts/TradingDataContext';
 import { TrendingUp, TrendingDown } from 'lucide-react';
 
+// Get API base URL from environment variable or use relative path
+// Vercel rewrites will handle /api/* requests, or use VITE_API_URL if set
+const API_BASE_URL = import.meta.env.VITE_API_URL || '';
+
+// Helper function to build API URL (same as useTradingData)
+const getApiUrl = (endpoint: string): string => {
+  if (API_BASE_URL) {
+    // If VITE_API_URL is set, use it (with or without trailing slash)
+    const base = API_BASE_URL.endsWith('/') ? API_BASE_URL.slice(0, -1) : API_BASE_URL;
+    const path = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+    return `${base}${path}`;
+  }
+  // Otherwise use relative path (works with Vercel rewrites and local dev proxy)
+  return endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+};
+
 interface PnLChartProps {
   className?: string;
 }
@@ -91,8 +107,7 @@ function PnLChartComponent({ className }: PnLChartProps) {
   useEffect(() => {
     const fetchProfitTarget = async () => {
       try {
-        const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8001';
-        const response = await fetch(`${API_BASE_URL}/api/config/current`);
+        const response = await fetch(getApiUrl('/api/config/current'));
         if (response.ok) {
           const data = await response.json();
           const target = data.config?.position_management?.portfolio_profit_target_pct;

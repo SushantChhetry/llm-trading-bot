@@ -17,7 +17,21 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Switch } from './ui/switch';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8001';
+// Get API base URL from environment variable or use relative path
+// Vercel rewrites will handle /api/* requests, or use VITE_API_URL if set
+const API_BASE_URL = import.meta.env.VITE_API_URL || '';
+
+// Helper function to build API URL (same as useTradingData)
+const getApiUrl = (endpoint: string): string => {
+  if (API_BASE_URL) {
+    // If VITE_API_URL is set, use it (with or without trailing slash)
+    const base = API_BASE_URL.endsWith('/') ? API_BASE_URL.slice(0, -1) : API_BASE_URL;
+    const path = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+    return `${base}${path}`;
+  }
+  // Otherwise use relative path (works with Vercel rewrites and local dev proxy)
+  return endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+};
 
 interface ConfigData {
   llm: {
@@ -88,7 +102,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch(`${API_BASE_URL}/api/config/current`);
+      const response = await fetch(getApiUrl('/api/config/current'));
       if (!response.ok) {
         const errorText = await response.text();
         let errorMessage = 'Failed to load configuration';
@@ -106,7 +120,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
       setConfigDescription(data.description || '');
     } catch (err) {
       if (err instanceof TypeError && err.message.includes('fetch')) {
-        setError(`Cannot connect to API server at ${API_BASE_URL}. Please check if the server is running.`);
+        setError(`Cannot connect to API server. Please check if the server is running.`);
       } else {
         setError(err instanceof Error ? err.message : 'Failed to load configuration');
       }
@@ -119,7 +133,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch(`${API_BASE_URL}/api/config/default`);
+      const response = await fetch(getApiUrl('/api/config/default'));
       if (!response.ok) {
         const errorText = await response.text();
         let errorMessage = 'Failed to load default configuration';
@@ -137,7 +151,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
       setConfigDescription('Reset to system defaults');
     } catch (err) {
       if (err instanceof TypeError && err.message.includes('fetch')) {
-        setError(`Cannot connect to API server at ${API_BASE_URL}. Please check if the server is running.`);
+        setError(`Cannot connect to API server. Please check if the server is running.`);
       } else {
         setError(err instanceof Error ? err.message : 'Failed to load default configuration');
       }
@@ -225,7 +239,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
     setSaving(true);
     setError(null);
     try {
-      const response = await fetch(`${API_BASE_URL}/api/config/save`, {
+      const response = await fetch(getApiUrl('/api/config/save'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

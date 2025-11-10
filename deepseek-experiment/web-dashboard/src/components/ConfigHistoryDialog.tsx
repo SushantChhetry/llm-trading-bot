@@ -12,7 +12,21 @@ import { Button } from './ui/button';
 import { Card, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Badge } from './ui/badge';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8001';
+// Get API base URL from environment variable or use relative path
+// Vercel rewrites will handle /api/* requests, or use VITE_API_URL if set
+const API_BASE_URL = import.meta.env.VITE_API_URL || '';
+
+// Helper function to build API URL (same as useTradingData)
+const getApiUrl = (endpoint: string): string => {
+  if (API_BASE_URL) {
+    // If VITE_API_URL is set, use it (with or without trailing slash)
+    const base = API_BASE_URL.endsWith('/') ? API_BASE_URL.slice(0, -1) : API_BASE_URL;
+    const path = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+    return `${base}${path}`;
+  }
+  // Otherwise use relative path (works with Vercel rewrites and local dev proxy)
+  return endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+};
 
 interface ConfigVersion {
   id: number;
@@ -46,7 +60,7 @@ export function ConfigHistoryDialog({ open, onOpenChange }: ConfigHistoryDialogP
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch(`${API_BASE_URL}/api/config/history`);
+      const response = await fetch(getApiUrl('/api/config/history'));
       if (!response.ok) throw new Error('Failed to load configuration history');
       const data = await response.json();
       setHistory(data.configurations || []);
@@ -61,7 +75,7 @@ export function ConfigHistoryDialog({ open, onOpenChange }: ConfigHistoryDialogP
     setActivating(configId);
     setError(null);
     try {
-      const response = await fetch(`${API_BASE_URL}/api/config/activate/${configId}`, {
+      const response = await fetch(getApiUrl(`/api/config/activate/${configId}`), {
         method: 'POST',
       });
       

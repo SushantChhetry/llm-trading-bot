@@ -83,9 +83,9 @@ export function useConnectionStatus() {
 
 // Combined hook for components that need both portfolio and botStatus
 export function usePortfolioOverview() {
-  const { portfolio, botStatus, isLoading, error } = useTradingDataContext();
+  const { portfolio, botStatus, isLoading, error, refetch } = useTradingDataContext();
   return useMemo(
-    () => ({ portfolio, botStatus, isLoading, error }),
-    [portfolio, botStatus, isLoading, error]
+    () => ({ portfolio, botStatus, isLoading, error, refetch }),
+    [portfolio, botStatus, isLoading, error, refetch]
   );
 }
