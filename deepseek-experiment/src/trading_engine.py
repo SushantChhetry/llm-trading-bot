@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import os
+import time
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
@@ -84,8 +85,16 @@ class TradingEngine:
         except Exception as e:
             logger.warning(f"Event logger not available: {e}")
 
+        # Daily loss tracking
+        self.daily_start_nav = None
+        self.daily_start_time = None
+        self._initialize_daily_tracking()
+
         # Load existing trades if file exists
         self._load_trades()
+        
+        # Load portfolio state including positions
+        self._load_portfolio_state()
 
         logger.info(f"Trading engine initialized with balance: {self.balance}")
 
@@ -99,6 +108,100 @@ class TradingEngine:
             except Exception as e:
                 logger.error(f"Error loading trades: {e}")
                 self.trades = []
+
+    def _load_portfolio_state(self):
+        """Load portfolio state including positions from file."""
+        portfolio_file = config.DATA_DIR / "portfolio.json"
+        if not portfolio_file.exists():
+            logger.debug("Portfolio state file does not exist, starting with empty positions")
+            return
+        
+        try:
+            with open(portfolio_file, "r") as f:
+                state = json.load(f)
+            
+            # Restore positions if they exist and are valid
+            if "positions" in state and isinstance(state["positions"], dict):
+                restored_positions = {}
+                for symbol, position_data in state["positions"].items():
+                    # Validate position data has required fields
+                    if isinstance(position_data, dict) and "quantity" in position_data and "avg_price" in position_data:
+                        # Ensure trailing stop tracking fields exist
+                        if "highest_price" not in position_data:
+                            position_data["highest_price"] = position_data.get("avg_price", 0)
+                        if "lowest_price" not in position_data:
+                            position_data["lowest_price"] = position_data.get("avg_price", 0)
+                        restored_positions[symbol] = position_data
+                
+                self.positions = restored_positions
+                logger.info(f"Restored {len(self.positions)} positions from portfolio state")
+                
+                # Log position details for audit trail
+                for symbol, pos in self.positions.items():
+                    logger.debug(f"Restored position: {symbol} side={pos.get('side', 'long')} "
+                               f"quantity={pos.get('quantity', 0):.6f} avg_price={pos.get('avg_price', 0):.2f}")
+            
+            # Restore balance if available and valid
+            if "balance" in state:
+                try:
+                    restored_balance = float(state["balance"])
+                    if restored_balance >= 0:
+                        self.balance = restored_balance
+                        logger.info(f"Restored balance: ${self.balance:.2f}")
+                    else:
+                        logger.warning(f"Invalid balance in portfolio state: {restored_balance}, using default")
+                except (ValueError, TypeError) as e:
+                    logger.warning(f"Could not restore balance from portfolio state: {e}")
+        
+        except json.JSONDecodeError as e:
+            logger.error(f"Invalid JSON in portfolio state file: {e}")
+        except Exception as e:
+            logger.error(f"Error loading portfolio state: {e}", exc_info=True)
+
+    def _initialize_daily_tracking(self):
+        """Initialize daily loss tracking with current NAV and time."""
+        from datetime import datetime, timezone
+        current_time = datetime.now(timezone.utc)
+        # Set to start of current day in UTC
+        self.daily_start_time = current_time.replace(hour=0, minute=0, second=0, microsecond=0)
+        # Will be set when we have a price
+        self.daily_start_nav = None
+        logger.debug(f"Daily tracking initialized: start_time={self.daily_start_time.isoformat()}")
+
+    def _check_and_reset_daily_tracking(self, current_nav: float):
+        """Check if we need to reset daily tracking at midnight UTC."""
+        from datetime import datetime, timezone
+        current_time = datetime.now(timezone.utc)
+        
+        # Check if we've crossed midnight UTC
+        if self.daily_start_time is None:
+            self._initialize_daily_tracking()
+        
+        # Calculate days difference
+        days_diff = (current_time.date() - self.daily_start_time.date()).days
+        
+        if days_diff > 0:
+            # New day - reset tracking
+            logger.info(f"Daily tracking reset: new day detected (days_diff={days_diff})")
+            self.daily_start_nav = current_nav
+            self.daily_start_time = current_time.replace(hour=0, minute=0, second=0, microsecond=0)
+        elif self.daily_start_nav is None:
+            # First time setting daily start NAV
+            self.daily_start_nav = current_nav
+            logger.debug(f"Daily start NAV set: {self.daily_start_nav:.2f}")
+
+    def _calculate_daily_loss_pct(self, current_nav: float) -> float:
+        """Calculate daily loss percentage."""
+        if self.daily_start_nav is None or self.daily_start_nav <= 0:
+            return 0.0
+        
+        if current_nav >= self.daily_start_nav:
+            # No loss or profit
+            return 0.0
+        
+        # Calculate loss percentage
+        daily_loss_pct = (self.daily_start_nav - current_nav) / self.daily_start_nav
+        return max(0.0, daily_loss_pct)  # Ensure non-negative
 
     def _save_trades(self):
         """Save trade history to file."""
@@ -153,6 +256,14 @@ class TradingEngine:
         # Get full portfolio summary with all metrics
         if current_price is not None:
             portfolio_summary = self.get_portfolio_summary(current_price)
+            current_nav = portfolio_summary.get("total_value", self.balance)
+            
+            # Check and reset daily tracking if needed
+            self._check_and_reset_daily_tracking(current_nav)
+            
+            # Calculate daily loss percentage
+            daily_loss_pct = self._calculate_daily_loss_pct(current_nav)
+            logger.debug(f"Daily loss tracking: start_nav={self.daily_start_nav:.2f} current_nav={current_nav:.2f} daily_loss_pct={daily_loss_pct:.4f}")
         else:
             # Fallback if no price provided
             portfolio_summary = {
@@ -165,6 +276,8 @@ class TradingEngine:
                 "open_positions": len(self.positions),
                 "total_trades": len(self.trades),
             }
+            current_nav = self.balance
+            daily_loss_pct = None
 
         logger.debug(f"PORTFOLIO_STATE_SUMMARY balance={portfolio_summary.get('balance', 0):.2f} "
                     f"open_positions={portfolio_summary.get('open_positions', 0)} "
@@ -294,6 +407,14 @@ class TradingEngine:
 
         return self.balance + position_value
 
+    # Error Handling Note:
+    # - Circuit breaker: Prevents cascading failures (5 failures = 30s timeout)
+    # - Retry logic: Retries up to 3 times with exponential backoff
+    # - For live trading: Additional error handling will be needed for:
+    #   * Exchange API errors (order rejection, insufficient margin, rate limits)
+    #   * Network errors (timeouts, connection failures)
+    #   * Order status verification (partial fills, cancellations)
+    #   * Exchange-specific error codes and handling
     @validate_trading_inputs
     @circuit_breaker(CircuitBreakerConfig(failure_threshold=5, recovery_timeout=30))
     @retry(RetryConfig(max_attempts=3, base_delay=0.5, max_delay=5.0))
@@ -328,6 +449,44 @@ class TradingEngine:
             pos = self.positions[symbol]
             logger.info(f"EXISTING_POSITION symbol={symbol} quantity={pos.get('quantity', 0):.6f} "
                        f"avg_price={pos.get('avg_price', 0):.2f} margin_used={pos.get('margin_used', 0):.2f}")
+
+        # CRITICAL: Risk validation BEFORE trade execution
+        if self.risk_client:
+            try:
+                current_nav = self.get_portfolio_value(price)
+                quantity = amount_usdt / price
+                position_value = amount_usdt  # Notional value for new position
+                
+                # If position exists, add to existing position value
+                if symbol in self.positions:
+                    existing_pos = self.positions[symbol]
+                    position_value = existing_pos.get("notional_value", 0) + amount_usdt
+                
+                validation_result = self.risk_client.validate_order(
+                    strategy_id="default",
+                    symbol=symbol,
+                    side="buy",
+                    quantity=quantity,
+                    price=price,
+                    leverage=leverage,
+                    current_nav=current_nav,
+                    position_value=position_value
+                )
+                
+                if not validation_result.approved:
+                    logger.error(f"TRADE_REJECTED reason=risk_validation_failed symbol={symbol} "
+                               f"status={validation_result.status} reason={validation_result.reason}")
+                    return None
+                
+                logger.info(f"RISK_VALIDATION_PASSED symbol={symbol} status={validation_result.status}")
+            except Exception as e:
+                logger.error(f"Error during risk validation: {e}", exc_info=True)
+                # If risk service is required and validation fails, reject trade
+                if config.RISK_SERVICE_REQUIRED:
+                    logger.critical(f"Risk validation failed and RISK_SERVICE_REQUIRED=true - REJECTING trade")
+                    return None
+                # Otherwise, log warning but continue (for paper trading)
+                logger.warning(f"Risk validation error but continuing (RISK_SERVICE_REQUIRED=false)")
 
         # Validate leverage
         original_leverage = leverage
@@ -442,6 +601,14 @@ class TradingEngine:
                        f"new_quantity={total_quantity:.6f} new_avg_price={new_avg_price:.2f} "
                        f"new_margin={total_margin:.2f}")
 
+            # Update trailing stop tracking when averaging positions
+            existing_highest = pos.get("highest_price", old_avg_price)
+            existing_lowest = pos.get("lowest_price", old_avg_price)
+            
+            # Preserve existing highest/lowest if better than current price
+            new_highest = max(existing_highest, price)
+            new_lowest = min(existing_lowest, price)
+            
             self.positions[symbol] = {
                 "side": "long",
                 "quantity": total_quantity,
@@ -450,6 +617,13 @@ class TradingEngine:
                 "leverage": leverage,
                 "margin_used": total_margin,
                 "notional_value": total_quantity * price,
+                "highest_price": new_highest,  # Preserve trailing stop tracking
+                "lowest_price": new_lowest,    # Preserve trailing stop tracking
+                # Preserve existing stop-loss, take-profit, and exit plan if they exist
+                "stop_loss": pos.get("stop_loss", 0),
+                "take_profit": pos.get("take_profit", 0),
+                "exit_plan": pos.get("exit_plan", {}),
+                "partial_profit_taken": pos.get("partial_profit_taken", False),
             }
         else:
             logger.info(f"POSITION_CREATED symbol={symbol} operation=new_position quantity={quantity:.6f} "
@@ -472,6 +646,8 @@ class TradingEngine:
                 "stop_loss": stop_loss,
                 "take_profit": take_profit,
                 "exit_plan": exit_plan,
+                "highest_price": price,  # For trailing stop-loss
+                "lowest_price": price,   # For trailing stop-loss (shorts)
             }
 
         logger.debug(f"TRADE_PERSISTENCE_START symbol={symbol} trade_id={trade['id']}")
@@ -488,13 +664,15 @@ class TradingEngine:
         if self.risk_client:
             try:
                 current_nav = self.get_portfolio_value(price)
-                daily_loss_pct = None  # Would calculate from daily tracking
+                # Calculate daily loss percentage
+                self._check_and_reset_daily_tracking(current_nav)
+                daily_loss_pct = self._calculate_daily_loss_pct(current_nav)
                 self.risk_client.update_portfolio(
                     nav=current_nav,
                     positions=self.positions,
                     daily_loss_pct=daily_loss_pct
                 )
-                logger.debug(f"Risk service updated with portfolio state: nav={current_nav:.2f}")
+                logger.debug(f"Risk service updated with portfolio state: nav={current_nav:.2f} daily_loss_pct={daily_loss_pct:.4f}")
             except Exception as e:
                 logger.warning(f"Failed to update risk service: {e}")
 
@@ -598,6 +776,40 @@ class TradingEngine:
                    f"leverage={position.get('leverage', 1.0):.1f}")
 
         sell_quantity = quantity if quantity else position_quantity
+        
+        # CRITICAL: Risk validation BEFORE trade execution
+        if self.risk_client:
+            try:
+                current_nav = self.get_portfolio_value(price)
+                # For sell, position_value is the remaining position value after selling
+                remaining_quantity = position_quantity - sell_quantity
+                position_value = remaining_quantity * price if remaining_quantity > 0 else 0
+                
+                validation_result = self.risk_client.validate_order(
+                    strategy_id="default",
+                    symbol=symbol,
+                    side="sell",
+                    quantity=sell_quantity,
+                    price=price,
+                    leverage=position.get("leverage", 1.0),
+                    current_nav=current_nav,
+                    position_value=position_value
+                )
+                
+                if not validation_result.approved:
+                    logger.error(f"TRADE_REJECTED reason=risk_validation_failed symbol={symbol} "
+                               f"status={validation_result.status} reason={validation_result.reason}")
+                    return None
+                
+                logger.info(f"RISK_VALIDATION_PASSED symbol={symbol} status={validation_result.status}")
+            except Exception as e:
+                logger.error(f"Error during risk validation: {e}", exc_info=True)
+                # If risk service is required and validation fails, reject trade
+                if config.RISK_SERVICE_REQUIRED:
+                    logger.critical(f"Risk validation failed and RISK_SERVICE_REQUIRED=true - REJECTING trade")
+                    return None
+                # Otherwise, log warning but continue (for paper trading)
+                logger.warning(f"Risk validation error but continuing (RISK_SERVICE_REQUIRED=false)")
         logger.debug(f"SELL_QUANTITY_DETERMINED symbol={symbol} requested={quantity if quantity else 'ALL'} "
                     f"final={sell_quantity:.6f}")
 
@@ -607,8 +819,17 @@ class TradingEngine:
             sell_quantity = position_quantity
 
         amount_usdt = sell_quantity * price
-        profit = (price - position_avg_price) * sell_quantity
-        profit_pct = ((price - position_avg_price) / position_avg_price) * 100 if position_avg_price > 0 else 0
+        position_side = position.get("side", "long")
+        
+        # Calculate profit based on position side
+        if position_side == "long":
+            # Long position: profit when price goes up
+            profit = (price - position_avg_price) * sell_quantity
+            profit_pct = ((price - position_avg_price) / position_avg_price) * 100 if position_avg_price > 0 else 0
+        else:  # short
+            # Short position: profit when price goes down
+            profit = (position_avg_price - price) * sell_quantity
+            profit_pct = ((position_avg_price - price) / position_avg_price) * 100 if position_avg_price > 0 else 0
 
         logger.debug(f"SELL_CALCULATION symbol={symbol} sell_quantity={sell_quantity:.6f} "
                     f"sell_price={price:.2f} amount_usdt={amount_usdt:.2f} entry_price={position_avg_price:.2f} "
@@ -789,6 +1010,44 @@ class TradingEngine:
                        f"avg_price={pos.get('avg_price', 0):.2f} margin_used={pos.get('margin_used', 0):.2f} "
                        f"side={pos.get('side', 'unknown')}")
 
+        # CRITICAL: Risk validation BEFORE trade execution
+        if self.risk_client:
+            try:
+                current_nav = self.get_portfolio_value(price)
+                quantity = amount_usdt / price
+                position_value = amount_usdt  # Notional value for new position
+                
+                # If position exists, add to existing position value
+                if symbol in self.positions:
+                    existing_pos = self.positions[symbol]
+                    position_value = existing_pos.get("notional_value", 0) + amount_usdt
+                
+                validation_result = self.risk_client.validate_order(
+                    strategy_id="default",
+                    symbol=symbol,
+                    side="short",
+                    quantity=quantity,
+                    price=price,
+                    leverage=leverage,
+                    current_nav=current_nav,
+                    position_value=position_value
+                )
+                
+                if not validation_result.approved:
+                    logger.error(f"TRADE_REJECTED reason=risk_validation_failed symbol={symbol} "
+                               f"status={validation_result.status} reason={validation_result.reason}")
+                    return None
+                
+                logger.info(f"RISK_VALIDATION_PASSED symbol={symbol} status={validation_result.status}")
+            except Exception as e:
+                logger.error(f"Error during risk validation: {e}", exc_info=True)
+                # If risk service is required and validation fails, reject trade
+                if config.RISK_SERVICE_REQUIRED:
+                    logger.critical(f"Risk validation failed and RISK_SERVICE_REQUIRED=true - REJECTING trade")
+                    return None
+                # Otherwise, log warning but continue (for paper trading)
+                logger.warning(f"Risk validation error but continuing (RISK_SERVICE_REQUIRED=false)")
+
         # Validate leverage
         original_leverage = leverage
         leverage = max(1.0, min(leverage, config.MAX_LEVERAGE))
@@ -893,6 +1152,15 @@ class TradingEngine:
                        f"new_quantity={total_quantity:.6f} new_avg_price={new_avg_price:.2f} "
                        f"new_margin={total_margin:.2f}")
 
+            # Update trailing stop tracking when averaging positions
+            existing_highest = pos.get("highest_price", old_avg_price)
+            existing_lowest = pos.get("lowest_price", old_avg_price)
+            
+            # For shorts, preserve existing highest/lowest if better than current price
+            # For shorts, we want lowest price (best entry) and highest price (worst entry)
+            new_highest = max(existing_highest, price)
+            new_lowest = min(existing_lowest, price)
+
             self.positions[symbol] = {
                 "side": "short",
                 "quantity": total_quantity,
@@ -901,12 +1169,24 @@ class TradingEngine:
                 "leverage": leverage,
                 "margin_used": total_margin,
                 "notional_value": total_quantity * price,
+                "highest_price": new_highest,  # Preserve trailing stop tracking
+                "lowest_price": new_lowest,    # Preserve trailing stop tracking
+                # Preserve existing stop-loss, take-profit, and exit plan if they exist
+                "stop_loss": pos.get("stop_loss", 0),
+                "take_profit": pos.get("take_profit", 0),
+                "exit_plan": pos.get("exit_plan", {}),
+                "partial_profit_taken": pos.get("partial_profit_taken", False),
             }
         else:
             logger.info(f"POSITION_CREATED symbol={symbol} operation=new_position direction=short "
                        f"quantity={quantity:.6f} entry_price={price:.2f} margin_used={required_margin:.2f} "
                        f"notional_value={quantity * price:.2f}")
 
+            # Store stop-loss and take-profit from exit plan for shorts
+            exit_plan = llm_decision.get("exit_plan", {}) if llm_decision else {}
+            stop_loss = exit_plan.get("stop_loss", 0)
+            take_profit = exit_plan.get("profit_target", 0)
+            
             self.positions[symbol] = {
                 "side": "short",
                 "quantity": quantity,
@@ -915,6 +1195,11 @@ class TradingEngine:
                 "leverage": leverage,
                 "margin_used": required_margin,
                 "notional_value": quantity * price,
+                "stop_loss": stop_loss,
+                "take_profit": take_profit,
+                "exit_plan": exit_plan,
+                "highest_price": price,  # For trailing stop-loss (shorts)
+                "lowest_price": price,   # For trailing stop-loss
             }
 
         logger.debug(f"TRADE_PERSISTENCE_START symbol={symbol} trade_id={trade['id']}")
@@ -1248,3 +1533,318 @@ class TradingEngine:
             "total_trading_fees": total_fees,
             "fee_impact_pct": fee_impact,
         }
+
+    def _close_position(self, symbol: str, price: float, quantity: float = None, reason: str = "manual") -> Optional[Dict]:
+        """
+        Close a position (handles both long and short positions) with retry logic.
+        
+        Args:
+            symbol: Trading pair symbol
+            price: Execution price
+            quantity: Quantity to close (None to close entire position)
+            reason: Reason for closing (for logging)
+            
+        Returns:
+            Trade dictionary if successful, None otherwise
+        """
+        if symbol not in self.positions:
+            logger.error(f"POSITION_CLOSE_FAILED symbol={symbol} reason=position_not_found")
+            return None
+        
+        position = self.positions[symbol]
+        side = position.get("side", "long")
+        
+        # Retry logic for position close
+        max_retries = 3
+        base_delay = 0.5
+        
+        for attempt in range(max_retries):
+            try:
+                # For long positions, use execute_sell
+                if side == "long":
+                    trade = self.execute_sell(symbol, price, quantity=quantity, confidence=1.0)
+                else:
+                    # For short positions, use execute_sell (it handles both sides)
+                    trade = self.execute_sell(symbol, price, quantity=quantity, confidence=1.0)
+                
+                if trade:
+                    return trade
+                else:
+                    # execute_sell returned None - might be a validation issue
+                    if attempt < max_retries - 1:
+                        delay = base_delay * (2 ** attempt)  # Exponential backoff
+                        logger.warning(f"Position close attempt {attempt + 1} failed for {symbol}, retrying in {delay:.2f}s")
+                        time.sleep(delay)
+                    else:
+                        logger.error(f"Failed to close position {symbol} after {max_retries} attempts")
+                        return None
+                        
+            except Exception as e:
+                if attempt < max_retries - 1:
+                    delay = base_delay * (2 ** attempt)  # Exponential backoff
+                    logger.warning(f"Position close attempt {attempt + 1} failed for {symbol}: {e}, retrying in {delay:.2f}s")
+                    time.sleep(delay)
+                else:
+                    logger.error(f"Failed to close position {symbol} after {max_retries} attempts: {e}", exc_info=True)
+                    return None
+        
+        return None
+
+    def monitor_positions(self, current_price: float) -> Dict[str, Any]:
+        """
+        Monitor all open positions and check for stop-loss, take-profit, and other exit conditions.
+        
+        This method is called each trading cycle to automatically close positions when:
+        - Stop-loss is hit
+        - Take-profit is hit
+        - Trailing stop-loss is triggered
+        - Partial profit targets are reached
+        
+        Args:
+            current_price: Current market price
+            
+        Returns:
+            Dictionary with monitoring results:
+            - positions_checked: Number of positions checked
+            - positions_closed: Number of positions closed
+            - stop_loss_triggers: Number of stop-loss triggers
+            - take_profit_triggers: Number of take-profit triggers
+            - trailing_stop_triggers: Number of trailing stop triggers
+            - partial_profit_triggers: Number of partial profit triggers
+        """
+        if not config.ENABLE_POSITION_MONITORING:
+            return {
+                "positions_checked": 0,
+                "positions_closed": 0,
+                "stop_loss_triggers": 0,
+                "take_profit_triggers": 0,
+                "trailing_stop_triggers": 0,
+                "partial_profit_triggers": 0,
+            }
+        
+        results = {
+            "positions_checked": len(self.positions),
+            "positions_closed": 0,
+            "stop_loss_triggers": 0,
+            "take_profit_triggers": 0,
+            "trailing_stop_triggers": 0,
+            "partial_profit_triggers": 0,
+        }
+        
+        if not self.positions:
+            return results
+        
+        # Check portfolio-level profit target first
+        portfolio_value = self.get_portfolio_value(current_price)
+        initial_balance = config.INITIAL_BALANCE
+        portfolio_profit_pct = ((portfolio_value - initial_balance) / initial_balance) * 100
+        
+        if portfolio_profit_pct >= config.PORTFOLIO_PROFIT_TARGET_PCT:
+            logger.info(f"PORTFOLIO_PROFIT_TARGET_HIT portfolio_profit_pct={portfolio_profit_pct:.2f}% "
+                       f"target={config.PORTFOLIO_PROFIT_TARGET_PCT:.2f}% closing_all_positions")
+            # Close all positions
+            symbols_to_close = list(self.positions.keys())
+            for symbol in symbols_to_close:
+                trade = self._close_position(symbol, current_price, quantity=None, reason="portfolio_profit_target")
+                if trade:
+                    results["positions_closed"] += 1
+                    results["take_profit_triggers"] += 1
+            return results
+        
+        # Check each position individually
+        positions_to_update = {}
+        for symbol, position in list(self.positions.items()):
+            entry_price = position.get("avg_price", 0)
+            if entry_price <= 0:
+                continue
+            
+            side = position.get("side", "long")
+            quantity = position.get("quantity", 0)
+            if quantity <= 0:
+                continue
+            
+            # Calculate current PnL
+            if side == "long":
+                pnl_pct = ((current_price - entry_price) / entry_price) * 100
+            else:  # short
+                pnl_pct = ((entry_price - current_price) / entry_price) * 100
+            
+            # Get stop-loss and take-profit from position or use defaults
+            stop_loss_price = position.get("stop_loss", 0)
+            take_profit_price = position.get("take_profit", 0)
+            
+            # If not set in position, calculate from config defaults
+            if stop_loss_price <= 0:
+                if side == "long":
+                    stop_loss_price = entry_price * (1 - config.STOP_LOSS_PERCENT / 100)
+                else:  # short
+                    stop_loss_price = entry_price * (1 + config.STOP_LOSS_PERCENT / 100)
+            
+            if take_profit_price <= 0:
+                if side == "long":
+                    take_profit_price = entry_price * (1 + config.TAKE_PROFIT_PERCENT / 100)
+                else:  # short
+                    take_profit_price = entry_price * (1 - config.TAKE_PROFIT_PERCENT / 100)
+            
+            # Update trailing stop-loss if enabled and profit threshold met
+            if config.ENABLE_TRAILING_STOP_LOSS and pnl_pct >= config.TRAILING_STOP_ACTIVATION_PCT:
+                highest_price = position.get("highest_price", entry_price)
+                lowest_price = position.get("lowest_price", entry_price)
+                
+                # Update highest/lowest price seen
+                if side == "long":
+                    if current_price > highest_price:
+                        highest_price = current_price
+                        position["highest_price"] = highest_price
+                    # Trailing stop: highest_price * (1 - trailing_distance)
+                    trailing_stop_price = highest_price * (1 - config.TRAILING_STOP_DISTANCE_PCT / 100)
+                    if trailing_stop_price > stop_loss_price:
+                        stop_loss_price = trailing_stop_price
+                        position["stop_loss"] = stop_loss_price
+                        logger.debug(f"TRAILING_STOP_UPDATED symbol={symbol} side={side} "
+                                   f"highest_price={highest_price:.2f} trailing_stop={trailing_stop_price:.2f} "
+                                   f"pnl_pct={pnl_pct:.2f}%")
+                else:  # short
+                    if current_price < lowest_price:
+                        lowest_price = current_price
+                        position["lowest_price"] = lowest_price
+                    # Trailing stop for short: lowest_price * (1 + trailing_distance)
+                    # For shorts, stop-loss is above entry, so trailing stop should be above lowest_price
+                    trailing_stop_price = lowest_price * (1 + config.TRAILING_STOP_DISTANCE_PCT / 100)
+                    # For shorts, stop_loss_price should be >= trailing_stop_price (stop-loss is above entry for shorts)
+                    # But we want trailing stop to be tighter (lower) than initial stop-loss
+                    initial_stop_loss = entry_price * (1 + config.STOP_LOSS_PERCENT / 100)
+                    if trailing_stop_price < initial_stop_loss:
+                        stop_loss_price = trailing_stop_price
+                        position["stop_loss"] = stop_loss_price
+                        logger.debug(f"TRAILING_STOP_UPDATED symbol={symbol} side={side} "
+                                   f"lowest_price={lowest_price:.2f} trailing_stop={trailing_stop_price:.2f} "
+                                   f"pnl_pct={pnl_pct:.2f}%")
+            elif config.ENABLE_TRAILING_STOP_LOSS and pnl_pct < config.TRAILING_STOP_ACTIVATION_PCT:
+                # Still update highest/lowest price tracking even if trailing stop not active yet
+                if side == "long":
+                    if current_price > position.get("highest_price", entry_price):
+                        position["highest_price"] = current_price
+                else:  # short
+                    if current_price < position.get("lowest_price", entry_price):
+                        position["lowest_price"] = current_price
+            
+            # Check stop-loss trigger
+            stop_loss_triggered = False
+            if side == "long":
+                stop_loss_triggered = current_price <= stop_loss_price
+            else:  # short
+                stop_loss_triggered = current_price >= stop_loss_price
+            
+            # Check take-profit trigger
+            take_profit_triggered = False
+            if side == "long":
+                take_profit_triggered = current_price >= take_profit_price
+            else:  # short
+                take_profit_triggered = current_price <= take_profit_price
+            
+            # Check partial profit-taking
+            partial_profit_triggered = False
+            if config.ENABLE_PARTIAL_PROFIT_TAKING and not position.get("partial_profit_taken", False):
+                partial_profit_target_pct = config.PARTIAL_PROFIT_TARGET_PCT
+                if side == "long":
+                    partial_profit_price = entry_price * (1 + partial_profit_target_pct / 100)
+                    partial_profit_triggered = current_price >= partial_profit_price
+                else:  # short
+                    partial_profit_price = entry_price * (1 - partial_profit_target_pct / 100)
+                    partial_profit_triggered = current_price <= partial_profit_price
+            
+            # Execute exits based on priority: stop-loss > take-profit > partial profit
+            if stop_loss_triggered:
+                # Handle price gaps: use stop-loss price if price gapped through it
+                if side == "long":
+                    # For longs, use the lower of current price or stop-loss price
+                    execution_price = min(current_price, stop_loss_price)
+                else:  # short
+                    # For shorts, use the higher of current price or stop-loss price
+                    execution_price = max(current_price, stop_loss_price)
+                
+                logger.warning(f"STOP_LOSS_TRIGGERED symbol={symbol} side={side} "
+                             f"entry_price={entry_price:.2f} current_price={current_price:.2f} "
+                             f"stop_loss_price={stop_loss_price:.2f} execution_price={execution_price:.2f} "
+                             f"pnl_pct={pnl_pct:.2f}%")
+                trade = self._close_position(symbol, execution_price, quantity=None, reason="stop_loss")
+                if trade:
+                    results["positions_closed"] += 1
+                    results["stop_loss_triggers"] += 1
+                    # Log event if available
+                    if self.event_logger:
+                        try:
+                            self.event_logger.log_event(
+                                event_type="stop_loss_trigger",
+                                data={
+                                    "symbol": symbol,
+                                    "side": side,
+                                    "entry_price": entry_price,
+                                    "exit_price": current_price,
+                                    "pnl_pct": pnl_pct,
+                                    "trade_id": trade.get("id")
+                                }
+                            )
+                        except Exception as e:
+                            logger.debug(f"Error logging stop-loss event: {e}")
+            elif take_profit_triggered:
+                logger.info(f"TAKE_PROFIT_TRIGGERED symbol={symbol} side={side} "
+                          f"entry_price={entry_price:.2f} current_price={current_price:.2f} "
+                          f"take_profit_price={take_profit_price:.2f} pnl_pct={pnl_pct:.2f}%")
+                trade = self._close_position(symbol, current_price, quantity=None, reason="take_profit")
+                if trade:
+                    results["positions_closed"] += 1
+                    results["take_profit_triggers"] += 1
+                    # Log event if available
+                    if self.event_logger:
+                        try:
+                            self.event_logger.log_event(
+                                event_type="take_profit_trigger",
+                                data={
+                                    "symbol": symbol,
+                                    "side": side,
+                                    "entry_price": entry_price,
+                                    "exit_price": current_price,
+                                    "pnl_pct": pnl_pct,
+                                    "trade_id": trade.get("id")
+                                }
+                            )
+                        except Exception as e:
+                            logger.debug(f"Error logging take-profit event: {e}")
+            elif partial_profit_triggered:
+                # Close partial position (e.g., 50%)
+                partial_quantity = quantity * (config.PARTIAL_PROFIT_PERCENT / 100)
+                logger.info(f"PARTIAL_PROFIT_TRIGGERED symbol={symbol} side={side} "
+                          f"entry_price={entry_price:.2f} current_price={current_price:.2f} "
+                          f"pnl_pct={pnl_pct:.2f}% closing_{config.PARTIAL_PROFIT_PERCENT:.0f}%")
+                trade = self._close_position(symbol, current_price, quantity=partial_quantity, reason="partial_profit")
+                if trade:
+                    results["partial_profit_triggers"] += 1
+                    # Mark that partial profit has been taken
+                    if symbol in self.positions:
+                        self.positions[symbol]["partial_profit_taken"] = True
+                    logger.info(f"PARTIAL_PROFIT_EXECUTED symbol={symbol} quantity_closed={partial_quantity:.6f} "
+                              f"remaining={self.positions.get(symbol, {}).get('quantity', 0):.6f}")
+            else:
+                # Update position tracking for trailing stop
+                if config.ENABLE_TRAILING_STOP_LOSS:
+                    if side == "long":
+                        if current_price > position.get("highest_price", entry_price):
+                            position["highest_price"] = current_price
+                    else:  # short
+                        if current_price < position.get("lowest_price", entry_price):
+                            position["lowest_price"] = current_price
+                    positions_to_update[symbol] = position
+        
+        # Update positions with trailing stop data
+        for symbol, position in positions_to_update.items():
+            if symbol in self.positions:
+                self.positions[symbol].update(position)
+        
+        # Save portfolio state if any positions were closed
+        if results["positions_closed"] > 0:
+            self._save_portfolio_state(current_price)
+            logger.debug(f"Portfolio state saved after closing {results['positions_closed']} positions")
+        
+        return results

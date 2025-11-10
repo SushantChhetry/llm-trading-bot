@@ -13,6 +13,8 @@ import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
+from config import config
+
 logger = logging.getLogger(__name__)
 
 
@@ -125,25 +127,45 @@ class RiskClient:
                 return result
             else:
                 logger.error(f"Risk service returned {response.status_code}: {response.text}")
-                # Fail open (approve) if service is down - risky but better than blocking all trades
-                # In production, you might want to fail closed instead
-                return OrderValidationResult(
-                    approved=False,
-                    status="rejected",
-                    reason=f"Risk service error: {response.status_code}",
-                    details={}
-                )
+                # Fail-closed behavior: reject trades when risk service is down (if configured)
+                if config.RISK_SERVICE_FAIL_CLOSED:
+                    logger.critical(f"Risk service error ({response.status_code}) - REJECTING trade (fail-closed mode)")
+                    return OrderValidationResult(
+                        approved=False,
+                        status="rejected",
+                        reason=f"Risk service error: {response.status_code} (fail-closed mode)",
+                        details={}
+                    )
+                else:
+                    # Fail-open behavior: approve trades when risk service is down (paper trading only)
+                    logger.warning(f"Risk service error ({response.status_code}) - APPROVING trade (fail-open mode)")
+                    return OrderValidationResult(
+                        approved=True,
+                        status="approved",
+                        reason=f"Risk service error but fail-open mode enabled",
+                        details={}
+                    )
         
         except requests.exceptions.RequestException as e:
             logger.error(f"Error calling risk service: {e}")
-            # Fail open (approve) if service is unreachable
-            # In production, consider failing closed for safety
-            return OrderValidationResult(
-                approved=False,
-                status="rejected",
-                reason=f"Risk service unreachable: {str(e)}",
-                details={}
-            )
+            # Fail-closed behavior: reject trades when risk service is unreachable (if configured)
+            if config.RISK_SERVICE_FAIL_CLOSED:
+                logger.critical(f"Risk service unreachable - REJECTING trade (fail-closed mode)")
+                return OrderValidationResult(
+                    approved=False,
+                    status="rejected",
+                    reason=f"Risk service unreachable: {str(e)} (fail-closed mode)",
+                    details={}
+                )
+            else:
+                # Fail-open behavior: approve trades when risk service is unreachable (paper trading only)
+                logger.warning(f"Risk service unreachable - APPROVING trade (fail-open mode)")
+                return OrderValidationResult(
+                    approved=True,
+                    status="approved",
+                    reason=f"Risk service unreachable but fail-open mode enabled",
+                    details={}
+                )
     
     def get_risk_state(self) -> Optional[Dict]:
         """Get current risk state from risk service."""

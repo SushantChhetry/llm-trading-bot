@@ -83,3 +83,81 @@ MAX_RISK_PER_TRADE = float(os.getenv("MAX_RISK_PER_TRADE", "2.0"))  # Max 2% ris
 MAX_ACTIVE_POSITIONS = int(os.getenv("MAX_ACTIVE_POSITIONS", "6"))  # Max simultaneous positions
 MIN_CONFIDENCE_THRESHOLD = float(os.getenv("MIN_CONFIDENCE_THRESHOLD", "0.6"))  # Min confidence to trade
 FEE_IMPACT_WARNING_THRESHOLD = float(os.getenv("FEE_IMPACT_WARNING_THRESHOLD", "20.0"))  # Warn if fees > 20% of PnL
+
+# Position monitoring and exit management
+ENABLE_POSITION_MONITORING = os.getenv("ENABLE_POSITION_MONITORING", "true").lower() == "true"  # Enable automatic position monitoring
+PORTFOLIO_PROFIT_TARGET_PCT = float(os.getenv("PORTFOLIO_PROFIT_TARGET_PCT", "10.0"))  # Close all positions at +10% portfolio profit
+ENABLE_TRAILING_STOP_LOSS = os.getenv("ENABLE_TRAILING_STOP_LOSS", "true").lower() == "true"  # Enable trailing stop-loss
+TRAILING_STOP_DISTANCE_PCT = float(os.getenv("TRAILING_STOP_DISTANCE_PCT", "1.0"))  # Trailing stop distance (1% below peak)
+TRAILING_STOP_ACTIVATION_PCT = float(os.getenv("TRAILING_STOP_ACTIVATION_PCT", "0.5"))  # Activate trailing stop after 0.5% profit
+ENABLE_PARTIAL_PROFIT_TAKING = os.getenv("ENABLE_PARTIAL_PROFIT_TAKING", "true").lower() == "true"  # Enable partial profit-taking
+PARTIAL_PROFIT_PERCENT = float(os.getenv("PARTIAL_PROFIT_PERCENT", "50.0"))  # Close 50% at first target
+PARTIAL_PROFIT_TARGET_PCT = float(os.getenv("PARTIAL_PROFIT_TARGET_PCT", "1.5"))  # First profit target (1.5%)
+
+# Risk service configuration
+RISK_SERVICE_FAIL_CLOSED = os.getenv("RISK_SERVICE_FAIL_CLOSED", "").lower() == "true" if os.getenv("RISK_SERVICE_FAIL_CLOSED") else (TRADING_MODE == "live")  # Default: True for live, False for paper
+RISK_SERVICE_REQUIRED = os.getenv("RISK_SERVICE_REQUIRED", "").lower() == "true" if os.getenv("RISK_SERVICE_REQUIRED") else (TRADING_MODE == "live")  # Default: True for live trading
+POSITION_RECONCILIATION_INTERVAL = int(os.getenv("POSITION_RECONCILIATION_INTERVAL", "5"))  # Run reconciliation every N cycles
+
+# LLM advanced settings (with defaults if not in env)
+LLM_TEMPERATURE = float(os.getenv("LLM_TEMPERATURE", "0.7"))
+LLM_MAX_TOKENS = int(os.getenv("LLM_MAX_TOKENS", "500"))
+LLM_TIMEOUT = int(os.getenv("LLM_TIMEOUT", "30"))
+
+
+def get_default_configuration() -> dict:
+    """
+    Export current configuration values as a dictionary.
+    This represents the default configuration that can be saved to Supabase.
+    
+    Returns:
+        Dictionary containing all configuration values organized by category
+    """
+    return {
+        "llm": {
+            "provider": LLM_PROVIDER,
+            "api_key": "",  # Never export API keys
+            "api_url": LLM_API_URL or "",
+            "model": LLM_MODEL or "",
+            "temperature": LLM_TEMPERATURE,
+            "max_tokens": LLM_MAX_TOKENS,
+            "timeout": LLM_TIMEOUT,
+        },
+        "exchange": {
+            "name": EXCHANGE,
+            "symbol": SYMBOL,
+            "use_testnet": USE_TESTNET,
+            "api_key": "",  # Never export API keys
+            "api_secret": "",  # Never export API keys
+            "testnet_api_key": "",  # Never export API keys
+            "testnet_api_secret": "",  # Never export API keys
+        },
+        "trading": {
+            "mode": TRADING_MODE,
+            "initial_balance": INITIAL_BALANCE,
+            "max_position_size": MAX_POSITION_SIZE,
+            "max_leverage": MAX_LEVERAGE,
+            "default_leverage": DEFAULT_LEVERAGE,
+            "trading_fee_percent": TRADING_FEE_PERCENT,
+            "max_risk_per_trade": MAX_RISK_PER_TRADE,
+            "stop_loss_percent": STOP_LOSS_PERCENT,
+            "take_profit_percent": TAKE_PROFIT_PERCENT,
+            "max_active_positions": MAX_ACTIVE_POSITIONS,
+            "min_confidence_threshold": MIN_CONFIDENCE_THRESHOLD,
+            "fee_impact_warning_threshold": FEE_IMPACT_WARNING_THRESHOLD,
+            "run_interval_seconds": RUN_INTERVAL_SECONDS,
+        },
+        "position_management": {
+            "enable_position_monitoring": ENABLE_POSITION_MONITORING,
+            "portfolio_profit_target_pct": PORTFOLIO_PROFIT_TARGET_PCT,
+            "enable_trailing_stop_loss": ENABLE_TRAILING_STOP_LOSS,
+            "trailing_stop_distance_pct": TRAILING_STOP_DISTANCE_PCT,
+            "trailing_stop_activation_pct": TRAILING_STOP_ACTIVATION_PCT,
+            "enable_partial_profit_taking": ENABLE_PARTIAL_PROFIT_TAKING,
+            "partial_profit_percent": PARTIAL_PROFIT_PERCENT,
+            "partial_profit_target_pct": PARTIAL_PROFIT_TARGET_PCT,
+        },
+        "logging": {
+            "level": LOG_LEVEL,
+        },
+    }

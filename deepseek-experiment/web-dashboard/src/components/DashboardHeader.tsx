@@ -1,11 +1,14 @@
-import { memo } from 'react';
+import { memo, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { Settings } from 'lucide-react';
 import { useConnectionStatus, usePortfolio } from '@/contexts/TradingDataContext';
 import { formatCurrency, formatPercentage, getProfitColor } from '@/lib/utils';
+import { SettingsDialog } from './SettingsDialog';
 
 export const DashboardHeader = memo(function DashboardHeader() {
   const { isConnected, error } = useConnectionStatus();
   const { portfolio } = usePortfolio();
+  const [settingsOpen, setSettingsOpen] = useState(false);
   
   const totalValue = portfolio?.total_value ?? 0;
   const totalReturnPct = portfolio?.total_return_pct ?? 0;
@@ -38,6 +41,13 @@ export const DashboardHeader = memo(function DashboardHeader() {
             </div>
           </div>
           <div className="flex items-center gap-4">
+            <button
+              onClick={() => setSettingsOpen(true)}
+              className="px-4 py-2 text-sm font-medium text-foreground hover:text-primary transition-colors border border-border rounded-md hover:border-primary tracking-normal flex items-center gap-2"
+            >
+              <Settings className="h-4 w-4" />
+              Settings
+            </button>
             <Link
               to="/docs"
               className="px-4 py-2 text-sm font-medium text-foreground hover:text-primary transition-colors border border-border rounded-md hover:border-primary tracking-normal"
@@ -65,6 +75,7 @@ export const DashboardHeader = memo(function DashboardHeader() {
           </div>
         </div>
       </div>
+      <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
     </header>
   );
 });

@@ -63,6 +63,7 @@ class StartupValidator:
             self.validate_database_connectivity()
             self.validate_api_keys()
             self.validate_configuration_values()
+            self.validate_risk_service()
         except ValidationError as e:
             self.errors.append(str(e))
 
@@ -145,6 +146,36 @@ class StartupValidator:
             elif not security_manager.validate_api_key(llm_api_key, llm_provider):
                 self.errors.append(f"Invalid LLM_API_KEY format for provider: {llm_provider}")
 
+    def validate_risk_service(self):
+        """Validate risk service is available and healthy."""
+        import os
+        import requests
+        
+        risk_service_url = os.getenv("RISK_SERVICE_URL", "http://localhost:8003")
+        
+        try:
+            # Check health endpoint
+            response = requests.get(f"{risk_service_url}/health", timeout=5)
+            if response.status_code == 200:
+                logger.info(f"Risk service health check passed: {risk_service_url}")
+                return True
+            else:
+                self.errors.append(f"Risk service health check failed: {response.status_code}")
+                return False
+        except requests.exceptions.RequestException as e:
+            # Risk service is optional for paper trading, required for live trading
+            from config import config
+            if config.TRADING_MODE == "live" and config.RISK_SERVICE_REQUIRED:
+                self.errors.append(
+                    f"Risk service is required for live trading but unavailable: {risk_service_url}\n"
+                    f"Error: {str(e)}\n"
+                    f"Please start the risk service or set RISK_SERVICE_REQUIRED=false"
+                )
+                return False
+            else:
+                logger.warning(f"Risk service not available (optional for paper trading): {e}")
+                return True  # Not an error for paper trading
+    
     def validate_configuration_values(self):
         """Validate configuration values are within acceptable ranges."""
         try:
@@ -202,6 +233,31 @@ class StartupValidator:
             elif trading_mode not in ["paper", "live"]:
                 self.errors.append(
                     f"Invalid TRADING_MODE: {trading_mode}. Must be 'paper' or 'live'"
+                )
+            
+            # Validate position monitoring configuration
+            trailing_stop_distance = float(os.getenv("TRAILING_STOP_DISTANCE_PCT", "1.0"))
+            stop_loss_percent = float(os.getenv("STOP_LOSS_PERCENT", "2.0"))
+            
+            if trailing_stop_distance >= stop_loss_percent:
+                self.warnings.append(
+                    f"TRAILING_STOP_DISTANCE_PCT ({trailing_stop_distance}%) should be less than "
+                    f"STOP_LOSS_PERCENT ({stop_loss_percent}%) to be effective"
+                )
+            
+            partial_profit_target = float(os.getenv("PARTIAL_PROFIT_TARGET_PCT", "1.5"))
+            take_profit_percent = float(os.getenv("TAKE_PROFIT_PERCENT", "3.0"))
+            
+            if partial_profit_target >= take_profit_percent:
+                self.warnings.append(
+                    f"PARTIAL_PROFIT_TARGET_PCT ({partial_profit_target}%) should be less than "
+                    f"TAKE_PROFIT_PERCENT ({take_profit_percent}%) to be effective"
+                )
+            
+            trailing_stop_activation = float(os.getenv("TRAILING_STOP_ACTIVATION_PCT", "0.5"))
+            if trailing_stop_activation < 0 or trailing_stop_activation > 10:
+                self.warnings.append(
+                    f"TRAILING_STOP_ACTIVATION_PCT ({trailing_stop_activation}%) is outside recommended range (0-10%)"
                 )
                 
         except ValueError as e:

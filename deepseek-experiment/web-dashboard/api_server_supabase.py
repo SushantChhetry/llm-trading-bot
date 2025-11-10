@@ -820,6 +820,248 @@ async def portfolio_snapshots(limit: int = 1000):
         
         return snapshots
 
+# Configuration Management Endpoints
+@app.get("/api/config/current")
+async def get_current_config():
+    """Get the currently active configuration from Supabase."""
+    if not USE_SUPABASE or not supabase:
+        # Return default config if Supabase not available
+        try:
+            from config.config import get_default_configuration
+            return {
+                "config": get_default_configuration(),
+                "source": "default",
+                "is_active": True,
+                "version": None
+            }
+        except Exception as e:
+            logger.error(f"Error getting default config: {e}")
+            raise HTTPException(status_code=500, detail="Failed to get configuration")
+    
+    try:
+        active_config = supabase.get_active_configuration()
+        if active_config:
+            # Extract config_json and metadata
+            config_json = active_config.get("config_json", {})
+            return {
+                "config": config_json,
+                "source": "supabase",
+                "is_active": True,
+                "version": active_config.get("version"),
+                "name": active_config.get("name"),
+                "description": active_config.get("description"),
+                "created_at": active_config.get("created_at"),
+                "id": active_config.get("id")
+            }
+        else:
+            # No active config, return defaults
+            from config.config import get_default_configuration
+            return {
+                "config": get_default_configuration(),
+                "source": "default",
+                "is_active": False,
+                "version": None
+            }
+    except Exception as e:
+        logger.error(f"Error getting current configuration: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/config/default")
+async def get_default_config():
+    """Get the default system configuration."""
+    try:
+        from config.config import get_default_configuration
+        default_config = get_default_configuration()
+        
+        # Also check if there's a default in Supabase
+        if USE_SUPABASE and supabase:
+            supabase_default = supabase.get_default_configuration()
+            if supabase_default:
+                return {
+                    "config": supabase_default.get("config_json", default_config),
+                    "source": "supabase_default",
+                    "is_default": True,
+                    "version": supabase_default.get("version"),
+                    "name": supabase_default.get("name"),
+                    "id": supabase_default.get("id")
+                }
+        
+        return {
+            "config": default_config,
+            "source": "config.py",
+            "is_default": True,
+            "version": None
+        }
+    except Exception as e:
+        logger.error(f"Error getting default configuration: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/config/history")
+async def get_config_history(limit: int = 50):
+    """Get all configuration versions from Supabase."""
+    if not USE_SUPABASE or not supabase:
+        raise HTTPException(status_code=503, detail="Supabase not available")
+    
+    try:
+        history = supabase.get_configuration_history(limit)
+        return {
+            "configurations": history,
+            "count": len(history)
+        }
+    except Exception as e:
+        logger.error(f"Error getting configuration history: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/config/save")
+async def save_config(request: Request):
+    """Save a new configuration version to Supabase."""
+    if not USE_SUPABASE or not supabase:
+        raise HTTPException(status_code=503, detail="Supabase not available")
+    
+    try:
+        body = await request.json()
+        config_data = body.get("config")
+        name = body.get("name", "Custom Configuration")
+        description = body.get("description", "")
+        activate = body.get("activate", False)
+        
+        if not config_data:
+            raise HTTPException(status_code=400, detail="Configuration data is required")
+        
+        # Validate configuration structure
+        required_sections = ["llm", "exchange", "trading"]
+        for section in required_sections:
+            if section not in config_data:
+                raise HTTPException(status_code=400, detail=f"Missing required section: {section}")
+        
+        # Validate LLM configuration
+        llm = config_data.get("llm", {})
+        if llm.get("temperature", 0) < 0 or llm.get("temperature", 0) > 2:
+            raise HTTPException(status_code=400, detail="LLM temperature must be between 0 and 2")
+        if llm.get("max_tokens", 0) < 1 or llm.get("max_tokens", 0) > 100000:
+            raise HTTPException(status_code=400, detail="Max tokens must be between 1 and 100,000")
+        if llm.get("timeout", 0) < 1 or llm.get("timeout", 0) > 300:
+            raise HTTPException(status_code=400, detail="Timeout must be between 1 and 300 seconds")
+        
+        # Validate Trading configuration
+        trading = config_data.get("trading", {})
+        if trading.get("mode") not in ["paper", "live"]:
+            raise HTTPException(status_code=400, detail="Trading mode must be 'paper' or 'live'")
+        if trading.get("initial_balance", 0) <= 0:
+            raise HTTPException(status_code=400, detail="Initial balance must be greater than 0")
+        if trading.get("max_position_size", 0) <= 0 or trading.get("max_position_size", 0) > 1:
+            raise HTTPException(status_code=400, detail="Max position size must be between 0 and 1")
+        if trading.get("max_leverage", 0) < 1 or trading.get("max_leverage", 0) > 100:
+            raise HTTPException(status_code=400, detail="Max leverage must be between 1 and 100")
+        if trading.get("stop_loss_percent", 0) <= 0 or trading.get("stop_loss_percent", 0) > 50:
+            raise HTTPException(status_code=400, detail="Stop loss must be between 0 and 50%")
+        if trading.get("take_profit_percent", 0) <= 0 or trading.get("take_profit_percent", 0) > 100:
+            raise HTTPException(status_code=400, detail="Take profit must be between 0 and 100%")
+        if trading.get("max_active_positions", 0) < 1 or trading.get("max_active_positions", 0) > 50:
+            raise HTTPException(status_code=400, detail="Max active positions must be between 1 and 50")
+        if trading.get("min_confidence_threshold", 0) < 0 or trading.get("min_confidence_threshold", 0) > 1:
+            raise HTTPException(status_code=400, detail="Min confidence threshold must be between 0 and 1")
+        if trading.get("run_interval_seconds", 0) < 10 or trading.get("run_interval_seconds", 0) > 3600:
+            raise HTTPException(status_code=400, detail="Run interval must be between 10 and 3600 seconds")
+        
+        # Validate Exchange configuration
+        exchange = config_data.get("exchange", {})
+        if exchange.get("name") not in ["kraken", "bybit", "binance", "coinbase"]:
+            raise HTTPException(status_code=400, detail="Invalid exchange name")
+        if not exchange.get("symbol") or not exchange.get("symbol", "").strip():
+            raise HTTPException(status_code=400, detail="Trading symbol is required")
+        
+        # Validate Position Management (if present)
+        position_mgmt = config_data.get("position_management", {})
+        if position_mgmt.get("portfolio_profit_target_pct", 0) < 0 or position_mgmt.get("portfolio_profit_target_pct", 0) > 100:
+            raise HTTPException(status_code=400, detail="Portfolio profit target must be between 0 and 100%")
+        if position_mgmt.get("trailing_stop_distance_pct", 0) < 0 or position_mgmt.get("trailing_stop_distance_pct", 0) > 10:
+            raise HTTPException(status_code=400, detail="Trailing stop distance must be between 0 and 10%")
+        if position_mgmt.get("partial_profit_percent", 0) < 0 or position_mgmt.get("partial_profit_percent", 0) > 100:
+            raise HTTPException(status_code=400, detail="Partial profit percent must be between 0 and 100%")
+        
+        # Save configuration
+        saved_config = supabase.save_configuration(
+            config_data=config_data,
+            name=name,
+            description=description,
+            created_by="api_user"
+        )
+        
+        if not saved_config:
+            raise HTTPException(status_code=500, detail="Failed to save configuration")
+        
+        # Activate if requested
+        if activate:
+            config_id = saved_config.get("id")
+            if config_id:
+                supabase.activate_configuration(config_id)
+                saved_config["is_active"] = True
+        
+        return {
+            "success": True,
+            "configuration": saved_config,
+            "message": "Configuration saved successfully"
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error saving configuration: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/config/activate/{config_id}")
+async def activate_config(config_id: int):
+    """Activate a specific configuration version."""
+    if not USE_SUPABASE or not supabase:
+        raise HTTPException(status_code=503, detail="Supabase not available")
+    
+    try:
+        success = supabase.activate_configuration(config_id)
+        if success:
+            config = supabase.get_configuration_by_id(config_id)
+            return {
+                "success": True,
+                "configuration": config,
+                "message": f"Configuration {config_id} activated successfully"
+            }
+        else:
+            raise HTTPException(status_code=404, detail=f"Configuration {config_id} not found")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error activating configuration: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/config/reset")
+async def reset_config():
+    """Reset to default configuration."""
+    if not USE_SUPABASE or not supabase:
+        raise HTTPException(status_code=503, detail="Supabase not available")
+    
+    try:
+        # Try to reset to default in Supabase
+        success = supabase.reset_to_default()
+        
+        if success:
+            default_config = supabase.get_default_configuration()
+            return {
+                "success": True,
+                "configuration": default_config,
+                "message": "Reset to default configuration successfully"
+            }
+        else:
+            # No default in Supabase, return config.py defaults
+            from config.config import get_default_configuration
+            return {
+                "success": True,
+                "config": get_default_configuration(),
+                "source": "config.py",
+                "message": "Using config.py defaults (no default in Supabase)"
+            }
+    except Exception as e:
+        logger.error(f"Error resetting configuration: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
 if __name__ == "__main__":
     import threading
     import sys

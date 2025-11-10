@@ -142,6 +142,16 @@ class TradingBot:
         except Exception as e:
             logger.warning(f"Execution engine not available: {e}")
         
+        # Initialize position reconciler
+        self.position_reconciler = None
+        self.reconciliation_cycle_count = 0
+        try:
+            from .position_reconciler import PositionReconciler
+            self.position_reconciler = PositionReconciler(data_fetcher=self.data_fetcher)
+            logger.info("Position reconciler initialized")
+        except Exception as e:
+            logger.warning(f"Position reconciler not available: {e}")
+        
         # Initialize monitoring service
         self.monitoring_service = MonitoringService()
         self.monitoring_running = False
@@ -415,6 +425,22 @@ class TradingBot:
                 f"([{price_color}]{price_change:+.2f}%[/{price_color}])"
             )
 
+            # 1.5. Monitor open positions for stop-loss, take-profit, and other exit conditions
+            if config.ENABLE_POSITION_MONITORING:
+                monitoring_results = self.trading_engine.monitor_positions(current_price)
+                if monitoring_results["positions_checked"] > 0:
+                    if monitoring_results["positions_closed"] > 0:
+                        self.console.print(
+                            f"[bold yellow]⚠️ Position Monitoring:[/bold yellow] "
+                            f"Checked {monitoring_results['positions_checked']} positions, "
+                            f"closed {monitoring_results['positions_closed']} "
+                            f"(Stop-loss: {monitoring_results['stop_loss_triggers']}, "
+                            f"Take-profit: {monitoring_results['take_profit_triggers']}, "
+                            f"Partial: {monitoring_results['partial_profit_triggers']})"
+                        )
+                    else:
+                        logger.debug(f"Position monitoring: {monitoring_results['positions_checked']} positions checked, none closed")
+
             # 2. Get portfolio summary
             portfolio = self.trading_engine.get_portfolio_summary(current_price)
             return_pct = portfolio["total_return_pct"]
@@ -467,6 +493,51 @@ class TradingBot:
                             )
                     except Exception as e:
                         logger.debug(f"Could not get regime guidance: {e}")
+
+            # 2.5. Position reconciliation (every N cycles)
+            if self.position_reconciler:
+                self.reconciliation_cycle_count += 1
+                if self.reconciliation_cycle_count >= config.POSITION_RECONCILIATION_INTERVAL:
+                    self.reconciliation_cycle_count = 0
+                    try:
+                        discrepancies, success = self.position_reconciler.reconcile_positions(
+                            bot_positions=self.trading_engine.positions,
+                            current_price=current_price
+                        )
+                        if discrepancies:
+                            critical_count = sum(1 for d in discrepancies if d.severity == "critical")
+                            warning_count = sum(1 for d in discrepancies if d.severity == "warning")
+                            if critical_count > 0:
+                                self.console.print(
+                                    f"[bold red]⚠️ Position Reconciliation: {critical_count} critical, {warning_count} warning discrepancies[/bold red]"
+                                )
+                            else:
+                                self.console.print(
+                                    f"[bold yellow]⚠️ Position Reconciliation: {warning_count} warning discrepancies[/bold yellow]"
+                                )
+                        elif success:
+                            logger.debug("Position reconciliation: All positions match")
+                    except Exception as e:
+                        logger.error(f"Error during position reconciliation: {e}", exc_info=True)
+
+            # 2.6. Risk service health monitoring
+            if self.trading_engine.risk_client:
+                try:
+                    risk_state = self.trading_engine.risk_client.get_risk_state()
+                    if risk_state is None:
+                        logger.warning("Risk service health check failed - service may be unreachable")
+                        if config.RISK_SERVICE_REQUIRED:
+                            self.console.print(
+                                "[bold red]⚠️ Risk service unreachable - trades may be blocked[/bold red]"
+                            )
+                    else:
+                        if risk_state.get("kill_switch_active", False):
+                            self.console.print(
+                                f"[bold red]🚨 KILL SWITCH ACTIVE: {risk_state.get('kill_switch_reason', 'Unknown reason')}[/bold red]"
+                            )
+                        logger.debug(f"Risk service health: OK (kill_switch={risk_state.get('kill_switch_active', False)})")
+                except Exception as e:
+                    logger.error(f"Error checking risk service health: {e}", exc_info=True)
 
             # 3. Get LLM decision with portfolio context
             if self.is_interactive:

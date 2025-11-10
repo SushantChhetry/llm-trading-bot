@@ -124,6 +124,9 @@ function PnLChartComponent({ className }: PnLChartProps) {
   const isPositive = totalReturnPct >= 0;
   const TrendIcon = isPositive ? TrendingUp : TrendingDown;
 
+  // Profit target percentage for cash out
+  const PROFIT_TARGET_PCT = 10.0;
+
   const chartConfig = {
     margin: { top: 5, right: 20, left: 20, bottom: 5 },
     data: chartData,
@@ -190,7 +193,23 @@ function PnLChartComponent({ className }: PnLChartProps) {
           className="text-xs text-muted-foreground"
         />
         <Tooltip content={<CustomTooltip />} />
+        {/* Zero line */}
         <ReferenceLine y={0} stroke="hsl(var(--muted-foreground))" strokeDasharray="2 2" strokeOpacity={0.5} />
+        {/* 10% Profit Target Line */}
+        <ReferenceLine 
+          y={PROFIT_TARGET_PCT} 
+          stroke="#10b981" 
+          strokeDasharray="4 4" 
+          strokeWidth={2}
+          strokeOpacity={0.7}
+          label={{ 
+            value: `${PROFIT_TARGET_PCT}% Target`, 
+            position: "right",
+            fill: "#10b981",
+            fontSize: 12,
+            fontWeight: 500
+          }}
+        />
         <Line
           type="monotone"
           dataKey="total_return_pct"

@@ -50,6 +50,10 @@ class RiskDaemon:
         # Track last check time
         self.last_check_time = time.time()
         
+        # Lazy initialization of trading components (will be initialized on first use)
+        self._trading_engine = None
+        self._data_fetcher = None
+        
         logger.info(f"Risk Daemon initialized: {risk_service_url}, check_interval={check_interval}s")
     
     def run(self):
@@ -80,12 +84,17 @@ class RiskDaemon:
             if not positions:
                 return
             
-            # Get current prices (would need data fetcher in real implementation)
-            # For now, we'll check against portfolio file which should have current_price
+            # Get current price from portfolio file or data fetcher
             current_price = portfolio.get("current_price")
             if not current_price:
-                logger.warning("No current price in portfolio, skipping position check")
-                return
+                # Try to get price from data fetcher as fallback
+                # Use first position's symbol to fetch price
+                first_symbol = next(iter(positions.keys())) if positions else None
+                if first_symbol:
+                    current_price = self._get_current_price(first_symbol)
+                if not current_price:
+                    logger.warning("No current price available, skipping position check")
+                    return
             
             # Check each position
             for symbol, position in positions.items():
@@ -123,7 +132,7 @@ class RiskDaemon:
             else:  # short
                 pnl_pct = ((entry_price - current_price) / entry_price) * 100
                 hit_stop = stop_loss and current_price >= stop_loss
-                hit_take_take_profit = take_profit and current_price <= take_profit
+                hit_take_profit = take_profit and current_price <= take_profit
             
             # Check if stop-loss hit
             if hit_stop:
@@ -161,44 +170,197 @@ class RiskDaemon:
         except Exception as e:
             logger.error(f"Error checking position {symbol}: {e}", exc_info=True)
     
+    def _get_trading_engine(self):
+        """Lazy initialization of trading engine."""
+        if self._trading_engine is None:
+            try:
+                from src.trading_engine import TradingEngine
+                self._trading_engine = TradingEngine()
+                logger.info("Trading engine initialized for position closure")
+            except Exception as e:
+                logger.error(f"Failed to initialize trading engine: {e}", exc_info=True)
+                raise
+        return self._trading_engine
+    
+    def _get_data_fetcher(self):
+        """Lazy initialization of data fetcher."""
+        if self._data_fetcher is None:
+            try:
+                from src.data_fetcher import DataFetcher
+                self._data_fetcher = DataFetcher()
+                logger.info("Data fetcher initialized for price updates")
+            except Exception as e:
+                logger.warning(f"Failed to initialize data fetcher: {e}")
+                # Not critical - we can use price from portfolio file
+        return self._data_fetcher
+    
+    def _get_current_price(self, symbol: str) -> Optional[float]:
+        """Get current price from data fetcher or portfolio file."""
+        # Try data fetcher first
+        data_fetcher = self._get_data_fetcher()
+        if data_fetcher:
+            try:
+                ticker = data_fetcher.get_ticker(symbol)
+                if ticker and 'last' in ticker:
+                    return float(ticker['last'])
+            except Exception as e:
+                logger.warning(f"Failed to get price from data fetcher: {e}")
+        
+        # Fallback to portfolio file
+        try:
+            if self.portfolio_file.exists():
+                with open(self.portfolio_file, 'r') as f:
+                    portfolio = json.load(f)
+                    return portfolio.get("current_price")
+        except Exception as e:
+            logger.warning(f"Failed to get price from portfolio file: {e}")
+        
+        return None
+    
     def _close_position(self, symbol: str, side: str, quantity: float, price: float, reason: str):
         """
         Close position by calling trading engine.
         
-        In a real implementation, this would:
-        1. Call the trading engine's execute_sell/execute_close method
-        2. Or directly place a market order via exchange API
-        3. Update risk service
-        4. Log the closure
+        This method:
+        1. Validates the position exists
+        2. Calls trading engine's execute_sell to close the position
+        3. Updates risk service with new portfolio state
+        4. Logs the closure
         """
         logger.info(
             f"CLOSING POSITION: {symbol} {side} quantity={quantity:.6f} "
             f"price={price:.2f} reason={reason}"
         )
         
-        # In production, this would:
-        # 1. Call risk service to validate closure
-        # 2. Call trading engine to execute close
-        # 3. Update portfolio state
-        
-        # For now, just log
-        # TODO: Implement actual position closure via trading engine API
-        
-        # Notify risk service
         try:
-            response = requests.post(
-                f"{self.risk_service_url}/risk/update_portfolio",
-                json={
-                    "nav": 0,  # Would get from portfolio
-                    "positions": {},  # Would update after closure
-                    "daily_loss_pct": 0  # Would recalculate
-                },
-                timeout=5
+            # Get trading engine
+            trading_engine = self._get_trading_engine()
+            
+            # Verify position exists before attempting to close
+            if symbol not in trading_engine.positions:
+                logger.warning(
+                    f"Position {symbol} not found in trading engine. "
+                    f"Available positions: {list(trading_engine.positions.keys())}"
+                )
+                return
+            
+            position = trading_engine.positions[symbol]
+            actual_quantity = position.get("quantity", 0)
+            
+            if actual_quantity <= 0:
+                logger.warning(f"Position {symbol} has zero or negative quantity: {actual_quantity}")
+                return
+            
+            # Use actual position quantity if provided quantity is larger
+            sell_quantity = min(quantity, actual_quantity) if quantity else actual_quantity
+            
+            # Create LLM decision context for the closure
+            llm_decision = {
+                "action": "sell",
+                "reason": f"Risk daemon triggered: {reason}",
+                "justification": f"Automatic position closure due to {reason} trigger",
+                "confidence": 1.0,  # High confidence for risk-based closures
+            }
+            
+            # Execute the sell order
+            trade = trading_engine.execute_sell(
+                symbol=symbol,
+                price=price,
+                quantity=sell_quantity,
+                confidence=1.0,
+                llm_decision=llm_decision,
+                leverage=position.get("leverage", 1.0)
             )
-            if response.status_code == 200:
-                logger.debug("Risk service updated after position closure")
+            
+            if trade:
+                logger.info(
+                    f"POSITION CLOSED SUCCESSFULLY: {symbol} trade_id={trade.get('id')} "
+                    f"quantity={sell_quantity:.6f} price={price:.2f} "
+                    f"profit={trade.get('profit', 0):.2f} profit_pct={trade.get('profit_pct', 0):.2f}%"
+                )
+                
+                # Get updated portfolio state
+                # Calculate NAV properly by getting price for each symbol
+                # (get_portfolio_value assumes single symbol, so we calculate manually for multi-symbol support)
+                position_values = {}
+                total_position_value = 0.0
+                
+                # Prepare updated positions dict for risk service
+                # Fetch current price for each symbol individually
+                updated_positions = {}
+                for pos_symbol, pos_data in trading_engine.positions.items():
+                    # Get current price for this specific symbol
+                    pos_current_price = self._get_current_price(pos_symbol)
+                    if not pos_current_price:
+                        # Fallback: use avg_price if we can't get current price
+                        pos_current_price = pos_data.get("avg_price", 0)
+                        logger.warning(f"Could not get current price for {pos_symbol}, using avg_price")
+                    
+                    # Calculate notional value using symbol-specific price
+                    notional_value = pos_data.get("quantity", 0) * pos_current_price
+                    
+                    # Calculate position value for NAV calculation
+                    side = pos_data.get("side", "long")
+                    if side == "long":
+                        position_value = pos_data.get("quantity", 0) * pos_current_price
+                    else:  # short
+                        entry_value = pos_data.get("quantity", 0) * pos_data.get("avg_price", 0)
+                        current_value = pos_data.get("quantity", 0) * pos_current_price
+                        short_pnl = entry_value - current_value
+                        position_value = entry_value + short_pnl
+                    
+                    position_values[pos_symbol] = position_value
+                    total_position_value += position_value
+                    
+                    updated_positions[pos_symbol] = {
+                        "symbol": pos_symbol,
+                        "side": side,
+                        "quantity": pos_data.get("quantity", 0),
+                        "avg_price": pos_data.get("avg_price", 0),
+                        "margin_used": pos_data.get("margin_used", 0),
+                        "leverage": pos_data.get("leverage", 1.0),
+                        "value": pos_data.get("value", 0),
+                        "notional_value": notional_value,
+                    }
+                
+                # Calculate NAV: balance + total position values
+                nav = trading_engine.balance + total_position_value
+                
+                # Calculate daily loss percentage (if we have daily start NAV)
+                daily_loss_pct = None
+                try:
+                    if self.portfolio_file.exists():
+                        with open(self.portfolio_file, 'r') as f:
+                            portfolio = json.load(f)
+                            daily_start_nav = portfolio.get("daily_start_nav")
+                            if daily_start_nav and daily_start_nav > 0:
+                                daily_loss_pct = max(0, (daily_start_nav - nav) / daily_start_nav)
+                except Exception as e:
+                    logger.warning(f"Failed to calculate daily loss: {e}")
+                
+                # Update risk service with new portfolio state
+                try:
+                    response = requests.post(
+                        f"{self.risk_service_url}/risk/update_portfolio",
+                        json={
+                            "nav": nav,
+                            "positions": updated_positions,
+                            "daily_loss_pct": daily_loss_pct
+                        },
+                        timeout=5
+                    )
+                    if response.status_code == 200:
+                        logger.debug(f"Risk service updated after position closure: nav={nav:.2f}")
+                    else:
+                        logger.warning(f"Risk service update returned status {response.status_code}")
+                except Exception as e:
+                    logger.warning(f"Failed to update risk service: {e}")
+            else:
+                logger.error(f"Failed to close position {symbol}: execute_sell returned None")
+                
         except Exception as e:
-            logger.warning(f"Failed to update risk service: {e}")
+            logger.error(f"Error closing position {symbol}: {e}", exc_info=True)
+            # Don't raise - allow daemon to continue monitoring other positions
 
 
 def main():

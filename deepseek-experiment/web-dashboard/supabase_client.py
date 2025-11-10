@@ -187,6 +187,133 @@ class SupabaseService:
             print(f"Error updating bot config: {e}")
             return False
 
+    def save_configuration(self, config_data: Dict[str, Any], name: str = None, description: str = None, created_by: str = "user") -> Optional[Dict[str, Any]]:
+        """Save a new versioned configuration to Supabase"""
+        try:
+            # Get next version number - try RPC first, fallback to manual calculation
+            next_version = 1
+            try:
+                response = self.supabase.rpc("get_next_config_version").execute()
+                if response.data:
+                    next_version = response.data
+            except Exception:
+                # RPC function may not exist or may fail, calculate manually
+                pass
+            
+            # If RPC didn't return a valid version, calculate manually
+            if not next_version or not isinstance(next_version, (int, list)):
+                try:
+                    max_version_resp = self.supabase.table("bot_configurations").select("version").order("version", desc=True).limit(1).execute()
+                    if max_version_resp.data and len(max_version_resp.data) > 0:
+                        next_version = max_version_resp.data[0]["version"] + 1
+                    else:
+                        next_version = 1
+                except Exception:
+                    # Fallback to version 1 if query fails
+                    next_version = 1
+            
+            if isinstance(next_version, list) and len(next_version) > 0:
+                next_version = next_version[0]
+            elif not isinstance(next_version, int):
+                next_version = 1
+
+            # Prepare insert data
+            insert_data = {
+                "version": next_version,
+                "name": name or f"Configuration v{next_version}",
+                "description": description or "",
+                "config_json": config_data,
+                "is_active": False,  # New configs are not active by default
+                "is_default": False,
+                "created_by": created_by
+            }
+
+            response = self.supabase.table("bot_configurations").insert(insert_data).execute()
+            if response.data and len(response.data) > 0:
+                return response.data[0]
+            return None
+        except Exception as e:
+            print(f"Error saving configuration: {e}")
+            raise
+
+    def get_active_configuration(self) -> Optional[Dict[str, Any]]:
+        """Get the currently active configuration from Supabase"""
+        try:
+            response = self.supabase.table("bot_configurations").select("*").eq("is_active", True).limit(1).execute()
+            if response.data and len(response.data) > 0:
+                config = response.data[0]
+                # Merge config_json into the main dict for easier access
+                if "config_json" in config:
+                    config.update(config["config_json"])
+                return config
+            return None
+        except Exception as e:
+            print(f"Error fetching active configuration: {e}")
+            return None
+
+    def get_configuration_history(self, limit: int = 50) -> List[Dict[str, Any]]:
+        """Get all configuration versions from Supabase, ordered by creation date"""
+        try:
+            response = self.supabase.table("bot_configurations").select("*").order("created_at", desc=True).limit(limit).execute()
+            return response.data if response.data else []
+        except Exception as e:
+            print(f"Error fetching configuration history: {e}")
+            return []
+
+    def activate_configuration(self, version_id: int) -> bool:
+        """Activate a specific configuration version by ID"""
+        try:
+            # First, deactivate all configurations
+            self.supabase.table("bot_configurations").update({"is_active": False}).eq("is_active", True).execute()
+            
+            # Then activate the specified one
+            response = self.supabase.table("bot_configurations").update({"is_active": True}).eq("id", version_id).execute()
+            return response.data and len(response.data) > 0
+        except Exception as e:
+            print(f"Error activating configuration: {e}")
+            return False
+
+    def get_configuration_by_id(self, config_id: int) -> Optional[Dict[str, Any]]:
+        """Get a specific configuration by ID"""
+        try:
+            response = self.supabase.table("bot_configurations").select("*").eq("id", config_id).limit(1).execute()
+            if response.data and len(response.data) > 0:
+                config = response.data[0]
+                # Merge config_json into the main dict for easier access
+                if "config_json" in config:
+                    config.update(config["config_json"])
+                return config
+            return None
+        except Exception as e:
+            print(f"Error fetching configuration by ID: {e}")
+            return None
+
+    def get_default_configuration(self) -> Optional[Dict[str, Any]]:
+        """Get the default system configuration from Supabase"""
+        try:
+            response = self.supabase.table("bot_configurations").select("*").eq("is_default", True).limit(1).execute()
+            if response.data and len(response.data) > 0:
+                config = response.data[0]
+                # Merge config_json into the main dict for easier access
+                if "config_json" in config:
+                    config.update(config["config_json"])
+                return config
+            return None
+        except Exception as e:
+            print(f"Error fetching default configuration: {e}")
+            return None
+
+    def reset_to_default(self) -> bool:
+        """Reset to default configuration by activating the default config"""
+        try:
+            default_config = self.get_default_configuration()
+            if default_config and "id" in default_config:
+                return self.activate_configuration(default_config["id"])
+            return False
+        except Exception as e:
+            print(f"Error resetting to default configuration: {e}")
+            return False
+
 # Global instance
 supabase_service = None
 
