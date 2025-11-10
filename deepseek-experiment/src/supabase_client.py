@@ -35,7 +35,7 @@ class SupabaseService:
         self.supabase_url = os.getenv("SUPABASE_URL")
         self.supabase_key = os.getenv("SUPABASE_KEY")  # Anon key (for reads)
         self.supabase_service_key = os.getenv("SUPABASE_SERVICE_KEY")  # Service role key (for writes)
-        
+
         # Track if observability tables exist to avoid repeated error messages
         self._observability_metrics_table_exists = True
         self._service_health_table_exists = True
@@ -44,22 +44,23 @@ class SupabaseService:
 
         if not self.supabase_url:
             raise ValueError("SUPABASE_URL environment variable is required")
-        
+
         # Use service key if available (for writes), fall back to anon key (for reads only)
         # Service role key bypasses RLS, anon key is subject to RLS policies
         key_to_use = self.supabase_service_key or self.supabase_key
-        
+
         if not key_to_use:
             raise ValueError("SUPABASE_KEY or SUPABASE_SERVICE_KEY environment variable is required")
-        
+
         # Warn if using anon key for writes (will fail with proper RLS)
         if not self.supabase_service_key and self.supabase_key:
             import warnings
+
             warnings.warn(
                 "⚠️  Using SUPABASE_KEY (anon key) for all operations. "
                 "Set SUPABASE_SERVICE_KEY for write operations to work with RLS policies. "
                 "Write operations may fail once database RLS is properly configured.",
-                UserWarning
+                UserWarning,
             )
 
         try:
@@ -84,7 +85,7 @@ class SupabaseService:
             return response.data
         except Exception as e:
             error_str = str(e)
-            if hasattr(e, 'message'):
+            if hasattr(e, "message"):
                 error_str = str(e.message)
             logger.error(f"Error fetching trades: {error_str}")
             return []
@@ -94,44 +95,49 @@ class SupabaseService:
         try:
             # Create a copy to avoid modifying the original
             insert_data = trade_data.copy()
-            
+
             # Remove 'id' field if present - Supabase will auto-generate it
             # The 'id' in trade_data is just a local counter, not a database ID
             if "id" in insert_data:
                 del insert_data["id"]
-            
+
             # Map any field name mismatches if needed
             # The trade dict might have different field names than the schema expects
             field_mapping = {
                 "fees": "trading_fee",  # Some trades might use 'fees' instead of 'trading_fee'
             }
-            
+
             # Rename fields if they exist with old names
             for old_name, new_name in field_mapping.items():
                 if old_name in insert_data and new_name not in insert_data:
                     insert_data[new_name] = insert_data.pop(old_name)
-            
+
             # Filter out None values to avoid schema issues
             filtered_data = {k: v for k, v in insert_data.items() if v is not None}
-            
+
             response = self.supabase.table("trades").insert(filtered_data).execute()
             return len(response.data) > 0
         except Exception as e:
             error_str = str(e)
-            
+
             # Try to extract error message from Supabase exception
             # Supabase exceptions may have a 'message' attribute or be wrapped
-            if hasattr(e, 'message'):
+            if hasattr(e, "message"):
                 error_str = str(e.message)
-            elif hasattr(e, 'args') and len(e.args) > 0:
+            elif hasattr(e, "args") and len(e.args) > 0:
                 if isinstance(e.args[0], dict):
                     # Error might be a dict with 'message' key
-                    error_str = e.args[0].get('message', error_str)
+                    error_str = e.args[0].get("message", error_str)
                 else:
                     error_str = str(e.args[0])
-            
+
             # Check for schema/column errors
-            if "PGRST204" in error_str or "PGRST205" in error_str or "column" in error_str.lower() or "schema cache" in error_str.lower():
+            if (
+                "PGRST204" in error_str
+                or "PGRST205" in error_str
+                or "column" in error_str.lower()
+                or "schema cache" in error_str.lower()
+            ):
                 logger.error(
                     f"Error adding trade - schema issue: {error_str}\n"
                     f"Trade data keys: {list(trade_data.keys())}\n"
@@ -140,7 +146,7 @@ class SupabaseService:
             else:
                 logger.error(f"Error adding trade: {error_str}")
                 logger.debug(f"Trade data (first 10 keys): {list(trade_data.keys())[:10]}")
-                if hasattr(e, '__class__'):
+                if hasattr(e, "__class__"):
                     logger.debug(f"Exception type: {e.__class__.__name__}")
             return False
 
@@ -172,7 +178,9 @@ class SupabaseService:
                 print(f"Error updating portfolio: {e}")
             return False
 
-    def get_portfolio_snapshots(self, limit: int = 1000, order_by: str = "timestamp", desc: bool = True) -> List[Dict[str, Any]]:
+    def get_portfolio_snapshots(
+        self, limit: int = 1000, order_by: str = "timestamp", desc: bool = True
+    ) -> List[Dict[str, Any]]:
         """Get portfolio snapshots from Supabase"""
         try:
             query = self.supabase.table("portfolio_snapshots").select("*")
@@ -300,7 +308,7 @@ class SupabaseService:
         # Skip if we know the table doesn't exist
         if not self._observability_metrics_table_exists:
             return False
-            
+
         try:
             metric_data = {
                 "timestamp": datetime.now().isoformat(),
@@ -316,7 +324,9 @@ class SupabaseService:
         except Exception as e:
             error_str = str(e)
             # Check if it's the "table not found" error (PGRST205)
-            if "PGRST205" in error_str or ("schema cache" in error_str.lower() and "observability_metrics" in error_str.lower()):
+            if "PGRST205" in error_str or (
+                "schema cache" in error_str.lower() and "observability_metrics" in error_str.lower()
+            ):
                 self._observability_metrics_table_exists = False
                 if not self._observability_error_logged:
                     logger.warning(
@@ -330,14 +340,12 @@ class SupabaseService:
                 logger.debug(f"Error adding metric: {e}")
             return False
 
-    def add_health_check(
-        self, service_name: str, status: str, details: Optional[Dict[str, Any]] = None
-    ) -> bool:
+    def add_health_check(self, service_name: str, status: str, details: Optional[Dict[str, Any]] = None) -> bool:
         """Add a health check snapshot to service_health table"""
         # Skip if we know the table doesn't exist
         if not self._service_health_table_exists:
             return False
-            
+
         try:
             if status not in ["healthy", "degraded", "unhealthy"]:
                 raise ValueError(f"Invalid status: {status}. Must be 'healthy', 'degraded', or 'unhealthy'")
@@ -353,7 +361,9 @@ class SupabaseService:
         except Exception as e:
             error_str = str(e)
             # Check if it's the "table not found" error (PGRST205)
-            if "PGRST205" in error_str or ("schema cache" in error_str.lower() and "service_health" in error_str.lower()):
+            if "PGRST205" in error_str or (
+                "schema cache" in error_str.lower() and "service_health" in error_str.lower()
+            ):
                 self._service_health_table_exists = False
                 if not self._health_check_error_logged:
                     logger.warning(

@@ -176,10 +176,10 @@ class SecurityManager:
     def mask_api_key(key: str) -> str:
         """
         Mask API key for logging (show only first 8 and last 4 chars).
-        
+
         Args:
             key: API key to mask
-            
+
         Returns:
             Masked key string (e.g., "sk-12345...xyz")
         """

@@ -150,9 +150,9 @@ class StartupValidator:
         """Validate risk service is available and healthy."""
         import os
         import requests
-        
+
         risk_service_url = os.getenv("RISK_SERVICE_URL", "http://localhost:8003")
-        
+
         try:
             # Check health endpoint
             response = requests.get(f"{risk_service_url}/health", timeout=5)
@@ -165,6 +165,7 @@ class StartupValidator:
         except requests.exceptions.RequestException as e:
             # Risk service is optional for paper trading, required for live trading
             from config import config
+
             if config.TRADING_MODE == "live" and config.RISK_SERVICE_REQUIRED:
                 self.errors.append(
                     f"Risk service is required for live trading but unavailable: {risk_service_url}\n"
@@ -175,7 +176,7 @@ class StartupValidator:
             else:
                 logger.warning(f"Risk service not available (optional for paper trading): {e}")
                 return True  # Not an error for paper trading
-    
+
     def validate_configuration_values(self):
         """Validate configuration values are within acceptable ranges."""
         try:
@@ -188,7 +189,7 @@ class StartupValidator:
                 self.warnings.append(f"MAX_POSITION_SIZE ({max_position_size}) exceeds recommended limit (0.5)")
 
             trading_mode = os.getenv("TRADING_MODE", "paper").lower()
-            
+
             # CRITICAL: Validate live trading mode with confirmation requirement
             if trading_mode == "live":
                 # Require explicit confirmation to prevent accidental live trading
@@ -201,24 +202,22 @@ class StartupValidator:
                         "   ⚠️  WARNING: Live trading uses real money - ensure you have tested thoroughly!"
                     )
                     return  # Exit early - don't proceed with other validations
-                
+
                 # Additional checks for live mode
                 llm_provider = os.getenv("LLM_PROVIDER", "").lower()
                 llm_api_key = os.getenv("LLM_API_KEY", "")
-                
+
                 if llm_provider == "mock" or not llm_api_key:
                     self.errors.append(
                         "Live trading requires real LLM API key. "
                         f"Current LLM_PROVIDER={llm_provider}, LLM_API_KEY={'SET' if llm_api_key else 'NOT SET'}"
                     )
-                
+
                 exchange_api_key = os.getenv("EXCHANGE_API_KEY")
                 exchange_api_secret = os.getenv("EXCHANGE_API_SECRET")
                 if not exchange_api_key or not exchange_api_secret:
-                    self.errors.append(
-                        "EXCHANGE_API_KEY and EXCHANGE_API_SECRET required for live trading"
-                    )
-                
+                    self.errors.append("EXCHANGE_API_KEY and EXCHANGE_API_SECRET required for live trading")
+
                 # Log warning about live trading
                 logger.warning("=" * 60)
                 logger.warning("🚨 LIVE TRADING MODE ENABLED - REAL MONEY AT RISK!")
@@ -229,37 +228,35 @@ class StartupValidator:
                 logger.warning("  3. Confirmed API keys are correct")
                 logger.warning("  4. Set up monitoring and alerts")
                 logger.warning("=" * 60)
-                
+
             elif trading_mode not in ["paper", "live"]:
-                self.errors.append(
-                    f"Invalid TRADING_MODE: {trading_mode}. Must be 'paper' or 'live'"
-                )
-            
+                self.errors.append(f"Invalid TRADING_MODE: {trading_mode}. Must be 'paper' or 'live'")
+
             # Validate position monitoring configuration
             trailing_stop_distance = float(os.getenv("TRAILING_STOP_DISTANCE_PCT", "1.0"))
             stop_loss_percent = float(os.getenv("STOP_LOSS_PERCENT", "2.0"))
-            
+
             if trailing_stop_distance >= stop_loss_percent:
                 self.warnings.append(
                     f"TRAILING_STOP_DISTANCE_PCT ({trailing_stop_distance}%) should be less than "
                     f"STOP_LOSS_PERCENT ({stop_loss_percent}%) to be effective"
                 )
-            
+
             partial_profit_target = float(os.getenv("PARTIAL_PROFIT_TARGET_PCT", "1.5"))
             take_profit_percent = float(os.getenv("TAKE_PROFIT_PERCENT", "3.0"))
-            
+
             if partial_profit_target >= take_profit_percent:
                 self.warnings.append(
                     f"PARTIAL_PROFIT_TARGET_PCT ({partial_profit_target}%) should be less than "
                     f"TAKE_PROFIT_PERCENT ({take_profit_percent}%) to be effective"
                 )
-            
+
             trailing_stop_activation = float(os.getenv("TRAILING_STOP_ACTIVATION_PCT", "0.5"))
             if trailing_stop_activation < 0 or trailing_stop_activation > 10:
                 self.warnings.append(
                     f"TRAILING_STOP_ACTIVATION_PCT ({trailing_stop_activation}%) is outside recommended range (0-10%)"
                 )
-                
+
         except ValueError as e:
             self.errors.append(f"Invalid configuration value: {e}")
 

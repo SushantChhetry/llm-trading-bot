@@ -85,19 +85,41 @@ MIN_CONFIDENCE_THRESHOLD = float(os.getenv("MIN_CONFIDENCE_THRESHOLD", "0.6"))  
 FEE_IMPACT_WARNING_THRESHOLD = float(os.getenv("FEE_IMPACT_WARNING_THRESHOLD", "20.0"))  # Warn if fees > 20% of PnL
 
 # Position monitoring and exit management
-ENABLE_POSITION_MONITORING = os.getenv("ENABLE_POSITION_MONITORING", "true").lower() == "true"  # Enable automatic position monitoring
-PORTFOLIO_PROFIT_TARGET_PCT = float(os.getenv("PORTFOLIO_PROFIT_TARGET_PCT", "10.0"))  # Close all positions at +10% portfolio profit
-ENABLE_TRAILING_STOP_LOSS = os.getenv("ENABLE_TRAILING_STOP_LOSS", "true").lower() == "true"  # Enable trailing stop-loss
-TRAILING_STOP_DISTANCE_PCT = float(os.getenv("TRAILING_STOP_DISTANCE_PCT", "1.0"))  # Trailing stop distance (1% below peak)
-TRAILING_STOP_ACTIVATION_PCT = float(os.getenv("TRAILING_STOP_ACTIVATION_PCT", "0.5"))  # Activate trailing stop after 0.5% profit
-ENABLE_PARTIAL_PROFIT_TAKING = os.getenv("ENABLE_PARTIAL_PROFIT_TAKING", "true").lower() == "true"  # Enable partial profit-taking
+ENABLE_POSITION_MONITORING = (
+    os.getenv("ENABLE_POSITION_MONITORING", "true").lower() == "true"
+)  # Enable automatic position monitoring
+PORTFOLIO_PROFIT_TARGET_PCT = float(
+    os.getenv("PORTFOLIO_PROFIT_TARGET_PCT", "10.0")
+)  # Close all positions at +10% portfolio profit
+ENABLE_TRAILING_STOP_LOSS = (
+    os.getenv("ENABLE_TRAILING_STOP_LOSS", "true").lower() == "true"
+)  # Enable trailing stop-loss
+TRAILING_STOP_DISTANCE_PCT = float(
+    os.getenv("TRAILING_STOP_DISTANCE_PCT", "1.0")
+)  # Trailing stop distance (1% below peak)
+TRAILING_STOP_ACTIVATION_PCT = float(
+    os.getenv("TRAILING_STOP_ACTIVATION_PCT", "0.5")
+)  # Activate trailing stop after 0.5% profit
+ENABLE_PARTIAL_PROFIT_TAKING = (
+    os.getenv("ENABLE_PARTIAL_PROFIT_TAKING", "true").lower() == "true"
+)  # Enable partial profit-taking
 PARTIAL_PROFIT_PERCENT = float(os.getenv("PARTIAL_PROFIT_PERCENT", "50.0"))  # Close 50% at first target
 PARTIAL_PROFIT_TARGET_PCT = float(os.getenv("PARTIAL_PROFIT_TARGET_PCT", "1.5"))  # First profit target (1.5%)
 
 # Risk service configuration
-RISK_SERVICE_FAIL_CLOSED = os.getenv("RISK_SERVICE_FAIL_CLOSED", "").lower() == "true" if os.getenv("RISK_SERVICE_FAIL_CLOSED") else (TRADING_MODE == "live")  # Default: True for live, False for paper
-RISK_SERVICE_REQUIRED = os.getenv("RISK_SERVICE_REQUIRED", "").lower() == "true" if os.getenv("RISK_SERVICE_REQUIRED") else (TRADING_MODE == "live")  # Default: True for live trading
-POSITION_RECONCILIATION_INTERVAL = int(os.getenv("POSITION_RECONCILIATION_INTERVAL", "5"))  # Run reconciliation every N cycles
+RISK_SERVICE_FAIL_CLOSED = (
+    os.getenv("RISK_SERVICE_FAIL_CLOSED", "").lower() == "true"
+    if os.getenv("RISK_SERVICE_FAIL_CLOSED")
+    else (TRADING_MODE == "live")
+)  # Default: True for live, False for paper
+RISK_SERVICE_REQUIRED = (
+    os.getenv("RISK_SERVICE_REQUIRED", "").lower() == "true"
+    if os.getenv("RISK_SERVICE_REQUIRED")
+    else (TRADING_MODE == "live")
+)  # Default: True for live trading
+POSITION_RECONCILIATION_INTERVAL = int(
+    os.getenv("POSITION_RECONCILIATION_INTERVAL", "5")
+)  # Run reconciliation every N cycles
 
 # LLM advanced settings (with defaults if not in env)
 LLM_TEMPERATURE = float(os.getenv("LLM_TEMPERATURE", "0.7"))
@@ -109,7 +131,7 @@ def get_default_configuration() -> dict:
     """
     Export current configuration values as a dictionary.
     This represents the default configuration that can be saved to Supabase.
-    
+
     Returns:
         Dictionary containing all configuration values organized by category
     """

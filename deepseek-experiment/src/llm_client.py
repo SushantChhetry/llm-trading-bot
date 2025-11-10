@@ -84,21 +84,17 @@ class LLMClient:
         logger.info(f"LLM Client initialized: {self.provider.upper()} {'(MOCK)' if self.mock_mode else '(LIVE)'}")
 
     def _get_regime_guidance_text(
-        self,
-        regime: str,
-        volatility_regime: str,
-        trend_strength: float,
-        market_structure: str
+        self, regime: str, volatility_regime: str, trend_strength: float, market_structure: str
     ) -> str:
         """Generate regime-based trading guidance text."""
-        if regime in ['trending_bullish', 'trending_bearish']:
+        if regime in ["trending_bullish", "trending_bearish"]:
             regime_status = "✅ TRENDING MARKET DETECTED"
             strategy_focus = "- Focus on MOMENTUM strategies"
             if trend_strength > 0.7:
                 leverage_guidance = "- Consider higher leverage (up to 3x)"
             else:
                 leverage_guidance = "- Use moderate leverage (≤2.5x)"
-        elif regime in ['mean_reverting', 'choppy']:
+        elif regime in ["mean_reverting", "choppy"]:
             regime_status = "⚠️ MEAN-REVERTING/CHOPPY MARKET"
             strategy_focus = "- Focus on MEAN REVERSION strategies"
             leverage_guidance = "- Use lower leverage (≤2x)"
@@ -106,32 +102,28 @@ class LLMClient:
             regime_status = "❓ REGIME UNCLEAR"
             strategy_focus = "- Use conservative position sizing"
             leverage_guidance = "- Use moderate leverage (≤2.5x)"
-        
+
         volatility_text = f"- Volatility is {volatility_regime.upper()}" if volatility_regime else ""
-        
+
         size_adjustment = ""
-        if volatility_regime in ['high', 'extreme']:
+        if volatility_regime in ["high", "extreme"]:
             size_adjustment = "- Reduce position sizes by 30-40%"
-        
+
         structure_text = ""
-        if market_structure != 'unknown':
+        if market_structure != "unknown":
             structure_text = f"- Market structure shows {market_structure.replace('_', ' ').upper()}"
-        
-        lines = [
-            f"{regime_status}: {regime.upper()}",
-            strategy_focus,
-            leverage_guidance
-        ]
-        
+
+        lines = [f"{regime_status}: {regime.upper()}", strategy_focus, leverage_guidance]
+
         if volatility_text:
             lines.append(volatility_text)
         if size_adjustment:
             lines.append(size_adjustment)
         if structure_text:
             lines.append(structure_text)
-        
+
         return "\n".join(lines)
-    
+
     def _format_trading_prompt(self, market_data: Dict, portfolio_state: Dict) -> str:
         """
         Format a structured prompt for trading decisions.
@@ -190,7 +182,7 @@ class LLMClient:
         rsi_7 = indicators.get("rsi_7", 50.0)
         rsi_14 = indicators.get("rsi_14", 50.0)
         atr = indicators.get("atr", 0.0)
-        
+
         # Extract regime information (if available)
         regime = indicators.get("regime", "unknown")
         volatility_regime = indicators.get("volatility_regime", "medium")
@@ -424,18 +416,18 @@ No markdown formatting, no code blocks, no extra text.
 
         def quote_string_value(match):
             colon_ws = match.group(1)  # colon and optional whitespace
-            value = match.group(2)     # the value (may contain spaces/newlines)
+            value = match.group(2)  # the value (may contain spaces/newlines)
             ws_comma = match.group(3)  # whitespace and comma/brace/newline
 
             value = value.strip()
 
             # Don't quote if it's already quoted, numeric, boolean, null, or starts with { or [
-            if self._is_numeric_or_constant(value) or value.startswith(('{', '[')):
-                return f'{colon_ws}{value}{ws_comma}'
+            if self._is_numeric_or_constant(value) or value.startswith(("{", "[")):
+                return f"{colon_ws}{value}{ws_comma}"
 
             # Quote the string value
             # Escape any quotes in the value
-            escaped_value = value.replace('\\', '\\\\').replace('"', '\\"')
+            escaped_value = value.replace("\\", "\\\\").replace('"', '\\"')
             return f'{colon_ws}"{escaped_value}"{ws_comma}'
 
         # Pattern explanation:
@@ -448,7 +440,7 @@ No markdown formatting, no code blocks, no extra text.
 
         # First pass: handle simple single-line values
         # Match: : whitespace? unquoted-value whitespace? (comma|brace|newline)
-        pattern = r'(:\s*)([^,}\n\[\{]+?)(\s*[,}\n])'
+        pattern = r"(:\s*)([^,}\n\[\{]+?)(\s*[,}\n])"
 
         # But we need to be careful - this might match parts of nested structures
         # So we'll use a more careful state-based replacement
@@ -468,7 +460,7 @@ No markdown formatting, no code blocks, no extra text.
                 i += 1
                 continue
 
-            if char == '\\':
+            if char == "\\":
                 result.append(char)
                 escape_next = True
                 i += 1
@@ -485,24 +477,24 @@ No markdown formatting, no code blocks, no extra text.
                 i += 1
                 continue
 
-            if char == '{':
+            if char == "{":
                 brace_depth += 1
                 result.append(char)
                 i += 1
                 continue
-            elif char == '}':
+            elif char == "}":
                 brace_depth -= 1
                 result.append(char)
                 i += 1
                 continue
 
             # Look for : followed by an unquoted value
-            if char == ':' and brace_depth > 0:
+            if char == ":" and brace_depth > 0:
                 result.append(char)
                 i += 1
 
                 # Skip whitespace
-                while i < len(json_str) and json_str[i] in ' \t':
+                while i < len(json_str) and json_str[i] in " \t":
                     result.append(json_str[i])
                     i += 1
 
@@ -522,7 +514,7 @@ No markdown formatting, no code blocks, no extra text.
                             result.append(ch)
                             i += 1
                             continue
-                        if ch == '\\':
+                        if ch == "\\":
                             escape_next_quote = True
                             result.append(ch)
                             i += 1
@@ -535,7 +527,7 @@ No markdown formatting, no code blocks, no extra text.
                     continue
 
                 # Check if it's a nested object/array
-                if json_str[i] in '{[':
+                if json_str[i] in "{[":
                     # Skip nested structure
                     start = i
                     i = self._skip_nested(json_str, i)
@@ -554,7 +546,7 @@ No markdown formatting, no code blocks, no extra text.
                 # or value} (end of object)
 
                 # First, check if it's a nested structure
-                if json_str[i] in '{[':
+                if json_str[i] in "{[":
                     start = i
                     i = self._skip_nested(json_str, i)
                     result.append(json_str[start:i])
@@ -566,38 +558,38 @@ No markdown formatting, no code blocks, no extra text.
                     ch = json_str[value_end]
 
                     # If we hit a closing brace, that's definitely the end
-                    if ch == '}':
+                    if ch == "}":
                         break
 
                     # If we hit a comma, check if it's followed by a key (indicating next key-value pair)
-                    if ch == ',':
+                    if ch == ",":
                         # Look ahead past whitespace to see if there's a key
                         lookahead = value_end + 1
-                        while lookahead < len(json_str) and json_str[lookahead] in ' \t\n\r':
+                        while lookahead < len(json_str) and json_str[lookahead] in " \t\n\r":
                             lookahead += 1
                         if lookahead < len(json_str):
                             next_char = json_str[lookahead]
                             # Keys may be quoted (") or unquoted (letter/underscore)
                             # If next char is a quote, letter/underscore (start of key), or closing brace, this comma ends the value
-                            if next_char == '"' or next_char.isalpha() or next_char == '_' or next_char == '}':
+                            if next_char == '"' or next_char.isalpha() or next_char == "_" or next_char == "}":
                                 # value_end points to comma, value is everything before it
                                 break
 
                     # If we hit a newline, check if next non-whitespace looks like a key
-                    if ch == '\n':
+                    if ch == "\n":
                         # Look ahead past whitespace to see if there's a key
                         lookahead = value_end + 1
-                        while lookahead < len(json_str) and json_str[lookahead] in ' \t':
+                        while lookahead < len(json_str) and json_str[lookahead] in " \t":
                             lookahead += 1
                         if lookahead < len(json_str):
                             next_char = json_str[lookahead]
                             # Keys may be quoted (") or unquoted (letter/underscore)
                             # If next char is a quote, letter/underscore (start of key), or closing brace, newline ends the value
-                            if next_char == '"' or next_char.isalpha() or next_char == '_' or next_char == '}':
+                            if next_char == '"' or next_char.isalpha() or next_char == "_" or next_char == "}":
                                 break
 
                     # If we hit a nested structure, handle it separately
-                    if ch in '{[':
+                    if ch in "{[":
                         # Include the nested structure as part of the value
                         value_end = self._skip_nested(json_str, value_end)
                         break
@@ -610,17 +602,17 @@ No markdown formatting, no code blocks, no extra text.
                 value = json_str[value_start:value_end].rstrip()
 
                 # Check if there's a comma after the value (separator before next key-value pair)
-                has_comma = value_end < len(json_str) and json_str[value_end] == ','
+                has_comma = value_end < len(json_str) and json_str[value_end] == ","
 
                 # Check if this needs quoting
-                if value and not self._is_numeric_or_constant(value) and not value.startswith(('{', '[')):
+                if value and not self._is_numeric_or_constant(value) and not value.startswith(("{", "[")):
                     # Quote it and escape special characters
                     escaped_value = (
-                        value.replace('\\', '\\\\')  # Escape backslashes first
-                        .replace('"', '\\"')         # Escape quotes
-                        .replace('\n', '\\n')         # Escape newlines
-                        .replace('\r', '\\r')         # Escape carriage returns
-                        .replace('\t', '\\t')        # Escape tabs
+                        value.replace("\\", "\\\\")  # Escape backslashes first
+                        .replace('"', '\\"')  # Escape quotes
+                        .replace("\n", "\\n")  # Escape newlines
+                        .replace("\r", "\\r")  # Escape carriage returns
+                        .replace("\t", "\\t")  # Escape tabs
                     )
                     result.append('"')
                     result.append(escaped_value)
@@ -631,7 +623,7 @@ No markdown formatting, no code blocks, no extra text.
 
                 # Add comma if it was there (separator between key-value pairs)
                 if has_comma:
-                    result.append(',')
+                    result.append(",")
                     value_end += 1
 
                 i = value_end
@@ -640,14 +632,14 @@ No markdown formatting, no code blocks, no extra text.
             result.append(char)
             i += 1
 
-        return ''.join(result)
+        return "".join(result)
 
     def _skip_nested(self, json_str: str, start_pos: int) -> int:
         """Skip nested object or array, returning position after it."""
         pos = start_pos
         char = json_str[pos]
 
-        if char == '{':
+        if char == "{":
             depth = 1
             pos += 1
             in_string = False
@@ -659,7 +651,7 @@ No markdown formatting, no code blocks, no extra text.
                     escape_next = False
                     pos += 1
                     continue
-                if ch == '\\':
+                if ch == "\\":
                     escape_next = True
                     pos += 1
                     continue
@@ -668,13 +660,13 @@ No markdown formatting, no code blocks, no extra text.
                     pos += 1
                     continue
                 if not in_string:
-                    if ch == '{':
+                    if ch == "{":
                         depth += 1
-                    elif ch == '}':
+                    elif ch == "}":
                         depth -= 1
                 pos += 1
             return pos
-        elif char == '[':
+        elif char == "[":
             depth = 1
             pos += 1
             in_string = False
@@ -686,7 +678,7 @@ No markdown formatting, no code blocks, no extra text.
                     escape_next = False
                     pos += 1
                     continue
-                if ch == '\\':
+                if ch == "\\":
                     escape_next = True
                     pos += 1
                     continue
@@ -695,9 +687,9 @@ No markdown formatting, no code blocks, no extra text.
                     pos += 1
                     continue
                 if not in_string:
-                    if ch == '[':
+                    if ch == "[":
                         depth += 1
-                    elif ch == ']':
+                    elif ch == "]":
                         depth -= 1
                 pos += 1
             return pos
@@ -711,7 +703,7 @@ No markdown formatting, no code blocks, no extra text.
             return True  # Empty is safe
 
         # Check for boolean/null
-        if value.lower() in ('true', 'false', 'null'):
+        if value.lower() in ("true", "false", "null"):
             return True
 
         # Check for number (including negative, decimal, scientific notation)
@@ -769,12 +761,16 @@ No markdown formatting, no code blocks, no extra text.
                 logger.debug(f"JSON_PARSE_SUCCESS method=extracted_and_fixed")
                 return self._validate_response_structure(response)
             except json.JSONDecodeError as e:
-                logger.error(f"JSON_PARSE_FAILED method=extracted_and_fixed "
-                           f"error_type={type(e).__name__} error={str(e)} "
-                           f"extracted_preview={json_str[:200]}")
+                logger.error(
+                    f"JSON_PARSE_FAILED method=extracted_and_fixed "
+                    f"error_type={type(e).__name__} error={str(e)} "
+                    f"extracted_preview={json_str[:200]}"
+                )
 
-        logger.error(f"JSON_PARSE_FAILED reason=no_valid_json_found "
-                    f"response_length={len(response_text)} response_preview={response_text[:200]}")
+        logger.error(
+            f"JSON_PARSE_FAILED reason=no_valid_json_found "
+            f"response_length={len(response_text)} response_preview={response_text[:200]}"
+        )
         return None
 
     def _validate_response_structure(self, response: Dict) -> Optional[Dict]:
@@ -791,8 +787,10 @@ No markdown formatting, no code blocks, no extra text.
 
         # Use security manager for validation
         if not self.security_manager.validate_trading_decision(response):
-            logger.error(f"SECURITY_VALIDATION_FAILED response={response} "
-                       f"possible_causes=invalid_action_or_confidence_or_leverage_or_position_size")
+            logger.error(
+                f"SECURITY_VALIDATION_FAILED response={response} "
+                f"possible_causes=invalid_action_or_confidence_or_leverage_or_position_size"
+            )
             return None
         logger.debug(f"SECURITY_VALIDATION_SUCCESS")
 
@@ -1109,10 +1107,12 @@ No markdown formatting, no code blocks, no extra text.
             decision = self._validate_llm_response(raw_response_content)
 
             if decision is None:
-                logger.error(f"LLM_RESPONSE_VALIDATION_FAILED reason=invalid_response "
-                           f"response_length={len(raw_response_content)} "
-                           f"response_preview={raw_response_content[:200]} "
-                           f"fallback_action=hold")
+                logger.error(
+                    f"LLM_RESPONSE_VALIDATION_FAILED reason=invalid_response "
+                    f"response_length={len(raw_response_content)} "
+                    f"response_preview={raw_response_content[:200]} "
+                    f"fallback_action=hold"
+                )
                 fallback_decision = {
                     "action": "hold",
                     "direction": "none",
@@ -1128,16 +1128,20 @@ No markdown formatting, no code blocks, no extra text.
                 }
                 return fallback_decision
 
-            logger.info(f"LLM_DECISION_VALIDATED action={decision['action']} "
-                       f"direction={decision.get('direction', 'none')} "
-                       f"confidence={decision['confidence']:.2f} "
-                       f"position_size_usdt={decision.get('position_size_usdt', 0.0):.2f} "
-                       f"leverage={decision.get('leverage', 1.0):.1f} "
-                       f"risk_assessment={decision.get('risk_assessment', 'medium')}")
-            exit_plan = decision.get('exit_plan', {})
+            logger.info(
+                f"LLM_DECISION_VALIDATED action={decision['action']} "
+                f"direction={decision.get('direction', 'none')} "
+                f"confidence={decision['confidence']:.2f} "
+                f"position_size_usdt={decision.get('position_size_usdt', 0.0):.2f} "
+                f"leverage={decision.get('leverage', 1.0):.1f} "
+                f"risk_assessment={decision.get('risk_assessment', 'medium')}"
+            )
+            exit_plan = decision.get("exit_plan", {})
             if exit_plan:
-                logger.debug(f"LLM_EXIT_PLAN profit_target={exit_plan.get('profit_target', 0.0):.2f} "
-                           f"stop_loss={exit_plan.get('stop_loss', 0.0):.2f}")
+                logger.debug(
+                    f"LLM_EXIT_PLAN profit_target={exit_plan.get('profit_target', 0.0):.2f} "
+                    f"stop_loss={exit_plan.get('stop_loss', 0.0):.2f}"
+                )
 
             # Attach prompt and raw response for storage
             decision["_prompt"] = prompt

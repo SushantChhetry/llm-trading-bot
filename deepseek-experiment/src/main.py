@@ -101,57 +101,60 @@ class TradingBot:
         self.data_fetcher = DataFetcher()
         self.llm_client = LLMClient()
         self.trading_engine = TradingEngine()
-        
+
         # Initialize regime controller (optional)
         self.regime_controller = None
         try:
             from .regime_detector import RegimeDetector
             from .regime_controller import RegimeController
+
             if self.data_fetcher.regime_detector:
-                self.regime_controller = RegimeController(
-                    regime_detector=self.data_fetcher.regime_detector
-                )
+                self.regime_controller = RegimeController(regime_detector=self.data_fetcher.regime_detector)
                 logger.info("Regime controller initialized")
         except Exception as e:
             logger.warning(f"Regime controller not available: {e}")
-        
+
         # Initialize data quality manager
         self.data_quality = None
         try:
             from .data_quality import DataQualityManager
+
             self.data_quality = DataQualityManager()
             logger.info("Data quality manager initialized")
         except Exception as e:
             logger.warning(f"Data quality manager not available: {e}")
-        
+
         # Initialize funding/carry manager
         self.funding_carry = None
         try:
             from .funding_carry import FundingCarryManager
+
             self.funding_carry = FundingCarryManager()
             logger.info("Funding/carry manager initialized")
         except Exception as e:
             logger.warning(f"Funding/carry manager not available: {e}")
-        
+
         # Initialize execution engine
         self.execution_engine = None
         try:
             from .execution_engine import ExecutionEngine
+
             self.execution_engine = ExecutionEngine()
             logger.info("Execution engine initialized")
         except Exception as e:
             logger.warning(f"Execution engine not available: {e}")
-        
+
         # Initialize position reconciler
         self.position_reconciler = None
         self.reconciliation_cycle_count = 0
         try:
             from .position_reconciler import PositionReconciler
+
             self.position_reconciler = PositionReconciler(data_fetcher=self.data_fetcher)
             logger.info("Position reconciler initialized")
         except Exception as e:
             logger.warning(f"Position reconciler not available: {e}")
-        
+
         # Initialize monitoring service
         self.monitoring_service = MonitoringService()
         self.monitoring_running = False
@@ -231,7 +234,7 @@ class TradingBot:
         try:
             # Get metrics summary
             metrics_summary = self.monitoring_service.get_metrics_summary()
-            
+
             # Write counters
             for name, value in metrics_summary.get("counters", {}).items():
                 self.trading_engine.supabase_client.add_metric(
@@ -271,15 +274,17 @@ class TradingBot:
             overall_status = health_status.get("status", "unknown")
             status_map = {"healthy": "healthy", "degraded": "degraded", "unhealthy": "unhealthy"}
             supabase_status = status_map.get(overall_status, "degraded")
-            
+
             self.trading_engine.supabase_client.add_health_check(
                 service_name="trading-bot",
                 status=supabase_status,
                 details=health_status,
             )
 
-            logger.debug(f"Metrics flushed to Supabase: {len(metrics_summary.get('counters', {}))} counters, "
-                        f"{len(metrics_summary.get('gauges', {}))} gauges")
+            logger.debug(
+                f"Metrics flushed to Supabase: {len(metrics_summary.get('counters', {}))} counters, "
+                f"{len(metrics_summary.get('gauges', {}))} gauges"
+            )
         except Exception as e:
             logger.error(f"Failed to flush metrics to Supabase: {e}", exc_info=True)
 
@@ -347,11 +352,11 @@ class TradingBot:
                             return
                         elif quality_report.overall_status.value == "warning":
                             logger.warning(f"Data quality warning: {quality_report}")
-                    
+
                     # Update data timestamp
                     if self.data_quality:
                         self.data_quality.update_data_timestamp()
-                    
+
                     # Fetch technical indicators for Alpha Arena-style trading
                     try:
                         indicators = self.data_fetcher.get_technical_indicators(timeframe="5m", limit=100)
@@ -368,12 +373,11 @@ class TradingBot:
                             "atr": current_price * 0.02,
                             "current_price": current_price,
                         }
-                    
+
                     # Check price triangulation
                     if self.data_quality:
                         triangulation = self.data_quality.check_price_triangulation(
-                            venue_price=current_price,
-                            symbol=config.SYMBOL
+                            venue_price=current_price, symbol=config.SYMBOL
                         )
                         if triangulation.status.value == "critical":
                             logger.error(f"Price triangulation critical: {triangulation.divergence_bps:.2f} bps")
@@ -439,7 +443,9 @@ class TradingBot:
                             f"Partial: {monitoring_results['partial_profit_triggers']})"
                         )
                     else:
-                        logger.debug(f"Position monitoring: {monitoring_results['positions_checked']} positions checked, none closed")
+                        logger.debug(
+                            f"Position monitoring: {monitoring_results['positions_checked']} positions checked, none closed"
+                        )
 
             # 2. Get portfolio summary
             portfolio = self.trading_engine.get_portfolio_summary(current_price)
@@ -469,7 +475,7 @@ class TradingBot:
                 f"Freq: {portfolio.get('trade_frequency_per_day', 0):.1f}/day | "
                 f"Fees: ${portfolio.get('total_trading_fees', 0):.2f}"
             )
-            
+
             # Display regime information if available
             if indicators.get("regime"):
                 regime = indicators.get("regime", "unknown")
@@ -481,16 +487,18 @@ class TradingBot:
                     f"[{regime_color}]{regime.upper()}[/{regime_color}] "
                     f"(confidence: {regime_confidence:.2f}, volatility: {volatility_regime.upper()})"
                 )
-                
+
                 # Get regime guidance
                 if self.regime_controller and indicators.get("regime") != "unknown":
                     try:
-                        regime_state = self.data_fetcher.regime_detector.regime_history[-1] if self.data_fetcher.regime_detector.regime_history else None
+                        regime_state = (
+                            self.data_fetcher.regime_detector.regime_history[-1]
+                            if self.data_fetcher.regime_detector.regime_history
+                            else None
+                        )
                         if regime_state:
                             guidance = self.regime_controller.get_regime_guidance(regime_state)
-                            self.console.print(
-                                f"[dim]💡 Strategy Guidance: {guidance.get('guidance', '')}[/dim]"
-                            )
+                            self.console.print(f"[dim]💡 Strategy Guidance: {guidance.get('guidance', '')}[/dim]")
                     except Exception as e:
                         logger.debug(f"Could not get regime guidance: {e}")
 
@@ -501,8 +509,7 @@ class TradingBot:
                     self.reconciliation_cycle_count = 0
                     try:
                         discrepancies, success = self.position_reconciler.reconcile_positions(
-                            bot_positions=self.trading_engine.positions,
-                            current_price=current_price
+                            bot_positions=self.trading_engine.positions, current_price=current_price
                         )
                         if discrepancies:
                             critical_count = sum(1 for d in discrepancies if d.severity == "critical")
@@ -535,7 +542,9 @@ class TradingBot:
                             self.console.print(
                                 f"[bold red]🚨 KILL SWITCH ACTIVE: {risk_state.get('kill_switch_reason', 'Unknown reason')}[/bold red]"
                             )
-                        logger.debug(f"Risk service health: OK (kill_switch={risk_state.get('kill_switch_active', False)})")
+                        logger.debug(
+                            f"Risk service health: OK (kill_switch={risk_state.get('kill_switch_active', False)})"
+                        )
                 except Exception as e:
                     logger.error(f"Error checking risk service health: {e}", exc_info=True)
 
@@ -584,24 +593,32 @@ class TradingBot:
             )
 
             # 4. Execute trade based on decision
-            logger.info(f"TRADE_DECISION_EVALUATION action={action} direction={direction} "
-                       f"confidence={confidence:.2f} position_size_usdt={position_size_usdt:.2f} "
-                       f"leverage={leverage:.1f} current_price={current_price:.2f}")
-            logger.info(f"TRADE_DECISION_CONTEXT balance={portfolio['balance']:.2f} "
-                       f"open_positions={portfolio.get('open_positions', 0)} "
-                       f"max_positions={config.MAX_ACTIVE_POSITIONS} "
-                       f"max_position_size_pct={config.MAX_POSITION_SIZE * 100:.1f}")
+            logger.info(
+                f"TRADE_DECISION_EVALUATION action={action} direction={direction} "
+                f"confidence={confidence:.2f} position_size_usdt={position_size_usdt:.2f} "
+                f"leverage={leverage:.1f} current_price={current_price:.2f}"
+            )
+            logger.info(
+                f"TRADE_DECISION_CONTEXT balance={portfolio['balance']:.2f} "
+                f"open_positions={portfolio.get('open_positions', 0)} "
+                f"max_positions={config.MAX_ACTIVE_POSITIONS} "
+                f"max_position_size_pct={config.MAX_POSITION_SIZE * 100:.1f}"
+            )
 
             trade_executed = False
             if action == "buy" and confidence > 0.6 and direction == "long":
-                logger.info(f"TRADE_CONDITION_CHECK action=buy status=passed "
-                           f"confidence={confidence:.2f} direction={direction}")
+                logger.info(
+                    f"TRADE_CONDITION_CHECK action=buy status=passed "
+                    f"confidence={confidence:.2f} direction={direction}"
+                )
 
                 # Use LLM's position size and leverage directly
                 available_balance = portfolio["balance"]
-                logger.debug(f"POSITION_SIZE_VALIDATION balance={available_balance:.2f} "
-                            f"requested_size={position_size_usdt:.2f} "
-                            f"max_allowed={available_balance * config.MAX_POSITION_SIZE:.2f}")
+                logger.debug(
+                    f"POSITION_SIZE_VALIDATION balance={available_balance:.2f} "
+                    f"requested_size={position_size_usdt:.2f} "
+                    f"max_allowed={available_balance * config.MAX_POSITION_SIZE:.2f}"
+                )
 
                 if available_balance > 0 and position_size_usdt > 0:
                     # Check funding/carry costs before trading
@@ -609,87 +626,101 @@ class TradingBot:
                         # Estimate expected edge (simplified - would use actual signal strength)
                         expected_edge_bps = confidence * 100  # Simplified estimate
                         should_avoid, reason = self.funding_carry.should_avoid_perp(
-                            symbol=config.SYMBOL,
-                            expected_edge_bps=expected_edge_bps
+                            symbol=config.SYMBOL, expected_edge_bps=expected_edge_bps
                         )
                         if should_avoid:
                             logger.warning(f"Trade avoided due to carry costs: {reason}")
                             self.console.print(f"[bold yellow]⚠️ Trade avoided: {reason}[/bold yellow]")
                             return
-                    
+
                     # Use LLM's calculated position size
                     trade_amount = min(position_size_usdt, available_balance * config.MAX_POSITION_SIZE)
-                    logger.info(f"TRADE_EXECUTION_START action=buy symbol={config.SYMBOL} "
-                               f"amount={trade_amount:.2f} leverage={leverage:.1f}")
+                    logger.info(
+                        f"TRADE_EXECUTION_START action=buy symbol={config.SYMBOL} "
+                        f"amount={trade_amount:.2f} leverage={leverage:.1f}"
+                    )
 
                     self.console.print(
                         f"[bold green]🟢 Executing BUY: ${trade_amount:.2f} with {leverage:.1f}x leverage[/bold green]"
                     )
                     sys.stdout.flush()  # Ensure output appears immediately in Docker logs
-                    
+
                     # Use execution engine for order optimization if available
                     execution_price = current_price
                     if self.execution_engine:
                         try:
                             # Get spread and volatility for order selection
                             spread_bps = 10.0  # Would get from orderbook
-                            volatility_bps = indicators.get("atr", 0) / current_price * 10000 if current_price > 0 else 20.0
+                            volatility_bps = (
+                                indicators.get("atr", 0) / current_price * 10000 if current_price > 0 else 20.0
+                            )
                             edge_bps = confidence * 100
-                            
+
                             order_type = self.execution_engine.select_order_type(
                                 venue=config.EXCHANGE,
                                 spread_bps=spread_bps,
                                 volatility_bps=volatility_bps,
                                 edge_bps=edge_bps,
-                                urgency="normal"
+                                urgency="normal",
                             )
-                            
+
                             # Calculate limit offset if needed
                             if order_type.value in ["limit", "post_only"]:
                                 offset_bps = self.execution_engine.calculate_limit_offset(
                                     order_type, spread_bps, volatility_bps, "buy"
                                 )
                                 execution_price = current_price * (1 + offset_bps / 10000)
-                            
+
                             logger.debug(f"Order type selected: {order_type.value}, price={execution_price:.2f}")
                         except Exception as e:
                             logger.debug(f"Execution engine error: {e}, using market price")
-                    
+
                     trade = self.trading_engine.execute_buy(
                         config.SYMBOL, execution_price, trade_amount, confidence, decision, leverage
                     )
                     if trade:
                         trade_executed = True
-                        logger.info(f"TRADE_EXECUTION_SUCCESS action=buy trade_id={trade['id']} "
-                                   f"symbol={config.SYMBOL}")
+                        logger.info(
+                            f"TRADE_EXECUTION_SUCCESS action=buy trade_id={trade['id']} " f"symbol={config.SYMBOL}"
+                        )
                         self.console.print(
                             f"[bold green]✅ BUY trade executed successfully (ID: {trade['id']})[/bold green]"
                         )
                     else:
-                        logger.error(f"TRADE_EXECUTION_FAILED action=buy symbol={config.SYMBOL} "
-                                   f"reason=returned_none possible_causes=insufficient_balance_or_max_positions")
+                        logger.error(
+                            f"TRADE_EXECUTION_FAILED action=buy symbol={config.SYMBOL} "
+                            f"reason=returned_none possible_causes=insufficient_balance_or_max_positions"
+                        )
                         self.console.print(
                             "[bold red]❌ BUY trade failed (insufficient balance or other error)[/bold red]"
                         )
                 else:
-                    logger.warning(f"TRADE_SKIPPED action=buy reason=position_size_validation_failed "
-                                 f"balance_positive={available_balance > 0} "
-                                 f"position_size_positive={position_size_usdt > 0} "
-                                 f"balance={available_balance:.2f} position_size={position_size_usdt:.2f}")
+                    logger.warning(
+                        f"TRADE_SKIPPED action=buy reason=position_size_validation_failed "
+                        f"balance_positive={available_balance > 0} "
+                        f"position_size_positive={position_size_usdt > 0} "
+                        f"balance={available_balance:.2f} position_size={position_size_usdt:.2f}"
+                    )
             elif action == "buy" and confidence > 0.6 and direction == "short":
-                logger.info(f"TRADE_CONDITION_CHECK action=short status=passed "
-                           f"confidence={confidence:.2f} direction={direction}")
+                logger.info(
+                    f"TRADE_CONDITION_CHECK action=short status=passed "
+                    f"confidence={confidence:.2f} direction={direction}"
+                )
 
                 # Execute short position
                 available_balance = portfolio["balance"]
-                logger.debug(f"POSITION_SIZE_VALIDATION balance={available_balance:.2f} "
-                            f"requested_size={position_size_usdt:.2f} "
-                            f"max_allowed={available_balance * config.MAX_POSITION_SIZE:.2f}")
+                logger.debug(
+                    f"POSITION_SIZE_VALIDATION balance={available_balance:.2f} "
+                    f"requested_size={position_size_usdt:.2f} "
+                    f"max_allowed={available_balance * config.MAX_POSITION_SIZE:.2f}"
+                )
 
                 if available_balance > 0 and position_size_usdt > 0:
                     trade_amount = min(position_size_usdt, available_balance * config.MAX_POSITION_SIZE)
-                    logger.info(f"TRADE_EXECUTION_START action=short symbol={config.SYMBOL} "
-                               f"amount={trade_amount:.2f} leverage={leverage:.1f}")
+                    logger.info(
+                        f"TRADE_EXECUTION_START action=short symbol={config.SYMBOL} "
+                        f"amount={trade_amount:.2f} leverage={leverage:.1f}"
+                    )
 
                     self.console.print(
                         f"[bold red]🔴 Executing SHORT: ${trade_amount:.2f} with {leverage:.1f}x leverage[/bold red]"
@@ -700,25 +731,29 @@ class TradingBot:
                     )
                     if trade:
                         trade_executed = True
-                        logger.info(f"TRADE_EXECUTION_SUCCESS action=short trade_id={trade['id']} "
-                                   f"symbol={config.SYMBOL}")
+                        logger.info(
+                            f"TRADE_EXECUTION_SUCCESS action=short trade_id={trade['id']} " f"symbol={config.SYMBOL}"
+                        )
                         self.console.print(
                             f"[bold red]✅ SHORT trade executed successfully (ID: {trade['id']})[/bold red]"
                         )
                     else:
-                        logger.error(f"TRADE_EXECUTION_FAILED action=short symbol={config.SYMBOL} "
-                                   f"reason=returned_none possible_causes=insufficient_balance_or_max_positions")
+                        logger.error(
+                            f"TRADE_EXECUTION_FAILED action=short symbol={config.SYMBOL} "
+                            f"reason=returned_none possible_causes=insufficient_balance_or_max_positions"
+                        )
                         self.console.print(
                             "[bold red]❌ SHORT trade failed (insufficient balance or other error)[/bold red]"
                         )
                 else:
-                    logger.warning(f"TRADE_SKIPPED action=short reason=position_size_validation_failed "
-                                 f"balance_positive={available_balance > 0} "
-                                 f"position_size_positive={position_size_usdt > 0}")
+                    logger.warning(
+                        f"TRADE_SKIPPED action=short reason=position_size_validation_failed "
+                        f"balance_positive={available_balance > 0} "
+                        f"position_size_positive={position_size_usdt > 0}"
+                    )
 
             elif action == "sell" and confidence > 0.6:
-                logger.info(f"TRADE_CONDITION_CHECK action=sell status=passed "
-                           f"confidence={confidence:.2f}")
+                logger.info(f"TRADE_CONDITION_CHECK action=sell status=passed " f"confidence={confidence:.2f}")
 
                 # Sell all or partial position
                 symbol = config.SYMBOL
@@ -728,8 +763,9 @@ class TradingBot:
                 if has_position:
                     position = self.trading_engine.positions[symbol]
                     position_qty = position.get("quantity", 0)
-                    logger.info(f"TRADE_EXECUTION_START action=sell symbol={symbol} "
-                               f"position_quantity={position_qty:.6f}")
+                    logger.info(
+                        f"TRADE_EXECUTION_START action=sell symbol={symbol} " f"position_quantity={position_qty:.6f}"
+                    )
 
                     self.console.print(f"[bold red]🔴 Executing SELL with {leverage:.1f}x leverage[/bold red]")
                     sys.stdout.flush()  # Ensure output appears immediately in Docker logs
@@ -740,29 +776,39 @@ class TradingBot:
                         trade_executed = True
                         profit = trade.get("profit", 0)
                         profit_pct = trade.get("profit_pct", 0)
-                        logger.info(f"TRADE_EXECUTION_SUCCESS action=sell trade_id={trade['id']} "
-                                   f"symbol={symbol} profit={profit:.2f} profit_pct={profit_pct:.2f}")
+                        logger.info(
+                            f"TRADE_EXECUTION_SUCCESS action=sell trade_id={trade['id']} "
+                            f"symbol={symbol} profit={profit:.2f} profit_pct={profit_pct:.2f}"
+                        )
                         profit_color = "green" if profit >= 0 else "red"
                         self.console.print(
                             f"[bold green]✅ SELL trade executed successfully[/bold green] "
                             f"(ID: {trade['id']}, Profit: [{profit_color}]${profit:.2f}[/{profit_color}])"
                         )
                     else:
-                        logger.error(f"TRADE_EXECUTION_FAILED action=sell symbol={symbol} "
-                                   f"reason=returned_none possible_causes=position_quantity_invalid_or_validation_error")
+                        logger.error(
+                            f"TRADE_EXECUTION_FAILED action=sell symbol={symbol} "
+                            f"reason=returned_none possible_causes=position_quantity_invalid_or_validation_error"
+                        )
                         self.console.print("[bold red]❌ SELL trade failed (no position or other error)[/bold red]")
                 else:
-                    logger.warning(f"TRADE_SKIPPED action=sell reason=no_position symbol={symbol} "
-                                 f"available_positions={list(self.trading_engine.positions.keys())}")
+                    logger.warning(
+                        f"TRADE_SKIPPED action=sell reason=no_position symbol={symbol} "
+                        f"available_positions={list(self.trading_engine.positions.keys())}"
+                    )
                     self.console.print("[yellow]No position to sell[/yellow]")
             else:
-                logger.debug(f"TRADE_CONDITION_CHECK action=sell status=failed "
-                           f"action_match={action == 'sell'} confidence_sufficient={confidence > 0.6}")
+                logger.debug(
+                    f"TRADE_CONDITION_CHECK action=sell status=failed "
+                    f"action_match={action == 'sell'} confidence_sufficient={confidence > 0.6}"
+                )
                 self.console.print("[yellow]🟡 Decision is to HOLD or confidence too low. No action taken.[/yellow]")
 
             if not trade_executed:
-                logger.info(f"TRADE_EXECUTION_SUMMARY status=no_trade_executed action={action} "
-                           f"confidence={confidence:.2f} direction={direction}")
+                logger.info(
+                    f"TRADE_EXECUTION_SUMMARY status=no_trade_executed action={action} "
+                    f"confidence={confidence:.2f} direction={direction}"
+                )
                 self.console.print("[dim]No trade executed this cycle[/dim]")
             else:
                 logger.info(f"TRADE_EXECUTION_SUMMARY status=trade_executed_successfully")
@@ -845,7 +891,7 @@ class TradingBot:
         """
         # Start monitoring service
         self._start_monitoring_background()
-        
+
         # Colorful startup message
         self.console.print(
             Panel.fit(
@@ -860,13 +906,13 @@ class TradingBot:
         try:
             while True:
                 self.run_cycle()
-                
+
                 # Flush metrics to Supabase periodically
                 current_time = time.time()
                 if current_time - self.last_metrics_flush >= self.metrics_flush_interval:
                     self._flush_metrics_to_supabase()
                     self.last_metrics_flush = current_time
-                
+
                 # Explicitly flush stdout to ensure output appears in Docker logs immediately
                 sys.stdout.flush()
 
@@ -887,11 +933,12 @@ class TradingBot:
 
         except KeyboardInterrupt:
             self.console.print("\n[bold yellow]🛑 Bot stopped by user[/bold yellow]")
-            
+
             # Stop monitoring service
             if self.monitoring_running:
                 try:
                     import asyncio
+
                     loop = asyncio.new_event_loop()
                     asyncio.set_event_loop(loop)
                     loop.run_until_complete(self.monitoring_service.stop())
@@ -899,7 +946,7 @@ class TradingBot:
                     logger.info("Monitoring service stopped")
                 except Exception as e:
                     logger.error(f"Error stopping monitoring service: {e}", exc_info=True)
-            
+
             # Final metrics flush
             try:
                 self._flush_metrics_to_supabase()

@@ -96,11 +96,12 @@ class DataFetcher:
         )
 
         logger.info(f"Exchange initialized: {exchange_name.upper()} {mode_indicator} {api_status}")
-        
+
         # Initialize regime detector (optional)
         self.regime_detector = None
         try:
             from .regime_detector import RegimeDetector
+
             self.regime_detector = RegimeDetector()
             logger.info("Regime detector initialized")
         except Exception as e:
@@ -158,14 +159,15 @@ class DataFetcher:
             # Use circuit breaker and retry handler
             ticker = exchange_circuit_breaker.call(lambda: self.retry_handler.call(_fetch))
             mode_indicator = "🧪" if config.USE_TESTNET else "🌐"
-            
+
             # Normalize symbol if data quality manager available
             try:
                 from .data_quality import DataQualityManager
+
                 # Would normalize symbol here if needed
             except Exception:
                 pass
-            
+
             logger.debug(f"{mode_indicator} Fetched ticker for {self.symbol}: ${ticker['last']:,.2f}")
             return ticker
         except Exception as e:
@@ -374,11 +376,9 @@ class DataFetcher:
                         prices = df["close"].tolist()
                         volumes = df["volume"].tolist() if "volume" in df.columns else None
                         regime_state = self.regime_detector.detect_regime(
-                            prices=prices,
-                            volumes=volumes,
-                            timeframe_minutes=5 if timeframe == "5m" else 15
+                            prices=prices, volumes=volumes, timeframe_minutes=5 if timeframe == "5m" else 15
                         )
-                        
+
                         # Add regime information to indicators
                         indicators["regime"] = regime_state.regime_type.value
                         indicators["volatility_regime"] = regime_state.volatility_regime.value
@@ -387,7 +387,7 @@ class DataFetcher:
                         indicators["trend_strength"] = regime_state.trend_strength
                         indicators["momentum"] = regime_state.momentum
                         indicators["market_structure"] = regime_state.market_structure
-                        
+
                         logger.debug(
                             f"📊 Regime detected: {regime_state.regime_type.value} "
                             f"(confidence={regime_state.confidence:.2f}, volatility={regime_state.volatility_regime.value})"
