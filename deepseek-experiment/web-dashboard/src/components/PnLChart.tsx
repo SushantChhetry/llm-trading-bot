@@ -1,4 +1,4 @@
-import { memo, useState, useMemo } from 'react';
+import { memo, useState, useMemo, useEffect } from 'react';
 import { 
   LineChart, 
   Line, 
@@ -85,6 +85,32 @@ function PnLChartComponent({ className }: PnLChartProps) {
   const { pnlData: data } = usePnLData();
   const { snapshots } = usePortfolioSnapshots();
   const [view, setView] = useState<ChartView>('value');
+  const [profitTargetPct, setProfitTargetPct] = useState<number>(10.0); // Default fallback
+
+  // Fetch profit target from config
+  useEffect(() => {
+    const fetchProfitTarget = async () => {
+      try {
+        const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8001';
+        const response = await fetch(`${API_BASE_URL}/api/config/current`);
+        if (response.ok) {
+          const data = await response.json();
+          const target = data.config?.position_management?.portfolio_profit_target_pct;
+          if (target !== undefined && target !== null) {
+            setProfitTargetPct(target);
+          }
+        }
+      } catch (error) {
+        console.warn('Failed to fetch profit target from config, using default:', error);
+        // Keep default value
+      }
+    };
+
+    fetchProfitTarget();
+    // Optionally refetch periodically (every 30 seconds) in case config changes
+    const interval = setInterval(fetchProfitTarget, 30000);
+    return () => clearInterval(interval);
+  }, []);
 
   const chartData = useMemo<ChartDataPoint[]>(() => {
     if (snapshots && snapshots.length > 0) {
@@ -123,9 +149,6 @@ function PnLChartComponent({ className }: PnLChartProps) {
   const totalReturnPct = latestData?.total_return_pct ?? 0;
   const isPositive = totalReturnPct >= 0;
   const TrendIcon = isPositive ? TrendingUp : TrendingDown;
-
-  // Profit target percentage for cash out
-  const PROFIT_TARGET_PCT = 10.0;
 
   const chartConfig = {
     margin: { top: 5, right: 20, left: 20, bottom: 5 },
@@ -195,15 +218,15 @@ function PnLChartComponent({ className }: PnLChartProps) {
         <Tooltip content={<CustomTooltip />} />
         {/* Zero line */}
         <ReferenceLine y={0} stroke="hsl(var(--muted-foreground))" strokeDasharray="2 2" strokeOpacity={0.5} />
-        {/* 10% Profit Target Line */}
+        {/* Dynamic Profit Target Line */}
         <ReferenceLine 
-          y={PROFIT_TARGET_PCT} 
+          y={profitTargetPct} 
           stroke="#10b981" 
           strokeDasharray="4 4" 
           strokeWidth={2}
           strokeOpacity={0.7}
           label={{ 
-            value: `${PROFIT_TARGET_PCT}% Target`, 
+            value: `${profitTargetPct.toFixed(1)}% Target`, 
             position: "right",
             fill: "#10b981",
             fontSize: 12,
