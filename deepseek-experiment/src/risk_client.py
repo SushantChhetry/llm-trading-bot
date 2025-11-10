@@ -7,8 +7,9 @@ Provides caching, retry logic, and easy integration with trading engine.
 
 import logging
 import time
-from typing import Dict, Optional, Tuple
 from dataclasses import dataclass
+from typing import Dict, Optional, Tuple
+
 import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry

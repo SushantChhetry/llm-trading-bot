@@ -11,10 +11,10 @@ Provides execution quality controls:
 
 import logging
 import threading
-from typing import Dict, Optional, Tuple
+import time
 from dataclasses import dataclass
 from enum import Enum
-import time
+from typing import Dict, Optional, Tuple
 
 from config import config
 

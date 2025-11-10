@@ -10,13 +10,13 @@ Implements a strict promotion ladder with auto-deallocation:
 Auto-deallocation if canary underperforms its backtest IQR.
 """
 
-import logging
-from datetime import datetime, timedelta
-from typing import Dict, List, Optional, Tuple
-from dataclasses import dataclass
-from enum import Enum
 import json
+import logging
+from dataclasses import dataclass
+from datetime import datetime, timedelta
+from enum import Enum
 from pathlib import Path
+from typing import Dict, List, Optional, Tuple
 
 from config import config
 

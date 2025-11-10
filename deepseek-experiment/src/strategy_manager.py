@@ -7,10 +7,11 @@ Tracks pairwise P&L correlations and caps capital to any one cluster.
 """
 
 import logging
-from typing import Dict, List, Optional, Tuple
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
+from typing import Dict, List, Optional, Tuple
+
 import numpy as np
 
 from .regime_controller import RegimeController, StrategyType

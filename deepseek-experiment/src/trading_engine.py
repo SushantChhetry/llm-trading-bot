@@ -17,8 +17,8 @@ from config import config
 
 from .logger import get_logger
 from .resilience import CircuitBreakerConfig, RetryConfig, circuit_breaker, retry
+from .risk_client import OrderValidationResult, RiskClient
 from .security import SecurityManager, validate_trading_inputs
-from .risk_client import RiskClient, OrderValidationResult
 
 logger = get_logger(__name__)
 

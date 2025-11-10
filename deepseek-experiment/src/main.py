@@ -105,8 +105,8 @@ class TradingBot:
         # Initialize regime controller (optional)
         self.regime_controller = None
         try:
-            from .regime_detector import RegimeDetector
             from .regime_controller import RegimeController
+            from .regime_detector import RegimeDetector
 
             if self.data_fetcher.regime_detector:
                 self.regime_controller = RegimeController(regime_detector=self.data_fetcher.regime_detector)

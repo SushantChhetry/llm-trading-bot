@@ -12,11 +12,11 @@ Strategies:
 """
 
 import logging
-from typing import Dict, List, Optional
 from dataclasses import dataclass
 from enum import Enum
+from typing import Dict, List, Optional
 
-from .regime_detector import RegimeDetector, RegimeType, VolatilityRegime, RegimeState
+from .regime_detector import RegimeDetector, RegimeState, RegimeType, VolatilityRegime
 
 logger = logging.getLogger(__name__)
 

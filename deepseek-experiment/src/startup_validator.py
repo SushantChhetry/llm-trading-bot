@@ -149,6 +149,7 @@ class StartupValidator:
     def validate_risk_service(self):
         """Validate risk service is available and healthy."""
         import os
+
         import requests
 
         risk_service_url = os.getenv("RISK_SERVICE_URL", "http://localhost:8003")

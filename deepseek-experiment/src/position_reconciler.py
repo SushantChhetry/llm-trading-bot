@@ -6,9 +6,9 @@ Detects discrepancies and logs/alert on mismatches.
 """
 
 import logging
-from typing import Dict, Optional, Tuple, List
 from dataclasses import dataclass
 from datetime import datetime
+from typing import Dict, List, Optional, Tuple
 
 from config import config
 

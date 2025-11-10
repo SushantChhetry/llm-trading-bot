@@ -12,11 +12,12 @@ Data quality as a first-class risk:
 
 import logging
 import time
-import ntplib
-from datetime import datetime, timedelta
-from typing import Dict, List, Optional, Tuple
 from dataclasses import dataclass
+from datetime import datetime, timedelta
 from enum import Enum
+from typing import Dict, List, Optional, Tuple
+
+import ntplib
 
 logger = logging.getLogger(__name__)
 

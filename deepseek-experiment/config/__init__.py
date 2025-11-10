@@ -18,9 +18,9 @@ except (ImportError, ValueError) as e:
     logger = logging.getLogger(__name__)
     logger.warning(f"Could not load config_loader, falling back to config.py: {e}")
 
-    from types import SimpleNamespace
     import sys
     from pathlib import Path
+    from types import SimpleNamespace
 
     # Import config.py module directly
     _config_py_path = Path(__file__).parent / "config.py"

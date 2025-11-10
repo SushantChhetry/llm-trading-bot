@@ -13,9 +13,10 @@ Provides regime context to strategy controllers for adaptive trading.
 """
 
 import logging
-from typing import Dict, List, Optional, Tuple
-from enum import Enum
 from dataclasses import dataclass
+from enum import Enum
+from typing import Dict, List, Optional, Tuple
+
 import numpy as np
 import pandas as pd
 

@@ -7,52 +7,47 @@ Priority order:
 3. config.py defaults
 """
 
-import os
 import logging
-from typing import Dict, Any, Optional
+import os
 from pathlib import Path
+from typing import Any, Dict, Optional
 
 logger = logging.getLogger(__name__)
 
 # Import config defaults
-from config.config import (
-    # LLM
-    LLM_PROVIDER,
+from config.config import (  # LLM; Exchange; Trading; Position Management; Logging
+    DEFAULT_LEVERAGE,
+    ENABLE_PARTIAL_PROFIT_TAKING,
+    ENABLE_POSITION_MONITORING,
+    ENABLE_TRAILING_STOP_LOSS,
+    EXCHANGE,
+    FEE_IMPACT_WARNING_THRESHOLD,
+    INITIAL_BALANCE,
     LLM_API_KEY,
     LLM_API_URL,
-    LLM_MODEL,
-    LLM_TEMPERATURE,
     LLM_MAX_TOKENS,
+    LLM_MODEL,
+    LLM_PROVIDER,
+    LLM_TEMPERATURE,
     LLM_TIMEOUT,
-    # Exchange
-    EXCHANGE,
-    SYMBOL,
-    USE_TESTNET,
-    # Trading
-    TRADING_MODE,
-    INITIAL_BALANCE,
-    MAX_POSITION_SIZE,
-    MAX_LEVERAGE,
-    DEFAULT_LEVERAGE,
-    TRADING_FEE_PERCENT,
-    MAX_RISK_PER_TRADE,
-    STOP_LOSS_PERCENT,
-    TAKE_PROFIT_PERCENT,
+    LOG_LEVEL,
     MAX_ACTIVE_POSITIONS,
+    MAX_LEVERAGE,
+    MAX_POSITION_SIZE,
+    MAX_RISK_PER_TRADE,
     MIN_CONFIDENCE_THRESHOLD,
-    FEE_IMPACT_WARNING_THRESHOLD,
-    RUN_INTERVAL_SECONDS,
-    # Position Management
-    ENABLE_POSITION_MONITORING,
-    PORTFOLIO_PROFIT_TARGET_PCT,
-    ENABLE_TRAILING_STOP_LOSS,
-    TRAILING_STOP_DISTANCE_PCT,
-    TRAILING_STOP_ACTIVATION_PCT,
-    ENABLE_PARTIAL_PROFIT_TAKING,
     PARTIAL_PROFIT_PERCENT,
     PARTIAL_PROFIT_TARGET_PCT,
-    # Logging
-    LOG_LEVEL,
+    PORTFOLIO_PROFIT_TARGET_PCT,
+    RUN_INTERVAL_SECONDS,
+    STOP_LOSS_PERCENT,
+    SYMBOL,
+    TAKE_PROFIT_PERCENT,
+    TRADING_FEE_PERCENT,
+    TRADING_MODE,
+    TRAILING_STOP_ACTIVATION_PCT,
+    TRAILING_STOP_DISTANCE_PCT,
+    USE_TESTNET,
 )
 
 # Cache for loaded configuration
