@@ -89,13 +89,27 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
     setError(null);
     try {
       const response = await fetch(`${API_BASE_URL}/api/config/current`);
-      if (!response.ok) throw new Error('Failed to load configuration');
+      if (!response.ok) {
+        const errorText = await response.text();
+        let errorMessage = 'Failed to load configuration';
+        try {
+          const errorData = JSON.parse(errorText);
+          errorMessage = errorData.detail || errorData.message || errorMessage;
+        } catch {
+          errorMessage = errorText || `HTTP ${response.status}: ${response.statusText}`;
+        }
+        throw new Error(errorMessage);
+      }
       const data = await response.json();
       setConfig(data.config);
       setConfigName(data.name || '');
       setConfigDescription(data.description || '');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load configuration');
+      if (err instanceof TypeError && err.message.includes('fetch')) {
+        setError(`Cannot connect to API server at ${API_BASE_URL}. Please check if the server is running.`);
+      } else {
+        setError(err instanceof Error ? err.message : 'Failed to load configuration');
+      }
     } finally {
       setLoading(false);
     }
@@ -106,13 +120,27 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
     setError(null);
     try {
       const response = await fetch(`${API_BASE_URL}/api/config/default`);
-      if (!response.ok) throw new Error('Failed to load default configuration');
+      if (!response.ok) {
+        const errorText = await response.text();
+        let errorMessage = 'Failed to load default configuration';
+        try {
+          const errorData = JSON.parse(errorText);
+          errorMessage = errorData.detail || errorData.message || errorMessage;
+        } catch {
+          errorMessage = errorText || `HTTP ${response.status}: ${response.statusText}`;
+        }
+        throw new Error(errorMessage);
+      }
       const data = await response.json();
       setConfig(data.config);
       setConfigName('Default Configuration');
       setConfigDescription('Reset to system defaults');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load default configuration');
+      if (err instanceof TypeError && err.message.includes('fetch')) {
+        setError(`Cannot connect to API server at ${API_BASE_URL}. Please check if the server is running.`);
+      } else {
+        setError(err instanceof Error ? err.message : 'Failed to load default configuration');
+      }
     } finally {
       setLoading(false);
     }

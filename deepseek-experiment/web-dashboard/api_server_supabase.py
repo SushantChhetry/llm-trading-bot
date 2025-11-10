@@ -32,13 +32,52 @@ if str(project_root) not in sys.path:
 from config import config
 from supabase_client import get_supabase_service
 
-# Configure logging
+# Configure logging first (needed for import fallback)
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s | %(levelname)-8s | %(name)-20s | %(message)s',
     datefmt='%Y-%m-%d %H:%M:%S'
 )
 logger = logging.getLogger(__name__)
+
+# Import get_default_configuration with fallback
+try:
+    from config.config import get_default_configuration
+except ImportError as e:
+    # Fallback if import fails (e.g., running from different directory)
+    logger.warning(f"Failed to import get_default_configuration from config.config: {e}")
+    config_path = project_root.parent / "config" / "config.py"
+    if config_path.exists():
+        try:
+            import importlib.util
+            spec = importlib.util.spec_from_file_location("config.config", config_path)
+            config_module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(config_module)
+            get_default_configuration = config_module.get_default_configuration
+            logger.info("Successfully loaded get_default_configuration from fallback path")
+        except Exception as fallback_error:
+            logger.error(f"Fallback import also failed: {fallback_error}")
+            # Last resort: define a minimal default config function
+            def get_default_configuration():
+                logger.warning("Using minimal default config - config.config not available")
+                return {
+                    "llm": {"provider": "mock", "api_key": "", "api_url": "", "model": "", "temperature": 0.7, "max_tokens": 500, "timeout": 30},
+                    "exchange": {"name": "kraken", "symbol": "BTC/USDT", "use_testnet": True},
+                    "trading": {"mode": "paper", "initial_balance": 10000.0, "max_position_size": 0.1, "max_leverage": 10.0, "default_leverage": 1.0, "trading_fee_percent": 0.05, "max_risk_per_trade": 2.0, "stop_loss_percent": 2.0, "take_profit_percent": 3.0, "max_active_positions": 6, "min_confidence_threshold": 0.6, "fee_impact_warning_threshold": 20.0, "run_interval_seconds": 150},
+                    "position_management": {"enable_position_monitoring": True, "portfolio_profit_target_pct": 10.0, "enable_trailing_stop_loss": True, "trailing_stop_distance_pct": 1.0, "trailing_stop_activation_pct": 0.5, "enable_partial_profit_taking": True, "partial_profit_percent": 50.0, "partial_profit_target_pct": 1.5},
+                    "logging": {"level": "INFO"}
+                }
+    else:
+        # Last resort: define a minimal default config function
+        def get_default_configuration():
+            logger.warning(f"Config file not found at {config_path}, using minimal default config")
+            return {
+                "llm": {"provider": "mock", "api_key": "", "api_url": "", "model": "", "temperature": 0.7, "max_tokens": 500, "timeout": 30},
+                "exchange": {"name": "kraken", "symbol": "BTC/USDT", "use_testnet": True},
+                "trading": {"mode": "paper", "initial_balance": 10000.0, "max_position_size": 0.1, "max_leverage": 10.0, "default_leverage": 1.0, "trading_fee_percent": 0.05, "max_risk_per_trade": 2.0, "stop_loss_percent": 2.0, "take_profit_percent": 3.0, "max_active_positions": 6, "min_confidence_threshold": 0.6, "fee_impact_warning_threshold": 20.0, "run_interval_seconds": 150},
+                "position_management": {"enable_position_monitoring": True, "portfolio_profit_target_pct": 10.0, "enable_trailing_stop_loss": True, "trailing_stop_distance_pct": 1.0, "trailing_stop_activation_pct": 0.5, "enable_partial_profit_taking": True, "partial_profit_percent": 50.0, "partial_profit_target_pct": 1.5},
+                "logging": {"level": "INFO"}
+            }
 
 app = FastAPI(title="Trading Bot API", version="1.0.0")
 
@@ -827,7 +866,6 @@ async def get_current_config():
     if not USE_SUPABASE or not supabase:
         # Return default config if Supabase not available
         try:
-            from config.config import get_default_configuration
             return {
                 "config": get_default_configuration(),
                 "source": "default",
@@ -835,8 +873,8 @@ async def get_current_config():
                 "version": None
             }
         except Exception as e:
-            logger.error(f"Error getting default config: {e}")
-            raise HTTPException(status_code=500, detail="Failed to get configuration")
+            logger.error(f"Error getting default config: {e}", exc_info=True)
+            raise HTTPException(status_code=500, detail=f"Failed to get configuration: {str(e)}")
     
     try:
         active_config = supabase.get_active_configuration()
@@ -855,7 +893,6 @@ async def get_current_config():
             }
         else:
             # No active config, return defaults
-            from config.config import get_default_configuration
             return {
                 "config": get_default_configuration(),
                 "source": "default",
@@ -870,7 +907,6 @@ async def get_current_config():
 async def get_default_config():
     """Get the default system configuration."""
     try:
-        from config.config import get_default_configuration
         default_config = get_default_configuration()
         
         # Also check if there's a default in Supabase
@@ -1051,7 +1087,6 @@ async def reset_config():
             }
         else:
             # No default in Supabase, return config.py defaults
-            from config.config import get_default_configuration
             return {
                 "success": True,
                 "config": get_default_configuration(),

@@ -167,7 +167,7 @@ function PnLChartComponent({ className }: PnLChartProps) {
             type="monotone"
             dataKey="total_value"
             stroke={isPositive ? "#10b981" : "#ef4444"}
-            strokeWidth={2}
+            strokeWidth={isPositive ? 3 : 2}
             fill="url(#valueGradient)"
             dot={false}
             activeDot={{ r: 4 }}
@@ -214,7 +214,7 @@ function PnLChartComponent({ className }: PnLChartProps) {
           type="monotone"
           dataKey="total_return_pct"
           stroke={isPositive ? "#10b981" : "#ef4444"}
-          strokeWidth={2}
+          strokeWidth={isPositive ? 3 : 2}
           dot={false}
           activeDot={{ r: 4 }}
         />
