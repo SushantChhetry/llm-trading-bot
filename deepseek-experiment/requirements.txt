@@ -13,7 +13,13 @@ seaborn>=0.12.0
 numpy>=1.24.0
 
 # Technical indicators for Alpha Arena (required for real trading signals)
-pandas-ta>=0.4.66b0  # Compatible with Python 3.11+ (pip will auto-select highest compatible version)
+# Note: Code handles missing pandas-ta gracefully (returns mock indicators)
+# pip will auto-select highest compatible version per Python version:
+# - Python 3.9: 1.21.6 (latest 1.21.x)
+# - Python 3.10: 2.2.6 (latest 2.2.x)
+# - Python 3.11: 2.3.4 (latest 2.3.x)
+# - Python 3.12+: 0.4.67b0+ (latest beta)
+pandas-ta>=1.21.6
 
 # Experimentation and configuration
 pyyaml>=6.0
