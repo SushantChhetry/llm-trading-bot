@@ -14,12 +14,12 @@ numpy>=1.24.0
 
 # Technical indicators for Alpha Arena (required for real trading signals)
 # Note: Code handles missing pandas-ta gracefully (returns mock indicators)
-# pip will auto-select highest compatible version per Python version:
-# - Python 3.9: 1.21.6 (latest 1.21.x)
-# - Python 3.10: 2.2.6 (latest 2.2.x)
-# - Python 3.11: 2.3.4 (latest 2.3.x)
-# - Python 3.12+: 0.4.67b0+ (latest beta)
-pandas-ta>=1.21.6
+# Version compatibility:
+# - Python 3.9-3.11: Uses 1.x or 2.x versions
+# - Python 3.12+: Uses 0.4.x beta versions (0.4.67b0+)
+# Using environment markers to support all Python versions
+pandas-ta>=0.4.67b0; python_version >= "3.12"
+pandas-ta>=1.21.6; python_version < "3.12"
 
 # Experimentation and configuration
 pyyaml>=6.0
