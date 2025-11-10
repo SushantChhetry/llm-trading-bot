@@ -1112,6 +1112,151 @@ async def reset_config():
         logger.error(f"Error resetting configuration: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.post("/api/emergency-sell")
+async def emergency_sell(request: Request):
+    """
+    Emergency sell endpoint - sells all positions as a fail-safe.
+    Only available in live trading mode (disabled in paper mode).
+    """
+    try:
+        # Get bot status to check trading mode
+        bot_status = get_bot_status()
+        trading_mode = bot_status.get("trading_mode", "paper")
+        
+        # CRITICAL: Disable in paper mode
+        if trading_mode == "paper":
+            raise HTTPException(
+                status_code=403,
+                detail="Emergency sell is disabled in paper trading mode. This feature is only available in live trading mode."
+            )
+        
+        # Get current positions
+        positions = get_positions()
+        
+        if not positions:
+            return {
+                "success": True,
+                "message": "No open positions to sell",
+                "positions_sold": 0,
+                "trades": []
+            }
+        
+        # Import trading components (lazy import to avoid circular dependencies)
+        try:
+            # Add parent directory to path for imports
+            if str(parent_root) not in sys.path:
+                sys.path.insert(0, str(parent_root))
+            
+            from src.data_fetcher import DataFetcher
+            from src.trading_engine import TradingEngine
+            from config import config as trading_config
+        except ImportError as e:
+            logger.error(f"Failed to import trading components: {e}", exc_info=True)
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to initialize trading components: {str(e)}"
+            )
+        
+        # Initialize data fetcher and trading engine
+        try:
+            data_fetcher = DataFetcher()
+            trading_engine = TradingEngine()
+        except Exception as e:
+            logger.error(f"Failed to initialize trading components: {e}", exc_info=True)
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to initialize trading engine: {str(e)}"
+            )
+        
+        # Execute sells for all positions
+        trades_executed = []
+        errors = []
+        
+        for position in positions:
+            symbol = position.get("symbol")
+            if not symbol:
+                continue
+            
+            try:
+                # Get current price - fetch ticker directly from exchange for this symbol
+                # DataFetcher.get_ticker() uses config.SYMBOL, so we use exchange directly
+                if not data_fetcher.exchange:
+                    errors.append(f"Exchange not initialized for {symbol}")
+                    continue
+                
+                try:
+                    ticker = data_fetcher.exchange.fetch_ticker(symbol)
+                    current_price = ticker.get("last", 0)
+                except Exception as ticker_error:
+                    logger.warning(f"Failed to fetch ticker for {symbol}: {ticker_error}")
+                    # Fallback: try using DataFetcher's get_ticker if symbol matches config
+                    if symbol == data_fetcher.symbol:
+                        ticker = data_fetcher.get_ticker()
+                        current_price = ticker.get("last", 0)
+                    else:
+                        raise ticker_error
+                
+                if current_price <= 0:
+                    errors.append(f"Could not get current price for {symbol}")
+                    logger.warning(f"Emergency sell: Could not get price for {symbol}")
+                    continue
+                
+                # Get position quantity
+                position_quantity = position.get("quantity", 0)
+                if position_quantity <= 0:
+                    errors.append(f"No quantity to sell for {symbol}")
+                    continue
+                
+                # Execute sell (sell entire position)
+                trade = trading_engine.execute_sell(
+                    symbol=symbol,
+                    price=current_price,
+                    quantity=None,  # Sell entire position
+                    confidence=1.0,  # High confidence for emergency sell
+                    llm_decision={
+                        "action": "sell",
+                        "direction": "sell",
+                        "confidence": 1.0,
+                        "justification": "Emergency sell - manual fail-safe trigger"
+                    },
+                    leverage=position.get("leverage", 1.0)
+                )
+                
+                if trade:
+                    trades_executed.append({
+                        "symbol": symbol,
+                        "trade_id": trade.get("id"),
+                        "quantity": trade.get("quantity", 0),
+                        "price": trade.get("price", 0),
+                        "profit": trade.get("profit", 0),
+                        "profit_pct": trade.get("profit_pct", 0)
+                    })
+                    logger.info(f"Emergency sell executed for {symbol}: trade_id={trade.get('id')} quantity={trade.get('quantity', 0):.6f} price={current_price:.2f}")
+                else:
+                    errors.append(f"Failed to execute sell for {symbol} (trading engine returned None)")
+                    logger.warning(f"Emergency sell failed for {symbol}: trading engine returned None")
+                    
+            except Exception as e:
+                error_msg = f"Error selling {symbol}: {str(e)}"
+                logger.error(error_msg, exc_info=True)
+                errors.append(error_msg)
+        
+        # Return results
+        success = len(errors) == 0 or len(trades_executed) > 0
+        return {
+            "success": success,
+            "message": f"Emergency sell completed. {len(trades_executed)} position(s) sold." + (f" {len(errors)} error(s) occurred." if errors else ""),
+            "positions_sold": len(trades_executed),
+            "trades": trades_executed,
+            "errors": errors if errors else None
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in emergency sell endpoint: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
 if __name__ == "__main__":
     import threading
     import sys

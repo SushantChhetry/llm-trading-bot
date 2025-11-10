@@ -4,6 +4,7 @@ import { Settings } from 'lucide-react';
 import { useConnectionStatus, usePortfolio } from '@/contexts/TradingDataContext';
 import { formatCurrency, formatPercentage, getProfitColor } from '@/lib/utils';
 import { SettingsDialog } from './SettingsDialog';
+import { EmergencySellButton } from './EmergencySellButton';
 
 export const DashboardHeader = memo(function DashboardHeader() {
   const { isConnected, error } = useConnectionStatus();
@@ -41,6 +42,7 @@ export const DashboardHeader = memo(function DashboardHeader() {
             </div>
           </div>
           <div className="flex items-center gap-4">
+            <EmergencySellButton />
             <button
               onClick={() => setSettingsOpen(true)}
               className="px-4 py-2 text-sm font-medium text-foreground hover:text-primary transition-colors border border-border rounded-md hover:border-primary tracking-normal flex items-center gap-2"
