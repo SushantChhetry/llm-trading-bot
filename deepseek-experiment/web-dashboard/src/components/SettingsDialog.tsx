@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Settings, Save, X, RotateCcw, History } from 'lucide-react';
 import { ConfigHistoryDialog } from './ConfigHistoryDialog';
 import {
@@ -92,13 +92,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
   const [configDescription, setConfigDescription] = useState('');
   const [historyOpen, setHistoryOpen] = useState(false);
 
-  useEffect(() => {
-    if (open) {
-      loadCurrentConfig();
-    }
-  }, [open]);
-
-  const loadCurrentConfig = async () => {
+  const loadCurrentConfig = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
@@ -127,7 +121,13 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    if (open) {
+      loadCurrentConfig();
+    }
+  }, [open, loadCurrentConfig]);
 
   const loadDefaultConfig = async () => {
     setLoading(true);
@@ -165,6 +165,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
     if (!config.llm) return 'LLM configuration is missing';
     if (!config.trading) return 'Trading configuration is missing';
     if (!config.exchange) return 'Exchange configuration is missing';
+    if (!config.position_management) return 'Position management configuration is missing';
     
     // Validate LLM
     if (!config.llm.provider) return 'LLM provider is required';
@@ -296,7 +297,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
     );
   }
 
-  if (!config || !config.llm || !config.trading || !config.exchange) {
+  if (!config || !config.llm || !config.trading || !config.exchange || !config.position_management) {
     return (
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
