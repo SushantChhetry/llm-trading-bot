@@ -88,7 +88,7 @@ class TradingEngine:
 
         # Initialize position sizer (optional - for Kelly Criterion sizing)
         self.position_sizer = None
-        if config.ENABLE_KELLY_SIZING:
+        if getattr(config, 'ENABLE_KELLY_SIZING', False):
             try:
                 from .position_sizer import PositionSizer
 
@@ -518,14 +518,14 @@ class TradingEngine:
 
         # Kelly Criterion position sizing (if enabled) - for buy orders
         original_amount_usdt = amount_usdt
-        if self.position_sizer and (config.ENABLE_KELLY_SIZING or (llm_decision and llm_decision.get("use_kelly_sizing", False))):
+        if self.position_sizer and (getattr(config, 'ENABLE_KELLY_SIZING', False) or (llm_decision and llm_decision.get("use_kelly_sizing", False))):
             try:
                 portfolio = {
                     "balance": self.balance,
                     "total_value": self.get_portfolio_value(price),
                 }
                 # Get recent trades for Kelly calculation
-                recent_trades = self.trades[-config.KELLY_LOOKBACK_TRADES:] if len(self.trades) > 0 else []
+                recent_trades = self.trades[-getattr(config, 'KELLY_LOOKBACK_TRADES', 30):] if len(self.trades) > 0 else []
                 
                 kelly_size = self.position_sizer.calculate_optimal_position_size(
                     portfolio=portfolio,
@@ -1205,14 +1205,14 @@ class TradingEngine:
 
         # Kelly Criterion position sizing (if enabled) - for short orders
         original_amount_usdt = amount_usdt
-        if self.position_sizer and (config.ENABLE_KELLY_SIZING or (llm_decision and llm_decision.get("use_kelly_sizing", False))):
+        if self.position_sizer and (getattr(config, 'ENABLE_KELLY_SIZING', False) or (llm_decision and llm_decision.get("use_kelly_sizing", False))):
             try:
                 portfolio = {
                     "balance": self.balance,
                     "total_value": self.get_portfolio_value(price),
                 }
                 # Get recent trades for Kelly calculation
-                recent_trades = self.trades[-config.KELLY_LOOKBACK_TRADES:] if len(self.trades) > 0 else []
+                recent_trades = self.trades[-getattr(config, 'KELLY_LOOKBACK_TRADES', 30):] if len(self.trades) > 0 else []
                 
                 kelly_size = self.position_sizer.calculate_optimal_position_size(
                     portfolio=portfolio,

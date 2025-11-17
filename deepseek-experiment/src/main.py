@@ -157,7 +157,7 @@ class TradingBot:
 
         # Initialize performance learner (optional - for adaptive confidence)
         self.performance_learner = None
-        if config.ENABLE_PERFORMANCE_LEARNING:
+        if getattr(config, 'ENABLE_PERFORMANCE_LEARNING', True):
             try:
                 from .performance_learner import PerformanceLearner
 
@@ -169,7 +169,7 @@ class TradingBot:
         # Initialize strategy manager (optional - for multi-strategy execution)
         self.strategy_manager = None
         self.last_rebalance_time = None
-        if config.ENABLE_MULTI_STRATEGY:
+        if getattr(config, 'ENABLE_MULTI_STRATEGY', False):
             try:
                 from .strategy_manager import StrategyManager
                 
@@ -680,7 +680,7 @@ class TradingBot:
             # Adaptive confidence adjustment based on pattern performance
             original_confidence = confidence
             confidence_adjustment = 0.0
-            if self.performance_learner and config.ADAPTIVE_CONFIDENCE_ENABLED:
+            if self.performance_learner and getattr(config, 'ADAPTIVE_CONFIDENCE_ENABLED', True):
                 try:
                     # Detect current market regime
                     price_history = market_data.get("price_history", [])
@@ -1022,11 +1022,11 @@ class TradingBot:
                 return  # Skip rest of cycle
 
             # Check for strategy rebalancing (if multi-strategy enabled)
-            if self.strategy_manager and config.ENABLE_MULTI_STRATEGY:
+            if self.strategy_manager and getattr(config, 'ENABLE_MULTI_STRATEGY', False):
                 try:
                     should_rebalance, reason = self.strategy_manager.should_rebalance(
                         performance_range_threshold=0.15,
-                        rebalance_interval_hours=config.STRATEGY_REBALANCE_INTERVAL_HOURS,
+                        rebalance_interval_hours=getattr(config, 'STRATEGY_REBALANCE_INTERVAL_HOURS', 24),
                         loss_threshold=-0.10,
                         last_rebalance_time=self.last_rebalance_time
                     )
@@ -1041,10 +1041,10 @@ class TradingBot:
                         # Reallocate capital
                         new_allocations = self.strategy_manager.reallocate_capital(
                             total_capital=total_capital,
-                            min_allocation=config.MIN_STRATEGY_ALLOCATION,
-                            max_allocation=config.MAX_STRATEGY_ALLOCATION,
+                            min_allocation=getattr(config, 'MIN_STRATEGY_ALLOCATION', 0.05),
+                            max_allocation=getattr(config, 'MAX_STRATEGY_ALLOCATION', 0.50),
                             performance_range_threshold=0.15,
-                            rebalance_interval_hours=config.STRATEGY_REBALANCE_INTERVAL_HOURS
+                            rebalance_interval_hours=getattr(config, 'STRATEGY_REBALANCE_INTERVAL_HOURS', 24)
                         )
                         
                         # Update last rebalance time
