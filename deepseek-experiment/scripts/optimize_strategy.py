@@ -206,14 +206,24 @@ class StrategyOptimizer:
         return results
     
     def find_best_configs(self, 
-                         metric: str = "sharpe_ratio", 
-                         top_k: int = 5) -> List[Dict[str, Any]]:
+                         metric: str = "sharpe_ratio",
+                         optimization_mode: str = "balanced",
+                         top_k: int = 5,
+                         max_drawdown_threshold: float = None,
+                         min_sharpe_threshold: float = None,
+                         min_win_rate_threshold: float = None,
+                         relax_constraints: bool = False) -> List[Dict[str, Any]]:
         """
-        Find the best performing configurations.
+        Find the best performing configurations with mode-dependent optimization.
         
         Args:
-            metric: Metric to optimize for
+            metric: Base metric to optimize for (used in balanced mode)
+            optimization_mode: Optimization mode - "profit", "sharpe", or "balanced"
             top_k: Number of top configurations to return
+            max_drawdown_threshold: Override max drawdown threshold (None = use mode default)
+            min_sharpe_threshold: Override min Sharpe threshold (None = use mode default)
+            min_win_rate_threshold: Override min win rate threshold (None = use mode default)
+            relax_constraints: If True, reduce all constraints by 50% (for testing)
             
         Returns:
             List of best configurations
@@ -222,21 +232,312 @@ class StrategyOptimizer:
             logger.warning("No optimization results available")
             return []
         
-        # Sort by metric (higher is better for most metrics)
+        # Get mode-specific constraints
+        constraints = self._get_mode_constraints(
+            optimization_mode, max_drawdown_threshold, min_sharpe_threshold, 
+            min_win_rate_threshold, relax_constraints
+        )
+        
+        # Filter results by risk constraints
+        filtered_results = self._apply_risk_constraints(self.optimization_results, constraints)
+        
+        if not filtered_results:
+            logger.warning("No configurations passed risk constraints")
+            return []
+        
+        # Calculate optimization score based on mode
+        for result in filtered_results:
+            result["_optimization_score"] = self._calculate_optimization_score(
+                result, optimization_mode, metric
+            )
+        
+        # Sort by optimization score
         sorted_results = sorted(
-            self.optimization_results, 
-            key=lambda x: x.get("metrics", {}).get(metric, 0), 
+            filtered_results,
+            key=lambda x: x.get("_optimization_score", 0),
             reverse=True
         )
         
         self.best_configs = sorted_results[:top_k]
         
-        logger.info(f"Top {top_k} configurations by {metric}:")
+        logger.info(f"Top {top_k} configurations by {optimization_mode} mode:")
         for i, config in enumerate(self.best_configs):
-            metric_value = config.get("metrics", {}).get(metric, 0)
-            logger.info(f"  {i+1}. {config['config_id']}: {metric} = {metric_value:.4f}")
+            score = config.get("_optimization_score", 0)
+            metrics = config.get("metrics", {})
+            logger.info(
+                f"  {i+1}. {config['config_id']}: score={score:.4f} "
+                f"(profit={metrics.get('total_profit_mean', 0):.2f}, "
+                f"sharpe={metrics.get('sharpe_ratio_mean', 0):.4f}, "
+                f"win_rate={metrics.get('win_rate_mean', 0):.2f}%)"
+            )
         
         return self.best_configs
+    
+    def _get_mode_constraints(self, 
+                             mode: str,
+                             max_drawdown_override: float = None,
+                             min_sharpe_override: float = None,
+                             min_win_rate_override: float = None,
+                             relax: bool = False) -> Dict[str, float]:
+        """Get risk constraints for optimization mode."""
+        # Mode-specific defaults
+        if mode == "profit":
+            constraints = {
+                "max_drawdown": 0.25,
+                "min_sharpe": 0.3,
+                "min_win_rate": 0.35,
+            }
+        elif mode == "sharpe":
+            constraints = {
+                "max_drawdown": 0.15,
+                "min_sharpe": 0.5,
+                "min_win_rate": 0.40,
+            }
+        else:  # balanced
+            constraints = {
+                "max_drawdown": 0.20,
+                "min_sharpe": 0.4,
+                "min_win_rate": 0.38,
+            }
+        
+        # Apply overrides
+        if max_drawdown_override is not None:
+            constraints["max_drawdown"] = max_drawdown_override
+        if min_sharpe_override is not None:
+            constraints["min_sharpe"] = min_sharpe_override
+        if min_win_rate_override is not None:
+            constraints["min_win_rate"] = min_win_rate_override
+        
+        # Apply relaxation if requested
+        if relax:
+            constraints["max_drawdown"] *= 1.5  # Allow 50% more drawdown
+            constraints["min_sharpe"] *= 0.5     # Allow 50% lower Sharpe
+            constraints["min_win_rate"] *= 0.5   # Allow 50% lower win rate
+        
+        return constraints
+    
+    def _apply_risk_constraints(self, 
+                                results: List[Dict[str, Any]], 
+                                constraints: Dict[str, float]) -> List[Dict[str, Any]]:
+        """
+        Filter results by risk constraints.
+        
+        CORRECTED LOGIC:
+        - Reject if max_drawdown EXCEEDS threshold (too risky)
+        - Reject if sharpe_ratio BELOW threshold (too risky)
+        - Reject if win_rate BELOW threshold (unreliable)
+        - Reject if NOT profitable (hard requirement)
+        """
+        filtered = []
+        violations_log = []
+        
+        for result in results:
+            metrics = result.get("metrics", {})
+            
+            # Extract metric values (handle both mean and direct values)
+            max_drawdown = metrics.get("max_drawdown_mean", metrics.get("max_drawdown", 0))
+            sharpe_ratio = metrics.get("sharpe_ratio_mean", metrics.get("sharpe_ratio", 0))
+            win_rate = metrics.get("win_rate_mean", metrics.get("win_rate", 0))
+            total_profit = metrics.get("total_profit_mean", metrics.get("total_profit", 0))
+            
+            # Track violations for logging
+            violations = []
+            
+            # CORRECTED: Reject if max_drawdown EXCEEDS threshold (too risky)
+            if max_drawdown > constraints["max_drawdown"]:
+                violations.append(f"Drawdown {max_drawdown:.2%} exceeds {constraints['max_drawdown']:.2%}")
+            
+            # CORRECTED: Reject if sharpe_ratio BELOW threshold (too risky)
+            if sharpe_ratio < constraints["min_sharpe"]:
+                violations.append(f"Sharpe {sharpe_ratio:.2f} below {constraints['min_sharpe']:.2f}")
+            
+            # CORRECTED: Reject if win_rate BELOW threshold (unreliable)
+            if win_rate < constraints["min_win_rate"]:
+                violations.append(f"Win rate {win_rate:.2%} below {constraints['min_win_rate']:.2%}")
+            
+            # Hard requirement: must be profitable
+            if total_profit <= 0:
+                violations.append(f"Total profit {total_profit:.2f} not positive")
+            
+            if violations:
+                violations_log.append({
+                    "config_id": result.get("config_id", "unknown"),
+                    "violations": violations
+                })
+                continue
+            
+            filtered.append(result)
+        
+        logger.info(f"Filtered {len(results)} results to {len(filtered)} passing constraints")
+        if violations_log:
+            logger.debug(f"Rejected {len(violations_log)} configs due to constraint violations")
+        
+        return filtered
+    
+    def _calculate_optimization_score(self, 
+                                     result: Dict[str, Any], 
+                                     mode: str, 
+                                     base_metric: str) -> float:
+        """Calculate optimization score based on mode."""
+        metrics = result.get("metrics", {})
+        
+        if mode == "profit":
+            # Optimize for total profit or total return percentage
+            profit = metrics.get("total_profit_mean", metrics.get("total_profit", 0))
+            return_pct = metrics.get("total_return_pct_mean", metrics.get("total_return_pct", 0))
+            # Use return percentage if available, otherwise profit
+            return return_pct if return_pct != 0 else profit
+        
+        elif mode == "sharpe":
+            # Optimize for Sharpe ratio
+            sharpe = metrics.get("sharpe_ratio_mean", metrics.get("sharpe_ratio", 0))
+            return sharpe
+        
+        else:  # balanced
+            # Weighted combination: profit * 0.7 + sharpe * 0.3
+            profit = metrics.get("total_profit_mean", metrics.get("total_profit", 0))
+            sharpe = metrics.get("sharpe_ratio_mean", metrics.get("sharpe_ratio", 0))
+            
+            # Normalize profit to 0-1 scale (assuming max reasonable profit of 10000)
+            normalized_profit = min(profit / 10000.0, 1.0) if profit > 0 else 0.0
+            # Normalize Sharpe to 0-1 scale (assuming max reasonable Sharpe of 3.0)
+            normalized_sharpe = min(max(sharpe, 0) / 3.0, 1.0)
+            
+            return (normalized_profit * 0.7) + (normalized_sharpe * 0.3)
+    
+    def validate_strategy_generalization(
+        self,
+        config: Dict[str, Any],
+        train_results: List[Dict[str, Any]],
+        test_results: List[Dict[str, Any]],
+        degradation_threshold: float = 0.30
+    ) -> Dict[str, Any]:
+        """
+        Walk-forward validation to prevent over-optimization.
+        
+        CRITICAL: Must be done BEFORE deploying strategy.
+        Compares performance on training vs test data to detect overfitting.
+        
+        Args:
+            config: Configuration being validated
+            train_results: Results from training data (what optimizer saw)
+            test_results: Results from test data (unseen by optimizer)
+            degradation_threshold: Max acceptable degradation (default: 30%)
+        
+        Returns:
+            Dictionary with validation results and warnings
+        """
+        if not train_results or not test_results:
+            return {
+                "is_valid": False,
+                "reason": "Insufficient data for validation",
+                "degradation": 1.0
+            }
+        
+        # Calculate average metrics
+        train_metrics = self._calculate_averaged_result(
+            config, train_results, "train"
+        )
+        test_metrics = self._calculate_averaged_result(
+            config, test_results, "test"
+        )
+        
+        if not train_metrics or not test_metrics:
+            return {
+                "is_valid": False,
+                "reason": "Failed to calculate metrics",
+                "degradation": 1.0
+            }
+        
+        train_sharpe = train_metrics.get("metrics", {}).get("sharpe_ratio_mean", 0)
+        test_sharpe = test_metrics.get("metrics", {}).get("sharpe_ratio_mean", 0)
+        
+        train_profit = train_metrics.get("metrics", {}).get("total_profit_mean", 0)
+        test_profit = test_metrics.get("metrics", {}).get("total_profit_mean", 0)
+        
+        # Calculate degradation
+        sharpe_degradation = 0.0
+        if train_sharpe > 0:
+            sharpe_degradation = (train_sharpe - test_sharpe) / train_sharpe
+        
+        profit_degradation = 0.0
+        if train_profit > 0:
+            profit_degradation = (train_profit - test_profit) / train_profit
+        
+        max_degradation = max(sharpe_degradation, profit_degradation)
+        
+        is_valid = max_degradation <= degradation_threshold
+        
+        result = {
+            "is_valid": is_valid,
+            "degradation": max_degradation,
+            "sharpe_degradation": sharpe_degradation,
+            "profit_degradation": profit_degradation,
+            "train_sharpe": train_sharpe,
+            "test_sharpe": test_sharpe,
+            "train_profit": train_profit,
+            "test_profit": test_profit,
+        }
+        
+        if not is_valid:
+            result["warning"] = (
+                f"Config shows {max_degradation:.1%} degradation on test set. "
+                f"Train Sharpe: {train_sharpe:.2f}, Test Sharpe: {test_sharpe:.2f}. "
+                f"Train Profit: ${train_profit:.2f}, Test Profit: ${test_profit:.2f}"
+            )
+            logger.warning(f"OVER-OPTIMIZATION DETECTED: {result['warning']}")
+        else:
+            logger.info(
+                f"Validation passed: {max_degradation:.1%} degradation "
+                f"(threshold: {degradation_threshold:.1%})"
+            )
+        
+        return result
+    
+    def calculate_realistic_profit(
+        self,
+        backtest_profit: float,
+        num_trades: int,
+        avg_position_size: float,
+        slippage_pct: float = 0.001,
+        trading_fee_pct: float = 0.001
+    ) -> Dict[str, Any]:
+        """
+        Adjusts backtest profit for real-world trading costs.
+        
+        Accounts for:
+        - Slippage (entry + exit)
+        - Trading fees (entry + exit)
+        
+        Args:
+            backtest_profit: Gross profit from backtest
+            num_trades: Number of trades executed
+            avg_position_size: Average position size in USDT
+            slippage_pct: Slippage percentage per trade (default: 0.1%)
+            trading_fee_pct: Trading fee percentage per trade (default: 0.1%)
+        
+        Returns:
+            Dictionary with cost breakdown and realistic profit
+        """
+        # Total cost per trade: slippage (entry + exit) + fees (entry + exit)
+        cost_per_trade_pct = (slippage_pct * 2) + (trading_fee_pct * 2)
+        cost_per_trade = avg_position_size * cost_per_trade_pct
+        
+        total_costs = cost_per_trade * num_trades
+        realistic_profit = backtest_profit - total_costs
+        
+        cost_impact_pct = (1 - realistic_profit / backtest_profit) * 100 if backtest_profit > 0 else 100
+        
+        return {
+            "backtest_profit": backtest_profit,
+            "total_costs": total_costs,
+            "slippage_cost": slippage_pct * 2 * avg_position_size * num_trades,
+            "trading_fees": trading_fee_pct * 2 * avg_position_size * num_trades,
+            "realistic_profit": realistic_profit,
+            "cost_impact_pct": cost_impact_pct,
+            "num_trades": num_trades,
+            "avg_position_size": avg_position_size
+        }
     
     def export_results(self, 
                       output_file: str = None, 
@@ -549,6 +850,32 @@ Examples:
         default="sharpe_ratio",
         help="Metric to optimize for (default: sharpe_ratio)"
     )
+    parser.add_argument(
+        "--optimization-mode",
+        choices=["profit", "sharpe", "balanced"],
+        default="balanced",
+        help="Optimization mode: profit (maximize profit), sharpe (maximize Sharpe), balanced (weighted) (default: balanced)"
+    )
+    parser.add_argument(
+        "--max-drawdown-threshold",
+        type=float,
+        help="Override max drawdown threshold (overrides mode default)"
+    )
+    parser.add_argument(
+        "--min-sharpe-threshold",
+        type=float,
+        help="Override min Sharpe threshold (overrides mode default)"
+    )
+    parser.add_argument(
+        "--min-win-rate-threshold",
+        type=float,
+        help="Override min win rate threshold (overrides mode default)"
+    )
+    parser.add_argument(
+        "--relax-constraints",
+        action="store_true",
+        help="Relax all constraints by 50% (for testing)"
+    )
     
     args = parser.parse_args()
     
@@ -598,7 +925,15 @@ Examples:
         )
     
     # Find best configurations
-    best_configs = optimizer.find_best_configs(args.metric, args.top_k)
+    best_configs = optimizer.find_best_configs(
+        metric=args.metric,
+        optimization_mode=args.optimization_mode,
+        top_k=args.top_k,
+        max_drawdown_threshold=args.max_drawdown_threshold,
+        min_sharpe_threshold=args.min_sharpe_threshold,
+        min_win_rate_threshold=args.min_win_rate_threshold,
+        relax_constraints=args.relax_constraints
+    )
     
     # Export results
     if args.export:

@@ -1040,13 +1040,14 @@ No markdown formatting, no code blocks, no extra text.
     @fallback(
         lambda: {"action": "hold", "direction": "none", "confidence": 0.0, "justification": "Fallback due to error"}
     )
-    def get_trading_decision(self, market_data: Dict, portfolio_state: Dict = None) -> Dict:
+    def get_trading_decision(self, market_data: Dict, portfolio_state: Dict = None, use_agentic_mode: bool = False) -> Dict:
         """
         Get a trading decision from the LLM based on market data and portfolio state.
 
         Args:
             market_data: Dictionary containing market information (price, volume, etc.)
             portfolio_state: Dictionary containing portfolio state (balance, positions, etc.)
+            use_agentic_mode: If True, use multi-step agentic workflow instead of single call
 
         Returns:
             Dictionary with validated trading decision including action, confidence, reasoning, etc.
@@ -1060,6 +1061,23 @@ No markdown formatting, no code blocks, no extra text.
                 "total_return_pct": 0.0,
                 "total_trades": 0,
             }
+
+        # Use agentic mode if enabled
+        if use_agentic_mode or getattr(config, "ENABLE_AGENTIC_DECISIONS", False):
+            try:
+                from .llm_agent import LLMAgent
+                
+                # Initialize agent if not already done
+                if not hasattr(self, "_llm_agent"):
+                    self._llm_agent = LLMAgent(
+                        fast_llm_client=self,
+                        best_llm_client=self,  # Use same client for both (can be optimized later)
+                    )
+                
+                logger.info("Using agentic multi-step decision making")
+                return self._llm_agent.execute_agent_workflow(market_data, portfolio_state)
+            except Exception as e:
+                logger.warning(f"Agentic mode failed, falling back to single call: {e}")
 
         # Format structured prompt
         prompt = self._format_trading_prompt(market_data, portfolio_state)

@@ -91,7 +91,7 @@ function DashboardContent() {
       <footer className="border-t bg-card mt-12">
         <div className="container mx-auto px-4 py-6">
           <div className="text-center text-sm text-muted-foreground">
-            <p>Trading Bot Dashboard - Real-time monitoring and analytics</p>
+            <p>DeepTradeAI - Real-time monitoring and analytics</p>
             <p className="mt-1">Data updates every 5 seconds</p>
           </div>
         </div>

@@ -299,11 +299,16 @@ class ExperimentRunner:
             return {
                 "total_trades": 0,
                 "total_profit": 0.0,
+                "total_return_pct": 0.0,
                 "win_rate": 0.0,
                 "max_drawdown": 0.0,
                 "sharpe_ratio": 0.0,
                 "volatility": 0.0,
                 "avg_trade_duration": 0.0,
+                "profit_per_hour": 0.0,
+                "risk_adjusted_profit": 0.0,
+                "calmar_ratio": 0.0,
+                "sortino_ratio": 0.0,
             }
 
         # Basic metrics
@@ -315,30 +320,64 @@ class ExperimentRunner:
         profitable_trades = len([t for t in sell_trades if t.get("profit", 0) > 0])
         win_rate = (profitable_trades / len(sell_trades) * 100) if sell_trades else 0
 
+        # Get initial balance from config or first trade
+        initial_balance = config.INITIAL_BALANCE
+        if trades:
+            # Try to get initial balance from first trade if available
+            first_trade = trades[0]
+            if "initial_balance" in first_trade:
+                initial_balance = first_trade["initial_balance"]
+        
+        # Calculate total return percentage
+        total_return_pct = (total_profit / initial_balance * 100) if initial_balance > 0 else 0.0
+
         # Risk metrics
         profits = [t.get("profit", 0) for t in sell_trades]
         if profits:
             max_drawdown = self._calculate_max_drawdown(profits)
             volatility = self._calculate_volatility(profits)
             sharpe_ratio = self._calculate_sharpe_ratio(profits)
+            downside_volatility = self._calculate_downside_volatility(profits)
         else:
             max_drawdown = 0.0
             volatility = 0.0
             sharpe_ratio = 0.0
+            downside_volatility = 0.0
 
         # Time metrics
         duration_hours = (end_time - start_time).total_seconds() / 3600
         avg_trade_duration = duration_hours / total_trades if total_trades > 0 else 0
+        
+        # Profit per hour (time-normalized)
+        profit_per_hour = total_profit / duration_hours if duration_hours > 0 else 0.0
+        
+        # Risk-adjusted profit (using sqrt to avoid disproportionate penalty)
+        risk_adjusted_profit = total_profit / ((max_drawdown + 0.001) ** 0.5) if max_drawdown > 0 else total_profit
+        
+        # Calmar ratio (annual return / max drawdown)
+        # Annualize return: (total_return_pct / duration_hours) * (365 * 24)
+        annual_return = (total_return_pct / duration_hours * 365 * 24) if duration_hours > 0 else 0.0
+        calmar_ratio = annual_return / max_drawdown if max_drawdown > 0 else 0.0
+        
+        # Sortino ratio (annual return / downside volatility)
+        # Annualize downside volatility similarly
+        annual_downside_vol = (downside_volatility / duration_hours * 365 * 24) if duration_hours > 0 else 0.0
+        sortino_ratio = annual_return / annual_downside_vol if annual_downside_vol > 0 else 0.0
 
         return {
             "total_trades": total_trades,
             "total_profit": total_profit,
+            "total_return_pct": total_return_pct,
             "win_rate": win_rate,
             "max_drawdown": max_drawdown,
             "sharpe_ratio": sharpe_ratio,
             "volatility": volatility,
             "avg_trade_duration": avg_trade_duration,
             "duration_hours": duration_hours,
+            "profit_per_hour": profit_per_hour,
+            "risk_adjusted_profit": risk_adjusted_profit,
+            "calmar_ratio": calmar_ratio,
+            "sortino_ratio": sortino_ratio,
         }
 
     def _calculate_max_drawdown(self, profits: List[float]) -> float:
@@ -384,6 +423,21 @@ class ExperimentRunner:
             return 0.0
 
         return mean_return / volatility
+    
+    def _calculate_downside_volatility(self, profits: List[float]) -> float:
+        """Calculate downside volatility (only negative returns)."""
+        if len(profits) < 2:
+            return 0.0
+        
+        # Only consider negative returns (losses)
+        negative_returns = [p for p in profits if p < 0]
+        
+        if not negative_returns:
+            return 0.0
+        
+        mean = sum(negative_returns) / len(negative_returns)
+        variance = sum((p - mean) ** 2 for p in negative_returns) / len(negative_returns)
+        return variance ** 0.5
 
 
 def load_experiment_config(config_file: str) -> Dict[str, Any]:

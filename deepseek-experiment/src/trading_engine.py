@@ -86,6 +86,17 @@ class TradingEngine:
         except Exception as e:
             logger.warning(f"Event logger not available: {e}")
 
+        # Initialize position sizer (optional - for Kelly Criterion sizing)
+        self.position_sizer = None
+        if config.ENABLE_KELLY_SIZING:
+            try:
+                from .position_sizer import PositionSizer
+
+                self.position_sizer = PositionSizer()
+                logger.info("Position sizer (Kelly Criterion) initialized")
+            except Exception as e:
+                logger.warning(f"Position sizer not available: {e}")
+
         # Daily loss tracking
         self.daily_start_nav = None
         self.daily_start_time = None
@@ -504,6 +515,38 @@ class TradingEngine:
                     return None
                 # Otherwise, log warning but continue (for paper trading)
                 logger.warning(f"Risk validation error but continuing (RISK_SERVICE_REQUIRED=false)")
+
+        # Kelly Criterion position sizing (if enabled) - for buy orders
+        original_amount_usdt = amount_usdt
+        if self.position_sizer and (config.ENABLE_KELLY_SIZING or (llm_decision and llm_decision.get("use_kelly_sizing", False))):
+            try:
+                portfolio = {
+                    "balance": self.balance,
+                    "total_value": self.get_portfolio_value(price),
+                }
+                # Get recent trades for Kelly calculation
+                recent_trades = self.trades[-config.KELLY_LOOKBACK_TRADES:] if len(self.trades) > 0 else []
+                
+                kelly_size = self.position_sizer.calculate_optimal_position_size(
+                    portfolio=portfolio,
+                    recent_trades=recent_trades,
+                    max_position_size=config.MAX_POSITION_SIZE,
+                    existing_positions=self.positions
+                )
+                
+                if kelly_size > 0:
+                    # Override amount_usdt with Kelly-calculated size
+                    amount_usdt = kelly_size
+                    logger.info(
+                        f"KELLY_SIZING_APPLIED symbol={symbol} "
+                        f"llm_suggested={original_amount_usdt:.2f} kelly_calculated={kelly_size:.2f} "
+                        f"override={amount_usdt:.2f}"
+                    )
+                else:
+                    logger.debug(f"Kelly sizing returned 0, using LLM suggested size: {original_amount_usdt:.2f}")
+            except Exception as e:
+                logger.warning(f"Error calculating Kelly position size: {e}, using LLM suggested size")
+                amount_usdt = original_amount_usdt
 
         # Validate leverage
         original_leverage = leverage
@@ -1159,6 +1202,38 @@ class TradingEngine:
                     return None
                 # Otherwise, log warning but continue (for paper trading)
                 logger.warning(f"Risk validation error but continuing (RISK_SERVICE_REQUIRED=false)")
+
+        # Kelly Criterion position sizing (if enabled) - for short orders
+        original_amount_usdt = amount_usdt
+        if self.position_sizer and (config.ENABLE_KELLY_SIZING or (llm_decision and llm_decision.get("use_kelly_sizing", False))):
+            try:
+                portfolio = {
+                    "balance": self.balance,
+                    "total_value": self.get_portfolio_value(price),
+                }
+                # Get recent trades for Kelly calculation
+                recent_trades = self.trades[-config.KELLY_LOOKBACK_TRADES:] if len(self.trades) > 0 else []
+                
+                kelly_size = self.position_sizer.calculate_optimal_position_size(
+                    portfolio=portfolio,
+                    recent_trades=recent_trades,
+                    max_position_size=config.MAX_POSITION_SIZE,
+                    existing_positions=self.positions
+                )
+                
+                if kelly_size > 0:
+                    # Override amount_usdt with Kelly-calculated size
+                    amount_usdt = kelly_size
+                    logger.info(
+                        f"KELLY_SIZING_APPLIED symbol={symbol} "
+                        f"llm_suggested={original_amount_usdt:.2f} kelly_calculated={kelly_size:.2f} "
+                        f"override={amount_usdt:.2f}"
+                    )
+                else:
+                    logger.debug(f"Kelly sizing returned 0, using LLM suggested size: {original_amount_usdt:.2f}")
+            except Exception as e:
+                logger.warning(f"Error calculating Kelly position size: {e}, using LLM suggested size")
+                amount_usdt = original_amount_usdt
 
         # Validate leverage
         original_leverage = leverage

@@ -155,6 +155,32 @@ class TradingBot:
         except Exception as e:
             logger.warning(f"Position reconciler not available: {e}")
 
+        # Initialize performance learner (optional - for adaptive confidence)
+        self.performance_learner = None
+        if config.ENABLE_PERFORMANCE_LEARNING:
+            try:
+                from .performance_learner import PerformanceLearner
+
+                self.performance_learner = PerformanceLearner()
+                logger.info("Performance learner initialized")
+            except Exception as e:
+                logger.warning(f"Performance learner not available: {e}")
+
+        # Initialize strategy manager (optional - for multi-strategy execution)
+        self.strategy_manager = None
+        self.last_rebalance_time = None
+        if config.ENABLE_MULTI_STRATEGY:
+            try:
+                from .strategy_manager import StrategyManager
+                
+                if self.regime_controller:
+                    self.strategy_manager = StrategyManager(regime_controller=self.regime_controller)
+                    logger.info("Strategy manager initialized")
+                else:
+                    logger.warning("Strategy manager requires regime_controller, disabling multi-strategy")
+            except Exception as e:
+                logger.warning(f"Strategy manager not available: {e}")
+
         # Initialize monitoring service
         self.monitoring_service = MonitoringService()
         self.monitoring_running = False
@@ -197,8 +223,92 @@ class TradingBot:
 
         # Log hyperparameters for experiment tracking
         self._log_hyperparameters()
-
-        logger.info("=" * 60)
+    
+    def _check_circuit_breaker(self) -> bool:
+        """
+        Circuit breaker / kill switch for broken strategies.
+        
+        Checks for:
+        1. Consecutive losses (5+)
+        2. Daily loss limit ($500)
+        3. Drawdown exceeded (15%)
+        
+        Returns:
+            True if circuit breaker should halt trading
+        """
+        try:
+            # Get recent trades (last 24 hours) with safe timestamp parsing
+            recent_trades = []
+            for t in self.trading_engine.trades:
+                try:
+                    ts = t.get("timestamp")
+                    if not ts:
+                        continue
+                    if isinstance(ts, str):
+                        ts = ts.replace("Z", "+00:00")
+                        trade_time = datetime.fromisoformat(ts)
+                    elif isinstance(ts, datetime):
+                        trade_time = ts
+                    else:
+                        continue
+                    
+                    time_diff = (datetime.now() - trade_time).total_seconds()
+                    if time_diff < 86400:  # 24 hours
+                        recent_trades.append(t)
+                except Exception:
+                    # Skip trades with invalid timestamps
+                    continue
+            
+            if not recent_trades:
+                return False
+            
+            # Trigger 1: Consecutive losses
+            consecutive_losses = 0
+            for trade in reversed(recent_trades[-10:]):  # Check last 10 trades
+                if trade.get("profit", 0) < 0:
+                    consecutive_losses += 1
+                else:
+                    break
+            
+            if consecutive_losses >= 5:
+                logger.critical(
+                    f"CIRCUIT_BREAKER_TRIGGERED reason=consecutive_losses count={consecutive_losses}"
+                )
+                return True
+            
+            # Trigger 2: Daily loss limit
+            daily_loss = sum(t.get("profit", 0) for t in recent_trades if t.get("profit", 0) < 0)
+            if abs(daily_loss) > 500:  # $500 loss
+                logger.critical(
+                    f"CIRCUIT_BREAKER_TRIGGERED reason=daily_loss_limit loss=${abs(daily_loss):.2f}"
+                )
+                return True
+            
+            # Trigger 3: Drawdown exceeded (from peak, not initial)
+            current_price = self.trading_engine.trades[-1].get("price", 0) if self.trading_engine.trades else 0
+            portfolio_value = self.trading_engine.get_portfolio_value(current_price)
+            
+            # Track peak portfolio value
+            if not hasattr(self, 'peak_portfolio_value'):
+                self.peak_portfolio_value = config.INITIAL_BALANCE
+            
+            if portfolio_value > self.peak_portfolio_value:
+                self.peak_portfolio_value = portfolio_value
+            
+            # Calculate drawdown from peak
+            current_drawdown = (self.peak_portfolio_value - portfolio_value) / self.peak_portfolio_value if self.peak_portfolio_value > 0 else 0
+            
+            if current_drawdown > 0.15:  # 15% drawdown
+                logger.critical(
+                    f"CIRCUIT_BREAKER_TRIGGERED reason=drawdown_exceeded drawdown={current_drawdown:.1%}"
+                )
+                return True
+            
+            return False
+            
+        except Exception as e:
+            logger.error(f"Error checking circuit breaker: {e}")
+            return False  # Don't halt on error, just log it
 
     def _log_hyperparameters(self):
         """Log all hyperparameters for experiment tracking."""
@@ -567,6 +677,70 @@ class TradingBot:
             risk_assessment = decision.get("risk_assessment", "medium")
             exit_plan = decision.get("exit_plan", {})
 
+            # Adaptive confidence adjustment based on pattern performance
+            original_confidence = confidence
+            confidence_adjustment = 0.0
+            if self.performance_learner and config.ADAPTIVE_CONFIDENCE_ENABLED:
+                try:
+                    # Detect current market regime
+                    price_history = market_data.get("price_history", [])
+                    if not price_history and indicators:
+                        # Build price history from indicators if available
+                        price_history = [{"close": indicators.get("current_price", current_price)}]
+                    
+                    regime = self.performance_learner.detect_market_regime(price_history) if price_history else ("unknown", "normal")
+                    
+                    # Get adaptive confidence for current context
+                    # Try multiple patterns and use the most significant adjustment
+                    adjustments = []
+                    
+                    # Time patterns (multiple features)
+                    current_hour = datetime.now().hour
+                    hour_confidence = self.performance_learner.get_adaptive_confidence(
+                        confidence, "hour", str(current_hour)
+                    )
+                    if hour_confidence != confidence:
+                        adjustments.append(("hour", hour_confidence - confidence))
+                    
+                    # Trading session pattern
+                    trading_session = self.performance_learner._get_trading_session(current_hour)
+                    session_confidence = self.performance_learner.get_adaptive_confidence(
+                        confidence, "trading_session", trading_session
+                    )
+                    if session_confidence != confidence:
+                        adjustments.append(("trading_session", session_confidence - confidence))
+                    
+                    # Direction pattern
+                    if direction in ["long", "short"]:
+                        dir_confidence = self.performance_learner.get_adaptive_confidence(
+                            confidence, "direction", direction
+                        )
+                        if dir_confidence != confidence:
+                            adjustments.append(("direction", dir_confidence - confidence))
+                    
+                    # Regime pattern
+                    regime_key = f"{regime[0]}_{regime[1]}"
+                    regime_confidence = self.performance_learner.get_adaptive_confidence(
+                        confidence, "regime", regime_key
+                    )
+                    if regime_confidence != confidence:
+                        adjustments.append(("regime", regime_confidence - confidence))
+                    
+                    # Apply the most significant adjustment
+                    if adjustments:
+                        # Use the adjustment with largest absolute value
+                        best_adjustment = max(adjustments, key=lambda x: abs(x[1]))
+                        confidence = best_adjustment[1] + confidence  # adjustment is delta
+                        confidence = max(0.4, min(0.95, confidence))  # Clamp
+                        confidence_adjustment = best_adjustment[1]
+                        logger.info(
+                            f"ADAPTIVE_CONFIDENCE_ADJUSTMENT pattern={best_adjustment[0]} "
+                            f"original={original_confidence:.2f} adjusted={confidence:.2f} "
+                            f"delta={confidence_adjustment:+.2f}"
+                        )
+                except Exception as e:
+                    logger.warning(f"Error in adaptive confidence adjustment: {e}")
+
             # Create colorful decision panel
             action_emoji = {"buy": "🟢", "sell": "🔴", "hold": "🟡"}.get(action, "❓")
             action_color = {"buy": "green", "sell": "red", "hold": "yellow"}.get(action, "white")
@@ -812,6 +986,73 @@ class TradingBot:
                 self.console.print("[dim]No trade executed this cycle[/dim]")
             else:
                 logger.info(f"TRADE_EXECUTION_SUMMARY status=trade_executed_successfully")
+
+            # Record trade with performance learner (for closed trades)
+            if self.performance_learner and trade_executed:
+                try:
+                    # Get the last trade (most recently executed)
+                    if self.trading_engine.trades:
+                        last_trade = self.trading_engine.trades[-1]
+                        # Only record if it's a sell (closed trade with profit)
+                        if last_trade.get("side") == "sell" and "profit" in last_trade:
+                            # Build price history for regime detection
+                            price_history = []
+                            if indicators:
+                                # Use current price as latest
+                                price_history.append({
+                                    "close": current_price,
+                                    "high": indicators.get("ema_20", current_price) * 1.01,
+                                    "low": indicators.get("ema_20", current_price) * 0.99,
+                                })
+                            
+                            self.performance_learner.record_trade(
+                                trade=last_trade,
+                                market_data={"price_history": price_history, **market_data},
+                                regime=None  # Will be auto-detected
+                            )
+                            logger.debug(f"Recorded trade with performance learner: profit={last_trade.get('profit', 0):.2f}")
+                except Exception as e:
+                    logger.warning(f"Error recording trade with performance learner: {e}")
+
+            # Check circuit breaker (kill switch for broken strategies)
+            circuit_breaker_active = self._check_circuit_breaker()
+            if circuit_breaker_active:
+                logger.critical("CIRCUIT BREAKER ACTIVE: Trading halted")
+                self.console.print("[bold red]🚨 CIRCUIT BREAKER: Trading halted due to risk limits[/bold red]")
+                return  # Skip rest of cycle
+
+            # Check for strategy rebalancing (if multi-strategy enabled)
+            if self.strategy_manager and config.ENABLE_MULTI_STRATEGY:
+                try:
+                    should_rebalance, reason = self.strategy_manager.should_rebalance(
+                        performance_range_threshold=0.15,
+                        rebalance_interval_hours=config.STRATEGY_REBALANCE_INTERVAL_HOURS,
+                        loss_threshold=-0.10,
+                        last_rebalance_time=self.last_rebalance_time
+                    )
+                    
+                    if should_rebalance:
+                        logger.info(f"STRATEGY_REBALANCING_TRIGGERED reason={reason}")
+                        self.console.print(f"[bold yellow]⚖️ Rebalancing strategies: {reason}[/bold yellow]")
+                        
+                        # Get total capital
+                        total_capital = portfolio.get("total_value", portfolio.get("balance", 0))
+                        
+                        # Reallocate capital
+                        new_allocations = self.strategy_manager.reallocate_capital(
+                            total_capital=total_capital,
+                            min_allocation=config.MIN_STRATEGY_ALLOCATION,
+                            max_allocation=config.MAX_STRATEGY_ALLOCATION,
+                            performance_range_threshold=0.15,
+                            rebalance_interval_hours=config.STRATEGY_REBALANCE_INTERVAL_HOURS
+                        )
+                        
+                        # Update last rebalance time
+                        self.last_rebalance_time = datetime.now()
+                        
+                        logger.info(f"STRATEGY_REALLOCATION_COMPLETE allocations={new_allocations}")
+                except Exception as e:
+                    logger.warning(f"Error during strategy rebalancing: {e}")
 
             # Save portfolio state with full metrics
             self.trading_engine._save_portfolio_state(current_price)

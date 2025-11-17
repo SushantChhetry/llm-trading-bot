@@ -25,7 +25,7 @@ export const DashboardHeader = memo(function DashboardHeader() {
               className="h-8 w-8"
             />
             <div>
-              <h1 className="text-2xl font-semibold tracking-tight">Trading Bot Dashboard</h1>
+              <h1 className="text-2xl font-semibold tracking-tight">DeepTradeAI</h1>
               <p className="text-muted-foreground text-sm font-normal">
                 {portfolio ? (
                   <>

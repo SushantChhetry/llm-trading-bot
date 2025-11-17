@@ -323,7 +323,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Settings className="h-5 w-5" />
-            Trading Bot Configuration
+            DeepTradeAI Configuration
           </DialogTitle>
           <DialogDescription>
             Configure your trading bot settings. Changes are saved as versioned configurations that can be reverted.

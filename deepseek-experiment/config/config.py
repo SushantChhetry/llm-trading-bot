@@ -121,6 +121,31 @@ POSITION_RECONCILIATION_INTERVAL = int(
     os.getenv("POSITION_RECONCILIATION_INTERVAL", "5")
 )  # Run reconciliation every N cycles
 
+# Kelly Criterion Position Sizing
+ENABLE_KELLY_SIZING = os.getenv("ENABLE_KELLY_SIZING", "false").lower() == "true"
+KELLY_SAFETY_FACTOR = float(os.getenv("KELLY_SAFETY_FACTOR", "0.5"))  # Half-Kelly default
+KELLY_LOOKBACK_TRADES = int(os.getenv("KELLY_LOOKBACK_TRADES", "30"))
+KELLY_MIN_TRADES_FOR_CALC = int(os.getenv("KELLY_MIN_TRADES_FOR_CALC", "10"))
+
+# Performance Learning and Adaptation
+ENABLE_PERFORMANCE_LEARNING = os.getenv("ENABLE_PERFORMANCE_LEARNING", "true").lower() == "true"
+ADAPTIVE_CONFIDENCE_ENABLED = os.getenv("ADAPTIVE_CONFIDENCE_ENABLED", "true").lower() == "true"
+PERFORMANCE_LOOKBACK_TRADES = int(os.getenv("PERFORMANCE_LOOKBACK_TRADES", "20"))
+CONFIDENCE_MIN_SAMPLE_SIZE = int(os.getenv("CONFIDENCE_MIN_SAMPLE_SIZE", "5"))
+CONFIDENCE_Z_SCORE_THRESHOLD = float(os.getenv("CONFIDENCE_Z_SCORE_THRESHOLD", "1.0"))
+EWMA_DECAY_FACTOR = float(os.getenv("EWMA_DECAY_FACTOR", "0.3"))  # 30% weight to new data
+
+# LLM Agentic Decision Making
+ENABLE_AGENTIC_DECISIONS = os.getenv("ENABLE_AGENTIC_DECISIONS", "false").lower() == "true"
+AGENT_MAX_RETRIES = int(os.getenv("AGENT_MAX_RETRIES", "2"))
+AGENT_TIMEOUT_SECONDS = int(os.getenv("AGENT_TIMEOUT_SECONDS", "60"))
+
+# Multi-Strategy Management
+ENABLE_MULTI_STRATEGY = os.getenv("ENABLE_MULTI_STRATEGY", "false").lower() == "true"
+STRATEGY_REBALANCE_INTERVAL_HOURS = int(os.getenv("STRATEGY_REBALANCE_INTERVAL_HOURS", "24"))
+MIN_STRATEGY_ALLOCATION = float(os.getenv("MIN_STRATEGY_ALLOCATION", "0.05"))  # 5% minimum
+MAX_STRATEGY_ALLOCATION = float(os.getenv("MAX_STRATEGY_ALLOCATION", "0.50"))  # 50% maximum
+
 # LLM advanced settings (with defaults if not in env)
 LLM_TEMPERATURE = float(os.getenv("LLM_TEMPERATURE", "0.7"))
 LLM_MAX_TOKENS = int(os.getenv("LLM_MAX_TOKENS", "500"))
