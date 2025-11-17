@@ -39,6 +39,7 @@ from config.config import (  # LLM; Exchange; Trading; Position Management; Logg
     PARTIAL_PROFIT_PERCENT,
     PARTIAL_PROFIT_TARGET_PCT,
     PORTFOLIO_PROFIT_TARGET_PCT,
+    POSITION_RECONCILIATION_INTERVAL,
     RUN_INTERVAL_SECONDS,
     STOP_LOSS_PERCENT,
     SYMBOL,
@@ -86,6 +87,7 @@ def _get_default_config() -> Dict[str, Any]:
             "min_confidence_threshold": MIN_CONFIDENCE_THRESHOLD,
             "fee_impact_warning_threshold": FEE_IMPACT_WARNING_THRESHOLD,
             "run_interval_seconds": RUN_INTERVAL_SECONDS,
+            "position_reconciliation_interval": POSITION_RECONCILIATION_INTERVAL,
         },
         "position_management": {
             "enable_position_monitoring": ENABLE_POSITION_MONITORING,
@@ -156,6 +158,8 @@ def _apply_env_overrides(config: Dict[str, Any]) -> Dict[str, Any]:
         config["trading"]["fee_impact_warning_threshold"] = float(os.getenv("FEE_IMPACT_WARNING_THRESHOLD"))
     if os.getenv("RUN_INTERVAL_SECONDS"):
         config["trading"]["run_interval_seconds"] = int(os.getenv("RUN_INTERVAL_SECONDS"))
+    if os.getenv("POSITION_RECONCILIATION_INTERVAL"):
+        config["trading"]["position_reconciliation_interval"] = int(os.getenv("POSITION_RECONCILIATION_INTERVAL"))
 
     # Position management overrides
     if os.getenv("ENABLE_POSITION_MONITORING"):
@@ -455,6 +459,10 @@ class ConfigProxy:
     @property
     def RUN_INTERVAL_SECONDS(self):
         return self._config["trading"]["run_interval_seconds"]
+
+    @property
+    def POSITION_RECONCILIATION_INTERVAL(self):
+        return self._config["trading"].get("position_reconciliation_interval", 5)
 
     # Position management
     @property

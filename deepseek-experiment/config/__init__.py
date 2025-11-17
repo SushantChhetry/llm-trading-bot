@@ -87,4 +87,6 @@ except (ImportError, ValueError) as e:
         LLM_TEMPERATURE=getattr(_config_module, "LLM_TEMPERATURE", 0.7),
         LLM_MAX_TOKENS=getattr(_config_module, "LLM_MAX_TOKENS", 500),
         LLM_TIMEOUT=getattr(_config_module, "LLM_TIMEOUT", 30),
+        # Risk service configuration
+        POSITION_RECONCILIATION_INTERVAL=getattr(_config_module, "POSITION_RECONCILIATION_INTERVAL", 5),
     )

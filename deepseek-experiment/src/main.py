@@ -380,15 +380,21 @@ class TradingBot:
                             )
 
             # Write health status
-            health_status = metrics_summary.get("health_status", {})
-            overall_status = health_status.get("status", "unknown")
+            # health_status is a string from get_overall_health(), not a dict
+            health_status_str = metrics_summary.get("health_status", "unknown")
+            if isinstance(health_status_str, str):
+                overall_status = health_status_str
+            else:
+                # Fallback if it's somehow a dict (backward compatibility)
+                overall_status = health_status_str.get("status", "unknown") if isinstance(health_status_str, dict) else "unknown"
+            
             status_map = {"healthy": "healthy", "degraded": "degraded", "unhealthy": "unhealthy"}
             supabase_status = status_map.get(overall_status, "degraded")
 
             self.trading_engine.supabase_client.add_health_check(
                 service_name="trading-bot",
                 status=supabase_status,
-                details=health_status,
+                details={"status": overall_status, "source": "monitoring_service"},
             )
 
             logger.debug(
