@@ -257,7 +257,7 @@ TRADING PARAMETERS:
 - Maximum Leverage: 10x (use responsibly)
 - Trading Fees: 0.05% per trade (taker)
 - Position Sizing: Calculate based on available cash, leverage, and risk tolerance
-- Minimum Confidence: 0.6 for trade execution
+- Minimum Confidence: 0.4 for trade execution (lowered to allow more trading opportunities)
 
 ALPHA ARENA OBJECTIVES:
 - PRIMARY GOAL: Maximize PnL (profit and loss)
@@ -270,7 +270,7 @@ FEE AWARENESS (CRITICAL):
 - Trading fees are 0.05% per trade (taker) - they add up quickly!
 - Avoid over-trading: small, frequent trades get eaten by fees
 - Focus on fewer, higher-conviction positions with larger size
-- Only trade when confidence > 0.6 and clear signal exists
+- Only trade when confidence >= 0.4 and clear signal exists
 - Consider fee impact: if fee impact > 20% of PnL, reduce trade frequency
 
 RISK MANAGEMENT:

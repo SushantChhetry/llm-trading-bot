@@ -786,7 +786,8 @@ class TradingBot:
             )
 
             trade_executed = False
-            if action == "buy" and confidence > 0.6 and direction == "long":
+            min_confidence = config.MIN_CONFIDENCE_THRESHOLD
+            if action == "buy" and confidence >= min_confidence and direction == "long":
                 logger.info(
                     f"TRADE_CONDITION_CHECK action=buy status=passed "
                     f"confidence={confidence:.2f} direction={direction}"
@@ -881,7 +882,7 @@ class TradingBot:
                         f"position_size_positive={position_size_usdt > 0} "
                         f"balance={available_balance:.2f} position_size={position_size_usdt:.2f}"
                     )
-            elif action == "buy" and confidence > 0.6 and direction == "short":
+            elif action == "buy" and confidence >= min_confidence and direction == "short":
                 logger.info(
                     f"TRADE_CONDITION_CHECK action=short status=passed "
                     f"confidence={confidence:.2f} direction={direction}"
@@ -932,7 +933,7 @@ class TradingBot:
                         f"position_size_positive={position_size_usdt > 0}"
                     )
 
-            elif action == "sell" and confidence > 0.6:
+            elif action == "sell" and confidence >= min_confidence:
                 logger.info(f"TRADE_CONDITION_CHECK action=sell status=passed " f"confidence={confidence:.2f}")
 
                 # Sell all or partial position
@@ -979,8 +980,9 @@ class TradingBot:
                     self.console.print("[yellow]No position to sell[/yellow]")
             else:
                 logger.debug(
-                    f"TRADE_CONDITION_CHECK action=sell status=failed "
-                    f"action_match={action == 'sell'} confidence_sufficient={confidence > 0.6}"
+                    f"TRADE_CONDITION_CHECK action={action} status=failed "
+                    f"confidence={confidence:.2f} min_required={min_confidence:.2f} "
+                    f"confidence_sufficient={confidence >= min_confidence}"
                 )
                 self.console.print("[yellow]🟡 Decision is to HOLD or confidence too low. No action taken.[/yellow]")
 

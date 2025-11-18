@@ -92,7 +92,7 @@ class TradingConfig:
     stop_loss_percent: float = 2.0
     take_profit_percent: float = 3.0
     max_active_positions: int = 6
-    min_confidence_threshold: float = 0.6
+    min_confidence_threshold: float = 0.4  # Lowered from 0.6 to allow more trades
     fee_impact_warning_threshold: float = 20.0
     run_interval_seconds: int = 150  # 2.5 minutes
 
