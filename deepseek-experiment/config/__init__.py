@@ -89,4 +89,6 @@ except (ImportError, ValueError) as e:
         LLM_TIMEOUT=getattr(_config_module, "LLM_TIMEOUT", 30),
         # Risk service configuration
         POSITION_RECONCILIATION_INTERVAL=getattr(_config_module, "POSITION_RECONCILIATION_INTERVAL", 5),
+        RISK_SERVICE_FAIL_CLOSED=getattr(_config_module, "RISK_SERVICE_FAIL_CLOSED", False),
+        RISK_SERVICE_REQUIRED=getattr(_config_module, "RISK_SERVICE_REQUIRED", False),
     )

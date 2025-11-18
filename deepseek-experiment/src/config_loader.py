@@ -40,6 +40,8 @@ from config.config import (  # LLM; Exchange; Trading; Position Management; Logg
     PARTIAL_PROFIT_TARGET_PCT,
     PORTFOLIO_PROFIT_TARGET_PCT,
     POSITION_RECONCILIATION_INTERVAL,
+    RISK_SERVICE_FAIL_CLOSED,
+    RISK_SERVICE_REQUIRED,
     RUN_INTERVAL_SECONDS,
     STOP_LOSS_PERCENT,
     SYMBOL,
@@ -88,6 +90,8 @@ def _get_default_config() -> Dict[str, Any]:
             "fee_impact_warning_threshold": FEE_IMPACT_WARNING_THRESHOLD,
             "run_interval_seconds": RUN_INTERVAL_SECONDS,
             "position_reconciliation_interval": POSITION_RECONCILIATION_INTERVAL,
+            "risk_service_fail_closed": RISK_SERVICE_FAIL_CLOSED,
+            "risk_service_required": RISK_SERVICE_REQUIRED,
         },
         "position_management": {
             "enable_position_monitoring": ENABLE_POSITION_MONITORING,
@@ -160,6 +164,10 @@ def _apply_env_overrides(config: Dict[str, Any]) -> Dict[str, Any]:
         config["trading"]["run_interval_seconds"] = int(os.getenv("RUN_INTERVAL_SECONDS"))
     if os.getenv("POSITION_RECONCILIATION_INTERVAL"):
         config["trading"]["position_reconciliation_interval"] = int(os.getenv("POSITION_RECONCILIATION_INTERVAL"))
+    if os.getenv("RISK_SERVICE_FAIL_CLOSED"):
+        config["trading"]["risk_service_fail_closed"] = os.getenv("RISK_SERVICE_FAIL_CLOSED", "").lower() == "true"
+    if os.getenv("RISK_SERVICE_REQUIRED"):
+        config["trading"]["risk_service_required"] = os.getenv("RISK_SERVICE_REQUIRED", "").lower() == "true"
 
     # Position management overrides
     if os.getenv("ENABLE_POSITION_MONITORING"):
@@ -463,6 +471,14 @@ class ConfigProxy:
     @property
     def POSITION_RECONCILIATION_INTERVAL(self):
         return self._config["trading"].get("position_reconciliation_interval", 5)
+
+    @property
+    def RISK_SERVICE_FAIL_CLOSED(self):
+        return self._config["trading"].get("risk_service_fail_closed", False)
+
+    @property
+    def RISK_SERVICE_REQUIRED(self):
+        return self._config["trading"].get("risk_service_required", False)
 
     # Position management
     @property

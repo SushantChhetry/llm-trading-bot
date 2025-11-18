@@ -5,11 +5,11 @@ Authoritative risk management service that enforces hard limits and kill switche
 This service runs independently and can revoke orders before execution.
 
 Hard Limits (Per-Strategy):
-- max_position_value: 10% of NAV (default)
-- max_leverage: ≤3x (default, configurable per strategy)
-- per_trade_var: 0.35% of NAV (default)
-- max_daily_loss: 2% of NAV (default)
-- max_drawdown_trading_pause: 10% drawdown triggers 48h cooldown
+- max_position_value: 10% of NAV (default, configurable via RISK_MAX_POSITION_VALUE_PCT)
+- max_leverage: ≤3x (default, configurable via RISK_MAX_LEVERAGE)
+- per_trade_var: 10% of NAV (default, configurable via RISK_PER_TRADE_VAR_PCT)
+- max_daily_loss: 2% of NAV (default, configurable via RISK_MAX_DAILY_LOSS_PCT)
+- max_drawdown_trading_pause: 10% drawdown triggers 48h cooldown (configurable via RISK_MAX_DRAWDOWN_PCT, RISK_DRAWDOWN_COOLDOWN_HOURS)
 
 Kill Switch Triggers:
 - Exchange outage detection (no data for >30s)
@@ -21,6 +21,7 @@ Kill Switch Triggers:
 
 import json
 import logging
+import os
 import time
 import threading
 from datetime import datetime, timedelta
@@ -47,11 +48,24 @@ class RiskLimits:
     """Hard risk limits per strategy."""
     max_position_value_pct: float = 0.10  # 10% of NAV
     max_leverage: float = 3.0  # ≤3x
-    per_trade_var_pct: float = 0.0035  # 0.35% of NAV
+    per_trade_var_pct: float = 0.10  # 10% of NAV (increased from 0.35% to allow higher risk trades)
     max_daily_loss_pct: float = 0.02  # 2% of NAV
     max_drawdown_pct: float = 0.10  # 10% drawdown
     drawdown_cooldown_hours: int = 48  # 48h cooldown after drawdown
     correlation_limit: float = 0.7  # Max correlation between positions
+    
+    @classmethod
+    def from_env(cls) -> 'RiskLimits':
+        """Create RiskLimits from environment variables."""
+        return cls(
+            max_position_value_pct=float(os.getenv("RISK_MAX_POSITION_VALUE_PCT", "0.10")),
+            max_leverage=float(os.getenv("RISK_MAX_LEVERAGE", "3.0")),
+            per_trade_var_pct=float(os.getenv("RISK_PER_TRADE_VAR_PCT", "0.10")),  # 10% default
+            max_daily_loss_pct=float(os.getenv("RISK_MAX_DAILY_LOSS_PCT", "0.02")),
+            max_drawdown_pct=float(os.getenv("RISK_MAX_DRAWDOWN_PCT", "0.10")),
+            drawdown_cooldown_hours=int(os.getenv("RISK_DRAWDOWN_COOLDOWN_HOURS", "48")),
+            correlation_limit=float(os.getenv("RISK_CORRELATION_LIMIT", "0.7")),
+        )
 
 
 @dataclass
@@ -422,7 +436,8 @@ app = Flask(__name__)
 CORS(app)
 
 # Global risk service instance
-risk_service = RiskService()
+# Initialize risk service with environment variable configuration
+risk_service = RiskService(limits=RiskLimits.from_env())
 
 
 @app.route('/health', methods=['GET'])
