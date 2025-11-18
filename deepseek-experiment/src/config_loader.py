@@ -36,6 +36,7 @@ from config.config import (  # LLM; Exchange; Trading; Position Management; Logg
     MAX_POSITION_SIZE,
     MAX_RISK_PER_TRADE,
     MIN_CONFIDENCE_THRESHOLD,
+    EXIT_CONFIDENCE_THRESHOLD,
     PARTIAL_PROFIT_PERCENT,
     PARTIAL_PROFIT_TARGET_PCT,
     PORTFOLIO_PROFIT_TARGET_PCT,
@@ -87,6 +88,7 @@ def _get_default_config() -> Dict[str, Any]:
             "take_profit_percent": TAKE_PROFIT_PERCENT,
             "max_active_positions": MAX_ACTIVE_POSITIONS,
             "min_confidence_threshold": MIN_CONFIDENCE_THRESHOLD,
+            "exit_confidence_threshold": EXIT_CONFIDENCE_THRESHOLD,
             "fee_impact_warning_threshold": FEE_IMPACT_WARNING_THRESHOLD,
             "run_interval_seconds": RUN_INTERVAL_SECONDS,
             "position_reconciliation_interval": POSITION_RECONCILIATION_INTERVAL,
@@ -158,6 +160,8 @@ def _apply_env_overrides(config: Dict[str, Any]) -> Dict[str, Any]:
         config["trading"]["max_active_positions"] = int(os.getenv("MAX_ACTIVE_POSITIONS"))
     if os.getenv("MIN_CONFIDENCE_THRESHOLD"):
         config["trading"]["min_confidence_threshold"] = float(os.getenv("MIN_CONFIDENCE_THRESHOLD"))
+    if os.getenv("EXIT_CONFIDENCE_THRESHOLD"):
+        config["trading"]["exit_confidence_threshold"] = float(os.getenv("EXIT_CONFIDENCE_THRESHOLD"))
     if os.getenv("FEE_IMPACT_WARNING_THRESHOLD"):
         config["trading"]["fee_impact_warning_threshold"] = float(os.getenv("FEE_IMPACT_WARNING_THRESHOLD"))
     if os.getenv("RUN_INTERVAL_SECONDS"):
@@ -459,6 +463,10 @@ class ConfigProxy:
     @property
     def MIN_CONFIDENCE_THRESHOLD(self):
         return self._config["trading"]["min_confidence_threshold"]
+
+    @property
+    def EXIT_CONFIDENCE_THRESHOLD(self):
+        return self._config["trading"].get("exit_confidence_threshold", 0.5)
 
     @property
     def FEE_IMPACT_WARNING_THRESHOLD(self):

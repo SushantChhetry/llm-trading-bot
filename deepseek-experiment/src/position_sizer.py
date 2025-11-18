@@ -95,7 +95,10 @@ class PositionSizer:
         portfolio: Dict[str, Any],
         recent_trades: List[Dict[str, Any]],
         max_position_size: float,
-        existing_positions: Optional[Dict[str, Dict]] = None
+        existing_positions: Optional[Dict[str, Dict]] = None,
+        confidence: float = None,
+        volatility: float = None,
+        current_price: float = None
     ) -> float:
         """
         Calculate optimal position size using Kelly Criterion.
@@ -105,6 +108,9 @@ class PositionSizer:
             recent_trades: List of recent trades (should be closed trades with profit/loss)
             max_position_size: Maximum position size as fraction of balance
             existing_positions: Dictionary of existing positions (symbol -> position dict)
+            confidence: Current LLM confidence level (0.0-1.0) to adjust position size
+            volatility: Current market volatility (ATR or similar) for risk adjustment
+            current_price: Current market price for volatility normalization
         
         Returns:
             Optimal position size in USDT
@@ -152,26 +158,52 @@ class PositionSizer:
         # Calculate base position size
         base_position_size = balance * adjusted_kelly
         
-        # CORRECTED: Portfolio-level correlation check with proper adjustment
-        if existing_positions:
+        # Apply confidence adjustment if provided
+        # Higher confidence = larger position size (up to 1.2x multiplier)
+        if confidence is not None:
+            confidence_multiplier = 0.7 + (confidence * 0.5)  # Range: 0.7-1.2
+            base_position_size = base_position_size * confidence_multiplier
+            logger.debug(
+                f"Applied confidence adjustment: confidence={confidence:.2f}, "
+                f"multiplier={confidence_multiplier:.3f}"
+            )
+        
+        # Apply volatility adjustment if provided
+        # Higher volatility = smaller position size (risk reduction)
+        if volatility is not None and current_price is not None and current_price > 0:
+            # Normalize volatility as percentage of price
+            volatility_pct = (volatility / current_price) * 100
+            # Reduce position size for high volatility (volatility > 2% = reduce by up to 30%)
+            if volatility_pct > 2.0:
+                volatility_penalty = min(0.3, (volatility_pct - 2.0) / 10.0)  # Max 30% reduction
+                base_position_size = base_position_size * (1.0 - volatility_penalty)
+                logger.debug(
+                    f"Applied volatility adjustment: volatility_pct={volatility_pct:.2f}%, "
+                    f"penalty={volatility_penalty:.3f}"
+                )
+        
+        # Portfolio-level correlation check (only for multi-asset portfolios)
+        # For single-asset trading (BTC/USDT only), skip correlation penalty
+        if existing_positions and len(existing_positions) > 0:
+            # Only apply correlation penalty if we're trading multiple different assets
+            # For same asset (e.g., multiple BTC positions), correlation is 1.0, so no penalty needed
             num_existing = len(existing_positions)
             num_total = num_existing + 1  # Including this new position
             
-            # Apply correlation penalty: divide Kelly by sqrt(number of positions)
-            # This accounts for correlation between assets (e.g., BTC and ETH ~0.7-0.9 correlation)
-            correlation_adjustment = 1.0 / math.sqrt(max(num_total, 1))
-            
-            # Adjust Kelly fraction for correlation
-            adjusted_kelly = adjusted_kelly * correlation_adjustment
-            
-            logger.debug(
-                f"Applied correlation adjustment: num_positions={num_total}, "
-                f"adjustment={correlation_adjustment:.3f}, "
-                f"adjusted_kelly={adjusted_kelly:.3f}"
-            )
-            
-            # Recalculate base position size with correlation adjustment
-            base_position_size = balance * adjusted_kelly
+            # Only apply penalty if we have multiple different positions
+            # For single-asset portfolios, correlation adjustment is not needed
+            if num_total > 1:
+                # Apply correlation penalty: divide Kelly by sqrt(number of positions)
+                # This accounts for correlation between assets (e.g., BTC and ETH ~0.7-0.9 correlation)
+                correlation_adjustment = 1.0 / math.sqrt(max(num_total, 1))
+                
+                logger.debug(
+                    f"Applied correlation adjustment: num_positions={num_total}, "
+                    f"adjustment={correlation_adjustment:.3f}"
+                )
+                
+                # Apply correlation adjustment to base_position_size (preserves confidence/volatility adjustments)
+                base_position_size = base_position_size * correlation_adjustment
         
         # Apply caps
         max_size_by_config = balance * max_position_size

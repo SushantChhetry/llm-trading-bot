@@ -73,6 +73,7 @@ except (ImportError, ValueError) as e:
         # Alpha Arena behavioral simulation
         MAX_ACTIVE_POSITIONS=_config_module.MAX_ACTIVE_POSITIONS,
         MIN_CONFIDENCE_THRESHOLD=_config_module.MIN_CONFIDENCE_THRESHOLD,
+        EXIT_CONFIDENCE_THRESHOLD=getattr(_config_module, "EXIT_CONFIDENCE_THRESHOLD", 0.5),
         FEE_IMPACT_WARNING_THRESHOLD=_config_module.FEE_IMPACT_WARNING_THRESHOLD,
         # Position management (add missing attributes)
         ENABLE_POSITION_MONITORING=getattr(_config_module, "ENABLE_POSITION_MONITORING", True),

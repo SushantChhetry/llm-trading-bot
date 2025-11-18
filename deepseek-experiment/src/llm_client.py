@@ -281,6 +281,16 @@ RISK MANAGEMENT:
 - Optimize for risk-adjusted returns, not just raw profits
 - Be consistent with your exit plans - don't contradict yourself
 
+EXIT STRATEGY (CRITICAL FOR PROFIT MAXIMIZATION):
+- If you have open positions and confidence drops below 0.5, STRONGLY consider selling (action="sell")
+- Don't hold positions when confidence is low - prefer "sell" over "hold" when confidence < 0.5
+- Take profits when momentum weakens, even if position is profitable
+- Cut losses early - if position is losing >1% and confidence is low, sell immediately
+- If market regime changes unfavorably, prioritize exit over entry
+- Maximize position size when confidence is high (>0.7) - use larger sizes for high-conviction trades
+- Consider partial profit-taking at +2% if momentum weakens
+- Full exit at +5% or when confidence drops significantly
+
 REQUIRED RESPONSE FORMAT (Valid JSON only - no markdown, no code blocks):
 
 You MUST respond with ONLY valid JSON.
@@ -295,7 +305,7 @@ Format:
     "quantity": 0.0,
     "leverage": 1.0-10.0,
     "confidence": 0.0-1.0,
-    "justification": "Brief explanation of your decision",
+    "justification": "Brief explanation of your decision (emphasize exit logic if selling)",
     "exit_plan": {{
         "profit_target": 0.0,
         "stop_loss": 0.0,
@@ -304,6 +314,12 @@ Format:
     "position_size_usdt": 0.0,
     "risk_assessment": "low|medium|high"
 }}
+
+EXIT DECISION GUIDANCE:
+- If you have open positions and confidence < 0.5: action should be "sell", not "hold"
+- If position is losing >1% and confidence is low: action="sell"
+- If momentum weakens significantly: consider "sell" even if profitable
+- Maximize position_size_usdt for high-confidence trades (>0.7) - use larger sizes
 
 CRITICAL: Respond with ONLY the raw JSON object above.
 Start with {{ and end with }}.

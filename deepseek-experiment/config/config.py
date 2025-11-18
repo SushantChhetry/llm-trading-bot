@@ -82,6 +82,7 @@ MAX_RISK_PER_TRADE = float(os.getenv("MAX_RISK_PER_TRADE", "2.0"))  # Max 2% ris
 # Alpha Arena behavioral simulation
 MAX_ACTIVE_POSITIONS = int(os.getenv("MAX_ACTIVE_POSITIONS", "6"))  # Max simultaneous positions
 MIN_CONFIDENCE_THRESHOLD = float(os.getenv("MIN_CONFIDENCE_THRESHOLD", "0.4"))  # Min confidence to trade (lowered from 0.6 to allow more trades)
+EXIT_CONFIDENCE_THRESHOLD = float(os.getenv("EXIT_CONFIDENCE_THRESHOLD", "0.5"))  # Confidence threshold for automatic exits (lower = more aggressive exits)
 FEE_IMPACT_WARNING_THRESHOLD = float(os.getenv("FEE_IMPACT_WARNING_THRESHOLD", "20.0"))  # Warn if fees > 20% of PnL
 
 # Position monitoring and exit management
@@ -191,6 +192,7 @@ def get_default_configuration() -> dict:
             "take_profit_percent": TAKE_PROFIT_PERCENT,
             "max_active_positions": MAX_ACTIVE_POSITIONS,
             "min_confidence_threshold": MIN_CONFIDENCE_THRESHOLD,
+            "exit_confidence_threshold": EXIT_CONFIDENCE_THRESHOLD,
             "fee_impact_warning_threshold": FEE_IMPACT_WARNING_THRESHOLD,
             "run_interval_seconds": RUN_INTERVAL_SECONDS,
         },

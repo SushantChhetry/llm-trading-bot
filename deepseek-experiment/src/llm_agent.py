@@ -290,6 +290,9 @@ Respond in JSON format only."""
 
     def _format_strategy_evaluation_prompt(self, market_analysis: Dict, portfolio: Dict) -> str:
         """Format prompt for Strategy Evaluation Agent."""
+        open_positions = portfolio.get("open_positions", 0)
+        has_positions = open_positions > 0
+        
         return f"""You are a Strategy Evaluation Agent. Evaluate trading strategies based on market analysis.
 
 Market Analysis:
@@ -298,10 +301,13 @@ Market Analysis:
 Portfolio State:
 {json.dumps(portfolio, indent=2)}
 
+CRITICAL: You currently have {open_positions} open position(s). Consider exit strategies FIRST before new entries.
+
 Evaluate these strategies:
-1. Long position
-2. Short position
-3. Hold (no action)
+1. Long position (new entry)
+2. Short position (new entry)
+3. Hold (maintain current positions)
+4. SELL/EXIT (close existing positions) - CRITICAL if confidence drops or conditions deteriorate
 
 For each strategy, provide:
 - expected_outcome: "profit", "loss", "neutral"
@@ -309,6 +315,12 @@ For each strategy, provide:
 - probability_of_success: 0.0-1.0
 - pros: List of advantages
 - cons: List of disadvantages
+
+EXIT STRATEGY PRIORITY:
+- If you have open positions and confidence < 0.5, STRONGLY consider selling
+- If market conditions deteriorate significantly, prioritize exit over entry
+- Take profits when momentum weakens, even if position is profitable
+- Cut losses early - don't hold losing positions hoping for recovery
 
 Respond in JSON format with a "strategies" array."""
 
@@ -336,6 +348,9 @@ Respond in JSON format with a "risk_assessments" array."""
         self, market_analysis: Dict, strategy_options: Dict, risk_assessment: Dict, portfolio: Dict
     ) -> str:
         """Format prompt for Decision Agent."""
+        open_positions = portfolio.get("open_positions", 0)
+        has_positions = open_positions > 0
+        
         return f"""You are a Decision Agent. Make the final trading decision based on all analysis.
 
 Market Analysis:
@@ -350,15 +365,28 @@ Risk Assessment:
 Portfolio State:
 {json.dumps(portfolio, indent=2)}
 
+CRITICAL EXIT RULES:
+- If you have open positions ({open_positions}) and confidence drops below 0.5, STRONGLY consider selling
+- If market regime changes unfavorably, prioritize exit over entry
+- Take profits when momentum weakens - don't be greedy
+- Cut losses early - if position is losing >1% and confidence is low, sell immediately
+- If confidence < 0.4 and you have a position, action should be "sell", not "hold"
+
+PROFIT MAXIMIZATION STRATEGY:
+- Maximize position size when confidence is high (>0.7) and conditions are favorable
+- Use larger position sizes for high-conviction trades
+- Take partial profits at +2% if momentum weakens
+- Full exit at +5% or when confidence drops significantly
+
 Make a final trading decision. Provide a JSON response with:
-- action: "buy", "sell", or "hold"
+- action: "buy", "sell", or "hold" (prefer "sell" over "hold" if confidence < 0.5 and position exists)
 - direction: "long", "short", or "none"
 - confidence: 0.4-0.95
-- position_size_usdt: Position size in USDT (0-5000)
+- position_size_usdt: Position size in USDT (0-5000) - use larger sizes for high confidence
 - stop_loss_pct: Stop loss percentage (0.01-0.10)
 - take_profit_pct: Take profit percentage (0.02-0.50)
 - leverage: Leverage multiplier (1.0-10.0)
-- justification: Reasoning for the decision
+- justification: Reasoning for the decision (emphasize exit logic if selling)
 - risk_assessment: "low", "medium", or "high"
 - exit_plan: Object with profit_target and stop_loss
 

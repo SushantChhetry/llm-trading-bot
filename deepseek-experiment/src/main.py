@@ -31,6 +31,7 @@ from src.data_fetcher import DataFetcher  # noqa: E402
 from src.llm_client import LLMClient  # noqa: E402
 from src.logger import configure_production_logging, get_logger  # noqa: E402
 from src.monitoring import MonitoringService  # noqa: E402
+from src.position_sizer import PositionSizer  # noqa: E402
 from src.startup_validator import validate_startup  # noqa: E402
 from src.trading_engine import TradingEngine  # noqa: E402
 
@@ -165,6 +166,22 @@ class TradingBot:
                 logger.info("Performance learner initialized")
             except Exception as e:
                 logger.warning(f"Performance learner not available: {e}")
+
+        # Initialize position sizer (for Kelly criterion-based position sizing)
+        self.position_sizer = None
+        if getattr(config, 'ENABLE_KELLY_SIZING', False):
+            try:
+                self.position_sizer = PositionSizer()
+                logger.info("Position sizer (Kelly criterion) initialized")
+            except Exception as e:
+                logger.warning(f"Position sizer not available: {e}")
+        else:
+            # Initialize anyway for dynamic position sizing
+            try:
+                self.position_sizer = PositionSizer()
+                logger.info("Position sizer initialized (will be used for dynamic sizing)")
+            except Exception as e:
+                logger.warning(f"Position sizer not available: {e}")
 
         # Initialize strategy manager (optional - for multi-strategy execution)
         self.strategy_manager = None
@@ -814,8 +831,60 @@ class TradingBot:
                             self.console.print(f"[bold yellow]⚠️ Trade avoided: {reason}[/bold yellow]")
                             return
 
-                    # Use LLM's calculated position size
-                    trade_amount = min(position_size_usdt, available_balance * config.MAX_POSITION_SIZE)
+                    # Calculate optimal position size using Kelly criterion (if position_sizer available)
+                    # Otherwise fall back to LLM suggestion capped by MAX_POSITION_SIZE
+                    if self.position_sizer:
+                        try:
+                            # Get recent trades for Kelly calculation
+                            recent_trades = self.trading_engine.trades[-50:] if len(self.trading_engine.trades) > 0 else []
+                            
+                            # Get volatility (ATR) from indicators (with defensive check)
+                            volatility = indicators.get("atr", None) if indicators else None
+                            
+                            # Calculate Kelly-optimal position size
+                            kelly_optimal_size = self.position_sizer.calculate_optimal_position_size(
+                                portfolio=portfolio,
+                                recent_trades=recent_trades,
+                                max_position_size=config.MAX_POSITION_SIZE,
+                                existing_positions=self.trading_engine.positions,
+                                confidence=confidence,
+                                volatility=volatility,
+                                current_price=current_price
+                            )
+                            
+                            # Validate Kelly optimal size is reasonable
+                            if kelly_optimal_size <= 0:
+                                logger.warning(
+                                    f"Kelly optimal size is invalid ({kelly_optimal_size:.2f}), using LLM suggestion"
+                                )
+                                trade_amount = min(position_size_usdt, available_balance * config.MAX_POSITION_SIZE)
+                            else:
+                                # Use the larger of LLM suggestion or Kelly-optimal, but cap at MAX_POSITION_SIZE
+                                # This allows LLM to suggest larger sizes when confidence is high
+                                max_allowed_by_config = available_balance * config.MAX_POSITION_SIZE
+                                # Ensure optimal_size doesn't exceed reasonable limits (max 50% of balance as safety)
+                                optimal_size = max(position_size_usdt, kelly_optimal_size)
+                                optimal_size = min(optimal_size, available_balance * 0.5)  # Safety cap
+                                trade_amount = min(optimal_size, max_allowed_by_config)
+                            
+                            logger.info(
+                                f"POSITION_SIZE_CALCULATION llm_suggestion={position_size_usdt:.2f} "
+                                f"kelly_optimal={kelly_optimal_size:.2f} "
+                                f"final_size={trade_amount:.2f} "
+                                f"max_config={max_allowed_by_config:.2f}"
+                            )
+                            
+                            if trade_amount != position_size_usdt:
+                                logger.info(
+                                    f"POSITION_SIZE_ADJUSTED original={position_size_usdt:.2f} "
+                                    f"adjusted={trade_amount:.2f} reason=kelly_criterion"
+                                )
+                        except Exception as e:
+                            logger.warning(f"Error calculating Kelly position size: {e}, using LLM suggestion")
+                            trade_amount = min(position_size_usdt, available_balance * config.MAX_POSITION_SIZE)
+                    else:
+                        # Fallback: Use LLM's calculated position size capped by config
+                        trade_amount = min(position_size_usdt, available_balance * config.MAX_POSITION_SIZE)
                     logger.info(
                         f"TRADE_EXECUTION_START action=buy symbol={config.SYMBOL} "
                         f"amount={trade_amount:.2f} leverage={leverage:.1f}"
@@ -897,7 +966,38 @@ class TradingBot:
                 )
 
                 if available_balance > 0 and position_size_usdt > 0:
-                    trade_amount = min(position_size_usdt, available_balance * config.MAX_POSITION_SIZE)
+                    # Calculate optimal position size using Kelly criterion (if position_sizer available)
+                    if self.position_sizer:
+                        try:
+                            recent_trades = self.trading_engine.trades[-50:] if len(self.trading_engine.trades) > 0 else []
+                            volatility = indicators.get("atr", None) if indicators else None
+                            
+                            kelly_optimal_size = self.position_sizer.calculate_optimal_position_size(
+                                portfolio=portfolio,
+                                recent_trades=recent_trades,
+                                max_position_size=config.MAX_POSITION_SIZE,
+                                existing_positions=self.trading_engine.positions,
+                                confidence=confidence,
+                                volatility=volatility,
+                                current_price=current_price
+                            )
+                            
+                            # Validate Kelly optimal size is reasonable
+                            if kelly_optimal_size <= 0:
+                                logger.warning(
+                                    f"Kelly optimal size is invalid ({kelly_optimal_size:.2f}), using LLM suggestion"
+                                )
+                                trade_amount = min(position_size_usdt, available_balance * config.MAX_POSITION_SIZE)
+                            else:
+                                max_allowed_by_config = available_balance * config.MAX_POSITION_SIZE
+                                optimal_size = max(position_size_usdt, kelly_optimal_size)
+                                optimal_size = min(optimal_size, available_balance * 0.5)  # Safety cap
+                                trade_amount = min(optimal_size, max_allowed_by_config)
+                        except Exception as e:
+                            logger.warning(f"Error calculating Kelly position size: {e}, using LLM suggestion")
+                            trade_amount = min(position_size_usdt, available_balance * config.MAX_POSITION_SIZE)
+                    else:
+                        trade_amount = min(position_size_usdt, available_balance * config.MAX_POSITION_SIZE)
                     logger.info(
                         f"TRADE_EXECUTION_START action=short symbol={config.SYMBOL} "
                         f"amount={trade_amount:.2f} leverage={leverage:.1f}"
@@ -979,12 +1079,111 @@ class TradingBot:
                     )
                     self.console.print("[yellow]No position to sell[/yellow]")
             else:
-                logger.debug(
-                    f"TRADE_CONDITION_CHECK action={action} status=failed "
-                    f"confidence={confidence:.2f} min_required={min_confidence:.2f} "
-                    f"confidence_sufficient={confidence >= min_confidence}"
-                )
-                self.console.print("[yellow]🟡 Decision is to HOLD or confidence too low. No action taken.[/yellow]")
+                # Automatic exit logic: If holding position and confidence drops below exit threshold
+                exit_confidence_threshold = getattr(config, 'EXIT_CONFIDENCE_THRESHOLD', 0.5)
+                symbol = config.SYMBOL
+                has_position = symbol in self.trading_engine.positions
+                
+                if has_position and confidence < exit_confidence_threshold:
+                    # Check if position is profitable or losing
+                    position = self.trading_engine.positions[symbol]
+                    entry_price = position.get("avg_price", 0)
+                    position_qty = position.get("quantity", 0)
+                    
+                    if entry_price > 0 and position_qty > 0:
+                        # Calculate current P&L
+                        side = position.get("side", "long")
+                        if side == "long":
+                            pnl_pct = ((current_price - entry_price) / entry_price) * 100
+                        else:  # short
+                            pnl_pct = ((entry_price - current_price) / entry_price) * 100
+                        
+                        # Trigger automatic exit if:
+                        # 1. Confidence is low (< exit threshold) AND
+                        # 2. (Position is losing OR position is in small profit but momentum weakening)
+                        should_exit = False
+                        exit_reason = ""
+                        
+                        if pnl_pct < -1.0:  # Losing more than 1%
+                            should_exit = True
+                            exit_reason = f"automatic_exit_loss_confidence_low (P&L: {pnl_pct:.2f}%, confidence: {confidence:.2f})"
+                        elif pnl_pct > 0 and pnl_pct < 2.0 and confidence < exit_confidence_threshold:  # Small profit but low confidence
+                            should_exit = True
+                            exit_reason = f"automatic_exit_low_confidence_profit (P&L: {pnl_pct:.2f}%, confidence: {confidence:.2f})"
+                        elif action == "hold" and confidence < exit_confidence_threshold * 0.8:  # Very low confidence
+                            should_exit = True
+                            exit_reason = f"automatic_exit_very_low_confidence (confidence: {confidence:.2f})"
+                        
+                        if should_exit:
+                            logger.info(
+                                f"AUTOMATIC_EXIT_TRIGGERED symbol={symbol} reason={exit_reason} "
+                                f"pnl_pct={pnl_pct:.2f} confidence={confidence:.2f}"
+                            )
+                            self.console.print(
+                                f"[bold yellow]⚠️ Automatic exit triggered: {exit_reason}[/bold yellow]"
+                            )
+                            
+                            # Attempt to close position with retry logic
+                            max_retries = 2
+                            trade = None
+                            for attempt in range(max_retries):
+                                try:
+                                    trade = self.trading_engine.execute_sell(
+                                        config.SYMBOL, current_price, confidence=confidence, 
+                                        llm_decision={"action": "sell", "justification": exit_reason}, 
+                                        leverage=leverage
+                                    )
+                                    if trade:
+                                        break
+                                    elif attempt < max_retries - 1:
+                                        logger.warning(
+                                            f"AUTOMATIC_EXIT_RETRY symbol={symbol} attempt={attempt + 1}/{max_retries}"
+                                        )
+                                        time.sleep(0.5)  # Brief delay before retry
+                                except Exception as e:
+                                    logger.error(
+                                        f"AUTOMATIC_EXIT_ERROR symbol={symbol} attempt={attempt + 1} error={e}"
+                                    )
+                                    if attempt < max_retries - 1:
+                                        time.sleep(0.5)
+                            
+                            if trade:
+                                trade_executed = True
+                                profit = trade.get("profit", 0)
+                                profit_pct = trade.get("profit_pct", 0)
+                                logger.info(
+                                    f"AUTOMATIC_EXIT_SUCCESS symbol={symbol} trade_id={trade.get('id')} "
+                                    f"profit={profit:.2f} profit_pct={profit_pct:.2f}"
+                                )
+                                profit_color = "green" if profit >= 0 else "red"
+                                self.console.print(
+                                    f"[bold green]✅ Automatic exit executed[/bold green] "
+                                    f"(Profit: [{profit_color}]${profit:.2f}[/{profit_color}])"
+                                )
+                            else:
+                                # Verify if position still exists
+                                still_has_position = symbol in self.trading_engine.positions
+                                if still_has_position:
+                                    logger.error(
+                                        f"AUTOMATIC_EXIT_FAILED symbol={symbol} reason=execution_failed "
+                                        f"position_still_exists=True - MANUAL INTERVENTION MAY BE REQUIRED"
+                                    )
+                                    self.console.print(
+                                        f"[bold red]⚠️ Automatic exit failed - position still open![/bold red]"
+                                    )
+                                else:
+                                    logger.warning(
+                                        f"AUTOMATIC_EXIT_FAILED symbol={symbol} reason=execution_failed "
+                                        f"position_still_exists=False (may have been closed elsewhere)"
+                                    )
+                
+                if not trade_executed:
+                    logger.debug(
+                        f"TRADE_CONDITION_CHECK action={action} status=failed "
+                        f"confidence={confidence:.2f} min_required={min_confidence:.2f} "
+                        f"confidence_sufficient={confidence >= min_confidence}"
+                    )
+                    self.console.print("[yellow]🟡 Decision is to HOLD or confidence too low. No action taken.[/yellow]")
 
             if not trade_executed:
                 logger.info(
