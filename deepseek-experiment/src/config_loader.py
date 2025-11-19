@@ -12,7 +12,9 @@ import os
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-logger = logging.getLogger(__name__)
+from .logger import LogDomain, get_logger
+
+logger = get_logger(__name__, domain=LogDomain.SYSTEM)
 
 # Import config defaults
 from config.config import (  # LLM; Exchange; Trading; Position Management; Logging

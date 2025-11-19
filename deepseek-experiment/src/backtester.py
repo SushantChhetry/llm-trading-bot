@@ -28,7 +28,9 @@ import pandas as pd
 
 from config import config
 
-logger = logging.getLogger(__name__)
+from .logger import LogDomain, get_logger
+
+logger = get_logger(__name__, domain=LogDomain.STRATEGY)
 
 
 @dataclass

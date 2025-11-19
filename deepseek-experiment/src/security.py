@@ -12,7 +12,9 @@ import secrets
 from functools import wraps
 from typing import Any, Dict
 
-logger = logging.getLogger(__name__)
+from .logger import LogDomain, get_logger
+
+logger = get_logger(__name__, domain=LogDomain.SECURITY)
 
 
 class SecurityManager:

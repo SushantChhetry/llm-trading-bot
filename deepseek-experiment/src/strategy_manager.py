@@ -14,9 +14,10 @@ from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 
+from .logger import LogDomain, get_logger
 from .regime_controller import RegimeController, StrategyType
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__, domain=LogDomain.STRATEGY)
 
 
 @dataclass

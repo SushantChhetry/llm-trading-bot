@@ -10,7 +10,9 @@ from typing import Any, Dict, List, Optional
 
 from supabase import Client, create_client
 
-logger = logging.getLogger(__name__)
+from .logger import LogDomain, get_logger
+
+logger = get_logger(__name__, domain=LogDomain.SYSTEM)
 
 
 # Load environment variables from .env file

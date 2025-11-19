@@ -14,7 +14,9 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Tuple
 
-logger = logging.getLogger(__name__)
+from .logger import LogDomain, get_logger
+
+logger = get_logger(__name__, domain=LogDomain.TRADING)
 
 
 @dataclass

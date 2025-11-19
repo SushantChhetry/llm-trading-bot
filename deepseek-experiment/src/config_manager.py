@@ -13,9 +13,10 @@ from typing import Any, Dict, Optional
 import yaml
 from dotenv import load_dotenv
 
+from .logger import LogDomain, get_logger
 from .security import SecurityManager
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__, domain=LogDomain.SYSTEM)
 
 
 @dataclass
@@ -89,12 +90,12 @@ class TradingConfig:
     default_leverage: float = 1.0
     trading_fee_percent: float = 0.05
     max_risk_per_trade: float = 2.0
-    stop_loss_percent: float = 2.0
-    take_profit_percent: float = 3.0
+    stop_loss_percent: float = 1.5  # Tighter for mean-reverting markets
+    take_profit_percent: float = 1.5  # Tighter for mean-reverting markets
     max_active_positions: int = 6
-    min_confidence_threshold: float = 0.4  # Lowered from 0.6 to allow more trades
-    fee_impact_warning_threshold: float = 20.0
-    run_interval_seconds: int = 150  # 2.5 minutes
+    min_confidence_threshold: float = 0.58  # Balanced: filters low-quality trades while allowing good ones
+    fee_impact_warning_threshold: float = 50.0  # Block trades if fees > 50% of PnL
+    run_interval_seconds: int = 300  # 5 minutes (reduced frequency to prevent over-trading)
 
 
 @dataclass

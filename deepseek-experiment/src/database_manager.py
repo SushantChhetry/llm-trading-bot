@@ -18,9 +18,10 @@ from sqlalchemy import JSON, Boolean, Column, DateTime, Float, Integer, String, 
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import declarative_base, sessionmaker
 
+from .logger import LogDomain, get_logger
 from .resilience import CircuitBreakerConfig, circuit_breaker
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__, domain=LogDomain.SYSTEM)
 
 # SQLAlchemy base
 Base = declarative_base()

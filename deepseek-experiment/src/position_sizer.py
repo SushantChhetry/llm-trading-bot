@@ -11,7 +11,9 @@ from typing import Dict, List, Optional, Any
 
 from config import config
 
-logger = logging.getLogger(__name__)
+from .logger import LogDomain, get_logger
+
+logger = get_logger(__name__, domain=LogDomain.TRADING)
 
 
 class PositionSizer:

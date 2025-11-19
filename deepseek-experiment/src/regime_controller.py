@@ -16,9 +16,10 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Dict, List, Optional
 
+from .logger import LogDomain, get_logger
 from .regime_detector import RegimeDetector, RegimeState, RegimeType, VolatilityRegime
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__, domain=LogDomain.REGIME)
 
 
 class StrategyType(Enum):

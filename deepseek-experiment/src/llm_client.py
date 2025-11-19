@@ -14,6 +14,7 @@ import requests
 
 from config import config
 
+from .logger import LogDomain, get_logger
 from .resilience import (
     CircuitBreakerConfig,
     RetryConfig,
@@ -27,7 +28,7 @@ from .security import (
     validate_trading_inputs,
 )
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__, domain=LogDomain.LLM)
 
 
 class LLMClient:
@@ -75,13 +76,13 @@ class LLMClient:
         # Validate API key if not in mock mode
         if not self.mock_mode:
             if not self.api_key:
-                logger.warning(f"No API key provided for {self.provider}. Will use mock responses.")
+                logger.warning(f"Client initialization: No API key provided (provider={self.provider}) - using mock mode")
                 self.mock_mode = True
             elif not self.security_manager.validate_api_key(self.api_key, self.provider):
-                logger.error(f"Invalid API key format for {self.provider}. Will use mock responses.")
+                logger.error(f"Client initialization: Invalid API key format (provider={self.provider}) - using mock mode")
                 self.mock_mode = True
 
-        logger.info(f"LLM Client initialized: {self.provider.upper()} {'(MOCK)' if self.mock_mode else '(LIVE)'}")
+        logger.info(f"Client initialized: provider={self.provider.upper()} mode={'MOCK' if self.mock_mode else 'LIVE'} model={self.model}")
 
     def _get_regime_guidance_text(
         self, regime: str, volatility_regime: str, trend_strength: float, market_structure: str
@@ -257,7 +258,7 @@ TRADING PARAMETERS:
 - Maximum Leverage: 10x (use responsibly)
 - Trading Fees: 0.05% per trade (taker)
 - Position Sizing: Calculate based on available cash, leverage, and risk tolerance
-- Minimum Confidence: 0.4 for trade execution (lowered to allow more trading opportunities)
+- Minimum Confidence: 0.58 for trade execution (balanced: filters low-quality trades while allowing good ones)
 
 ALPHA ARENA OBJECTIVES:
 - PRIMARY GOAL: Maximize PnL (profit and loss)
@@ -270,8 +271,9 @@ FEE AWARENESS (CRITICAL):
 - Trading fees are 0.05% per trade (taker) - they add up quickly!
 - Avoid over-trading: small, frequent trades get eaten by fees
 - Focus on fewer, higher-conviction positions with larger size
-- Only trade when confidence >= 0.4 and clear signal exists
-- Consider fee impact: if fee impact > 20% of PnL, reduce trade frequency
+- Only trade when confidence >= 0.58 and clear signal exists
+- CRITICAL: If fee impact > 50% of PnL, DO NOT TRADE. Wait for better opportunities.
+- Quality over quantity: Better to miss a trade than lose to fees
 
 RISK MANAGEMENT:
 - Never risk more than 2% of portfolio per trade
@@ -282,14 +284,18 @@ RISK MANAGEMENT:
 - Be consistent with your exit plans - don't contradict yourself
 
 EXIT STRATEGY (CRITICAL FOR PROFIT MAXIMIZATION):
+- CRITICAL: Always set exit_plan with profit_target and stop_loss. NEVER set them to 0.
+- For mean-reverting markets: profit_target = entry_price * 1.015 (1.5%), stop_loss = entry_price * 0.985 (1.5%)
+- For trending markets: profit_target = entry_price * 1.03 (3%), stop_loss = entry_price * 0.97 (3%)
 - If you have open positions and confidence drops below 0.5, STRONGLY consider selling (action="sell")
 - Don't hold positions when confidence is low - prefer "sell" over "hold" when confidence < 0.5
 - Take profits when momentum weakens, even if position is profitable
 - Cut losses early - if position is losing >1% and confidence is low, sell immediately
 - If market regime changes unfavorably, prioritize exit over entry
 - Maximize position size when confidence is high (>0.7) - use larger sizes for high-conviction trades
-- Consider partial profit-taking at +2% if momentum weakens
-- Full exit at +5% or when confidence drops significantly
+- Lock in profits: If portfolio reaches profit target (e.g., $100 -> $110), sell to secure the $10 gain
+- Consider partial profit-taking at +1.5% if momentum weakens (mean-reverting markets)
+- Full exit at +3% or when confidence drops significantly
 
 REQUIRED RESPONSE FORMAT (Valid JSON only - no markdown, no code blocks):
 
@@ -307,8 +313,8 @@ Format:
     "confidence": 0.0-1.0,
     "justification": "Brief explanation of your decision (emphasize exit logic if selling)",
     "exit_plan": {{
-        "profit_target": 0.0,
-        "stop_loss": 0.0,
+        "profit_target": 92450.0,  // MUST be > 0. Calculate as entry_price * 1.015 for mean-reverting or * 1.03 for trending
+        "stop_loss": 91000.0,  // MUST be > 0. Calculate as entry_price * 0.985 for mean-reverting or * 0.97 for trending
         "invalidation_conditions": ["condition1", "condition2"]
     }},
     "position_size_usdt": 0.0,
@@ -820,9 +826,35 @@ No markdown formatting, no code blocks, no extra text.
         response["quantity"] = float(response.get("quantity", 0.0))
         response["position_size_usdt"] = float(response.get("position_size_usdt", 0.0))
         response["risk_assessment"] = response.get("risk_assessment", "medium")
+        
+        # Validate and set exit_plan with proper defaults if missing
+        profit_target = float(exit_plan.get("profit_target", 0.0))
+        stop_loss = float(exit_plan.get("stop_loss", 0.0))
+        
+        # If exit_plan values are 0 or missing, calculate defaults based on current price
+        # This ensures we always have valid exit targets
+        if profit_target <= 0 or stop_loss <= 0:
+            # Try to get current price from market_data if available
+            current_price = 0.0
+            if hasattr(self, '_last_market_data') and self._last_market_data:
+                current_price = float(self._last_market_data.get("price", 0))
+            
+            # If we have a price, calculate defaults for mean-reverting markets (tighter targets)
+            if current_price > 0:
+                if profit_target <= 0:
+                    # Default: 1.5% profit target for mean-reverting markets
+                    profit_target = current_price * 1.015
+                    logger.debug(f"Exit plan validation: Set default profit_target={profit_target:.2f} (1.5% from {current_price:.2f})")
+                if stop_loss <= 0:
+                    # Default: 1.5% stop loss for mean-reverting markets
+                    stop_loss = current_price * 0.985
+                    logger.debug(f"Exit plan validation: Set default stop_loss={stop_loss:.2f} (1.5% from {current_price:.2f})")
+            else:
+                logger.warning("Exit plan has zero values but no current price available. Position monitoring will use config defaults.")
+        
         response["exit_plan"] = {
-            "profit_target": float(exit_plan.get("profit_target", 0.0)),
-            "stop_loss": float(exit_plan.get("stop_loss", 0.0)),
+            "profit_target": profit_target,
+            "stop_loss": stop_loss,
             "invalidation_conditions": exit_plan.get("invalidation_conditions", []),
         }
 
@@ -1077,6 +1109,9 @@ No markdown formatting, no code blocks, no extra text.
                 "total_return_pct": 0.0,
                 "total_trades": 0,
             }
+        
+        # Store market_data for exit plan validation
+        self._last_market_data = market_data
 
         # Use agentic mode if enabled
         if use_agentic_mode or getattr(config, "ENABLE_AGENTIC_DECISIONS", False):
@@ -1090,46 +1125,38 @@ No markdown formatting, no code blocks, no extra text.
                         best_llm_client=self,  # Use same client for both (can be optimized later)
                     )
                 
-                logger.info("Using agentic multi-step decision making")
+                logger.info("Decision workflow: Using agentic multi-step decision making")
                 return self._llm_agent.execute_agent_workflow(market_data, portfolio_state)
             except Exception as e:
-                logger.warning(f"Agentic mode failed, falling back to single call: {e}")
+                logger.warning(f"Decision workflow: Agentic mode failed (error={str(e)}) - falling back to single call")
 
         # Format structured prompt
         prompt = self._format_trading_prompt(market_data, portfolio_state)
 
         try:
             if self.mock_mode:
-                logger.info(f"Using mock LLM response ({self.provider})")
+                logger.info(f"API call: Using mock response (provider={self.provider})")
                 response = self._get_mock_response(market_data, portfolio_state)
             else:
-                logger.info(f"Calling {self.provider.upper()} API")
+                logger.info(f"API call: Calling {self.provider.upper()} API (model={self.model})")
                 try:
                     response = self._make_api_request(prompt)
                 except Exception as api_error:
                     error_str = str(api_error)
                     # Check for payment-related errors
                     if "402" in error_str or "Payment Required" in error_str or "payment required" in error_str.lower():
-                        error_msg = (
-                            "💳 DeepSeek API payment required. "
-                            "The bot will continue in mock mode until payment is added. "
-                            "To fix: 1) Add payment to your DeepSeek account at "
-                            "https://platform.deepseek.com, "
-                            "or 2) Set LLM_PROVIDER=mock in Railway environment variables "
-                            "for testing."
+                        logger.error(
+                            f"API call failed: Payment required (provider={self.provider}) - "
+                            f"falling back to mock mode. Add payment at https://platform.deepseek.com"
                         )
-                        logger.error(error_msg)
                     elif "401" in error_str or "authentication failed" in error_str.lower():
-                        error_msg = (
-                            "🔑 DeepSeek API authentication failed. "
-                            "The bot will continue in mock mode. "
-                            "To fix: Verify your LLM_API_KEY is correct in Railway "
-                            "environment variables."
+                        logger.error(
+                            f"API call failed: Authentication failed (provider={self.provider}) - "
+                            f"falling back to mock mode. Verify LLM_API_KEY is correct"
                         )
-                        logger.error(error_msg)
                     else:
-                        logger.error(f"API call failed: {api_error}")
-                    logger.warning("🔄 Falling back to mock mode for this cycle")
+                        logger.error(f"API call failed: {api_error} (provider={self.provider}) - falling back to mock mode")
+                    logger.warning("API call: Falling back to mock mode for this cycle")
                     response = self._get_mock_response(market_data, portfolio_state)
 
             # Extract content from response based on provider
@@ -1142,7 +1169,7 @@ No markdown formatting, no code blocks, no extra text.
 
             if decision is None:
                 logger.error(
-                    f"LLM_RESPONSE_VALIDATION_FAILED reason=invalid_response "
+                    f"Response validation failed: reason=invalid_response "
                     f"response_length={len(raw_response_content)} "
                     f"response_preview={raw_response_content[:200]} "
                     f"fallback_action=hold"
@@ -1163,7 +1190,7 @@ No markdown formatting, no code blocks, no extra text.
                 return fallback_decision
 
             logger.info(
-                f"LLM_DECISION_VALIDATED action={decision['action']} "
+                f"Decision validated: action={decision['action']} "
                 f"direction={decision.get('direction', 'none')} "
                 f"confidence={decision['confidence']:.2f} "
                 f"position_size_usdt={decision.get('position_size_usdt', 0.0):.2f} "
@@ -1184,7 +1211,7 @@ No markdown formatting, no code blocks, no extra text.
             return decision
 
         except Exception as e:
-            logger.error(f"Error getting trading decision: {e}")
+            logger.error(f"Decision error: Failed to get trading decision (error={str(e)})")
             # Fallback to hold on error
             return {
                 "action": "hold",

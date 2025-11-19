@@ -29,7 +29,7 @@ sys.path.insert(0, str(project_root))
 from config import config  # noqa: E402
 from src.data_fetcher import DataFetcher  # noqa: E402
 from src.llm_client import LLMClient  # noqa: E402
-from src.logger import configure_production_logging, get_logger  # noqa: E402
+from src.logger import LogDomain, configure_production_logging, get_logger  # noqa: E402
 from src.monitoring import MonitoringService  # noqa: E402
 from src.position_sizer import PositionSizer  # noqa: E402
 from src.startup_validator import validate_startup  # noqa: E402
@@ -49,14 +49,14 @@ else:
         handlers=[logging.FileHandler(config.LOG_FILE), logging.StreamHandler(sys.stdout)],
     )
 
-logger = get_logger(__name__)
+logger = get_logger(__name__, domain=LogDomain.SYSTEM)
 
 # Run startup validation
 if not validate_startup():
-    logger.error("Startup validation failed. Exiting.")
+    logger.error("Startup validation: Failed - exiting")
     sys.exit(1)
 
-logger.info(f"Starting trading bot in {environment} mode")
+logger.info(f"Bot starting: environment={environment} mode={config.TRADING_MODE if hasattr(config, 'TRADING_MODE') else 'unknown'}")
 
 
 class TradingBot:
@@ -93,6 +93,10 @@ class TradingBot:
             config.USE_TESTNET = testnet_mode
         if live_mode is not None:
             config.TRADING_MODE = "live" if live_mode else "paper"
+
+        # Trade cooldown tracking to prevent over-trading
+        self.last_trade_time = None
+        self.TRADE_COOLDOWN_SECONDS = int(os.getenv("TRADE_COOLDOWN_SECONDS", "1800"))  # 30 minutes between trades
 
         # Colorful initialization banner
         self.console.print(
@@ -289,7 +293,7 @@ class TradingBot:
             
             if consecutive_losses >= 5:
                 logger.critical(
-                    f"CIRCUIT_BREAKER_TRIGGERED reason=consecutive_losses count={consecutive_losses}"
+                    f"Circuit breaker triggered: reason=consecutive_losses count={consecutive_losses} threshold=5"
                 )
                 return True
             
@@ -297,7 +301,7 @@ class TradingBot:
             daily_loss = sum(t.get("profit", 0) for t in recent_trades if t.get("profit", 0) < 0)
             if abs(daily_loss) > 500:  # $500 loss
                 logger.critical(
-                    f"CIRCUIT_BREAKER_TRIGGERED reason=daily_loss_limit loss=${abs(daily_loss):.2f}"
+                    f"Circuit breaker triggered: reason=daily_loss_limit loss={abs(daily_loss):.2f} threshold=500.00"
                 )
                 return True
             
@@ -317,14 +321,14 @@ class TradingBot:
             
             if current_drawdown > 0.15:  # 15% drawdown
                 logger.critical(
-                    f"CIRCUIT_BREAKER_TRIGGERED reason=drawdown_exceeded drawdown={current_drawdown:.1%}"
+                    f"Circuit breaker triggered: reason=drawdown_exceeded drawdown={current_drawdown:.1%} threshold=15.0%"
                 )
                 return True
             
             return False
             
         except Exception as e:
-            logger.error(f"Error checking circuit breaker: {e}")
+            logger.error(f"Circuit breaker check failed: (error={str(e)})")
             return False  # Don't halt on error, just log it
 
     def _log_hyperparameters(self):
@@ -472,7 +476,7 @@ class TradingBot:
 
                     # Validate market data
                     if current_price <= 0:
-                        logger.error("Invalid market price received")
+                        logger.error(f"Market data validation failed: price={current_price} - skipping cycle")
                         self.console.print("[bold red]❌ Invalid market data - skipping cycle[/bold red]")
                         return
 
@@ -480,11 +484,11 @@ class TradingBot:
                     if self.data_quality:
                         quality_report = self.data_quality.get_quality_report()
                         if quality_report.overall_status.value == "critical":
-                            logger.error(f"Data quality CRITICAL: {quality_report}")
+                            logger.error(f"Data quality critical: status=critical (report={quality_report}) - skipping cycle")
                             self.console.print("[bold red]❌ Data quality critical - skipping cycle[/bold red]")
                             return
                         elif quality_report.overall_status.value == "warning":
-                            logger.warning(f"Data quality warning: {quality_report}")
+                            logger.warning(f"Data quality warning: status=warning (report={quality_report})")
 
                     # Update data timestamp
                     if self.data_quality:
@@ -513,7 +517,7 @@ class TradingBot:
                             venue_price=current_price, symbol=config.SYMBOL
                         )
                         if triangulation.status.value == "critical":
-                            logger.error(f"Price triangulation critical: {triangulation.divergence_bps:.2f} bps")
+                            logger.error(f"Price triangulation critical: divergence={triangulation.divergence_bps:.2f}bps symbol={config.SYMBOL} - skipping cycle")
                             self.console.print("[bold red]❌ Price divergence too large - skipping cycle[/bold red]")
                             return
             else:
@@ -524,15 +528,14 @@ class TradingBot:
 
                 # Validate market data
                 if current_price <= 0:
-                    logger.error("Invalid market price received")
-                    self.console.print("[bold red]❌ Invalid market data - skipping cycle[/bold red]")
+                    logger.error(f"Market data validation failed: price={current_price} - skipping cycle")
                     return
 
                 # Fetch technical indicators for Alpha Arena-style trading
                 try:
                     indicators = self.data_fetcher.get_technical_indicators(timeframe="5m", limit=100)
                 except Exception as e:
-                    logger.warning(f"Failed to fetch technical indicators: {e}. Using fallback values.")
+                    logger.warning(f"Technical indicators fetch failed: timeframe=5m limit=100 (error={str(e)}) - using fallback values")
                     indicators = {
                         "ema_20": current_price * 0.99,
                         "ema_50": current_price * 0.98,
@@ -567,6 +570,13 @@ class TradingBot:
                 monitoring_results = self.trading_engine.monitor_positions(current_price)
                 if monitoring_results["positions_checked"] > 0:
                     if monitoring_results["positions_closed"] > 0:
+                        logger.info(
+                            f"Position monitoring: checked={monitoring_results['positions_checked']} "
+                            f"closed={monitoring_results['positions_closed']} "
+                            f"stop_loss={monitoring_results['stop_loss_triggers']} "
+                            f"take_profit={monitoring_results['take_profit_triggers']} "
+                            f"partial={monitoring_results['partial_profit_triggers']}"
+                        )
                         self.console.print(
                             f"[bold yellow]⚠️ Position Monitoring:[/bold yellow] "
                             f"Checked {monitoring_results['positions_checked']} positions, "
@@ -577,7 +587,7 @@ class TradingBot:
                         )
                     else:
                         logger.debug(
-                            f"Position monitoring: {monitoring_results['positions_checked']} positions checked, none closed"
+                            f"Position monitoring: checked={monitoring_results['positions_checked']} closed=0"
                         )
 
             # 2. Get portfolio summary
@@ -648,38 +658,42 @@ class TradingBot:
                             critical_count = sum(1 for d in discrepancies if d.severity == "critical")
                             warning_count = sum(1 for d in discrepancies if d.severity == "warning")
                             if critical_count > 0:
+                                logger.error(f"Position reconciliation: critical={critical_count} warning={warning_count} discrepancies found")
                                 self.console.print(
                                     f"[bold red]⚠️ Position Reconciliation: {critical_count} critical, {warning_count} warning discrepancies[/bold red]"
                                 )
                             else:
+                                logger.warning(f"Position reconciliation: warning={warning_count} discrepancies found")
                                 self.console.print(
                                     f"[bold yellow]⚠️ Position Reconciliation: {warning_count} warning discrepancies[/bold yellow]"
                                 )
                         elif success:
                             logger.debug("Position reconciliation: All positions match")
                     except Exception as e:
-                        logger.error(f"Error during position reconciliation: {e}", exc_info=True)
+                        logger.error(f"Position reconciliation failed: (error={str(e)})", exc_info=True)
 
             # 2.6. Risk service health monitoring
             if self.trading_engine.risk_client:
                 try:
                     risk_state = self.trading_engine.risk_client.get_risk_state()
                     if risk_state is None:
-                        logger.warning("Risk service health check failed - service may be unreachable")
+                        logger.warning("Risk service health check failed: service may be unreachable")
                         if config.RISK_SERVICE_REQUIRED:
                             self.console.print(
                                 "[bold red]⚠️ Risk service unreachable - trades may be blocked[/bold red]"
                             )
                     else:
                         if risk_state.get("kill_switch_active", False):
+                            kill_reason = risk_state.get('kill_switch_reason', 'Unknown reason')
+                            logger.critical(f"Kill switch active: reason={kill_reason}")
                             self.console.print(
-                                f"[bold red]🚨 KILL SWITCH ACTIVE: {risk_state.get('kill_switch_reason', 'Unknown reason')}[/bold red]"
+                                f"[bold red]🚨 KILL SWITCH ACTIVE: {kill_reason}[/bold red]"
                             )
                         logger.debug(
-                            f"Risk service health: OK (kill_switch={risk_state.get('kill_switch_active', False)})"
+                            f"Risk service health: status=OK kill_switch={risk_state.get('kill_switch_active', False)}"
                         )
                 except Exception as e:
-                    logger.error(f"Error checking risk service health: {e}", exc_info=True)
+                    logger.error(f"Risk service health check failed: (error={str(e)})", exc_info=True)
 
             # 3. Get LLM decision with portfolio context
             if self.is_interactive:
@@ -819,6 +833,31 @@ class TradingBot:
                 )
 
                 if available_balance > 0 and position_size_usdt > 0:
+                    # Check fee impact before trading - prevent over-trading
+                    fee_impact_pct = portfolio.get("fee_impact_pct", 0)
+                    if fee_impact_pct > config.FEE_IMPACT_WARNING_THRESHOLD:
+                        logger.warning(
+                            f"Trade blocked: fee impact {fee_impact_pct:.1f}% exceeds threshold "
+                            f"{config.FEE_IMPACT_WARNING_THRESHOLD}%"
+                        )
+                        self.console.print(
+                            f"[bold red]🚫 Trade blocked: Fee impact too high ({fee_impact_pct:.1f}%)[/bold red]"
+                        )
+                        return
+                    
+                    # Check trade cooldown period
+                    if self.last_trade_time:
+                        time_since_last_trade = (datetime.now() - self.last_trade_time).total_seconds()
+                        if time_since_last_trade < self.TRADE_COOLDOWN_SECONDS:
+                            remaining = self.TRADE_COOLDOWN_SECONDS - time_since_last_trade
+                            logger.info(
+                                f"Trade blocked: Cooldown active. {remaining:.0f}s remaining"
+                            )
+                            self.console.print(
+                                f"[bold yellow]⏳ Trade cooldown: {remaining:.0f}s remaining[/bold yellow]"
+                            )
+                            return
+                    
                     # Check funding/carry costs before trading
                     if self.funding_carry:
                         # Estimate expected edge (simplified - would use actual signal strength)
@@ -827,7 +866,7 @@ class TradingBot:
                             symbol=config.SYMBOL, expected_edge_bps=expected_edge_bps
                         )
                         if should_avoid:
-                            logger.warning(f"Trade avoided due to carry costs: {reason}")
+                            logger.warning(f"Trade avoided: reason=carry_costs details={reason}")
                             self.console.print(f"[bold yellow]⚠️ Trade avoided: {reason}[/bold yellow]")
                             return
 
@@ -868,7 +907,7 @@ class TradingBot:
                                 trade_amount = min(optimal_size, max_allowed_by_config)
                             
                             logger.info(
-                                f"POSITION_SIZE_CALCULATION llm_suggestion={position_size_usdt:.2f} "
+                                f"Position size calculation: llm_suggestion={position_size_usdt:.2f} "
                                 f"kelly_optimal={kelly_optimal_size:.2f} "
                                 f"final_size={trade_amount:.2f} "
                                 f"max_config={max_allowed_by_config:.2f}"
@@ -876,18 +915,18 @@ class TradingBot:
                             
                             if trade_amount != position_size_usdt:
                                 logger.info(
-                                    f"POSITION_SIZE_ADJUSTED original={position_size_usdt:.2f} "
+                                    f"Position size adjusted: original={position_size_usdt:.2f} "
                                     f"adjusted={trade_amount:.2f} reason=kelly_criterion"
                                 )
                         except Exception as e:
-                            logger.warning(f"Error calculating Kelly position size: {e}, using LLM suggestion")
+                            logger.warning(f"Position size calculation failed: method=kelly_criterion (error={str(e)}) - using LLM suggestion")
                             trade_amount = min(position_size_usdt, available_balance * config.MAX_POSITION_SIZE)
                     else:
                         # Fallback: Use LLM's calculated position size capped by config
                         trade_amount = min(position_size_usdt, available_balance * config.MAX_POSITION_SIZE)
                     logger.info(
-                        f"TRADE_EXECUTION_START action=buy symbol={config.SYMBOL} "
-                        f"amount={trade_amount:.2f} leverage={leverage:.1f}"
+                        f"Trade execution start: action=buy symbol={config.SYMBOL} "
+                        f"amount={trade_amount:.2f} leverage={leverage:.1f} price={current_price:.2f}"
                     )
 
                     self.console.print(
@@ -930,6 +969,7 @@ class TradingBot:
                     )
                     if trade:
                         trade_executed = True
+                        self.last_trade_time = datetime.now()  # Update cooldown timer
                         logger.info(
                             f"TRADE_EXECUTION_SUCCESS action=buy trade_id={trade['id']} " f"symbol={config.SYMBOL}"
                         )
@@ -1012,6 +1052,7 @@ class TradingBot:
                     )
                     if trade:
                         trade_executed = True
+                        self.last_trade_time = datetime.now()  # Update cooldown timer
                         logger.info(
                             f"TRADE_EXECUTION_SUCCESS action=short trade_id={trade['id']} " f"symbol={config.SYMBOL}"
                         )
@@ -1055,6 +1096,7 @@ class TradingBot:
                     )
                     if trade:
                         trade_executed = True
+                        self.last_trade_time = datetime.now()  # Update cooldown timer
                         profit = trade.get("profit", 0)
                         profit_pct = trade.get("profit_pct", 0)
                         logger.info(
@@ -1149,6 +1191,7 @@ class TradingBot:
                             
                             if trade:
                                 trade_executed = True
+                                self.last_trade_time = datetime.now()  # Update cooldown timer
                                 profit = trade.get("profit", 0)
                                 profit_pct = trade.get("profit_pct", 0)
                                 logger.info(

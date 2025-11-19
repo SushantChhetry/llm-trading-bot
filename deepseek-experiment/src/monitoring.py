@@ -16,7 +16,9 @@ from typing import Any, Callable, Dict, List
 
 import psutil
 
-logger = logging.getLogger(__name__)
+from .logger import LogDomain, get_logger
+
+logger = get_logger(__name__, domain=LogDomain.MONITORING)
 
 
 @dataclass

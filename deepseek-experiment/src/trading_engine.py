@@ -15,12 +15,12 @@ from typing import Any, Dict, List, Optional
 
 from config import config
 
-from .logger import get_logger
+from .logger import LogDomain, get_logger
 from .resilience import CircuitBreakerConfig, RetryConfig, circuit_breaker, retry
 from .risk_client import OrderValidationResult, RiskClient
 from .security import SecurityManager, validate_trading_inputs
 
-logger = get_logger(__name__)
+logger = get_logger(__name__, domain=LogDomain.TRADING)
 
 
 class TradingEngine:
@@ -61,20 +61,20 @@ class TradingEngine:
             from .supabase_client import get_supabase_service
 
             self.supabase_client = get_supabase_service()
-            logger.info("Supabase client initialized successfully")
+            logger.info("Component initialized: component=supabase_client status=success")
         except ImportError as e:
-            logger.warning(f"Supabase client not available: {e}")
+            logger.warning(f"Component unavailable: component=supabase_client reason=import_error (error={str(e)})")
         except Exception as e:
-            logger.warning(f"Failed to initialize Supabase client: {e}")
+            logger.warning(f"Component initialization failed: component=supabase_client (error={str(e)})")
 
         # Initialize risk client (optional - will fail gracefully if service unavailable)
         self.risk_client = None
         try:
             risk_service_url = os.getenv("RISK_SERVICE_URL", "http://localhost:8003")
             self.risk_client = RiskClient(risk_service_url=risk_service_url)
-            logger.info(f"Risk client initialized: {risk_service_url}")
+            logger.info(f"Component initialized: component=risk_client url={risk_service_url}")
         except Exception as e:
-            logger.warning(f"Risk client not available (service may be down): {e}")
+            logger.warning(f"Component unavailable: component=risk_client reason=service_down (error={str(e)})")
 
         # Initialize event logger (optional)
         self.event_logger = None
@@ -82,9 +82,9 @@ class TradingEngine:
             from .event_logger import EventLogger
 
             self.event_logger = EventLogger()
-            logger.info("Event logger initialized")
+            logger.info("Component initialized: component=event_logger status=success")
         except Exception as e:
-            logger.warning(f"Event logger not available: {e}")
+            logger.warning(f"Component unavailable: component=event_logger (error={str(e)})")
 
         # Initialize position sizer (optional - for Kelly Criterion sizing)
         self.position_sizer = None
@@ -93,9 +93,9 @@ class TradingEngine:
                 from .position_sizer import PositionSizer
 
                 self.position_sizer = PositionSizer()
-                logger.info("Position sizer (Kelly Criterion) initialized")
+                logger.info("Component initialized: component=position_sizer type=Kelly_Criterion")
             except Exception as e:
-                logger.warning(f"Position sizer not available: {e}")
+                logger.warning(f"Component unavailable: component=position_sizer (error={str(e)})")
 
         # Daily loss tracking
         self.daily_start_nav = None
@@ -108,7 +108,7 @@ class TradingEngine:
         # Load portfolio state including positions
         self._load_portfolio_state()
 
-        logger.info(f"Trading engine initialized with balance: {self.balance}")
+        logger.info(f"Engine initialized: component=trading_engine balance={self.balance:.2f} mode={config.TRADING_MODE}")
 
     def _load_trades(self):
         """Load trade history from file."""
@@ -116,9 +116,9 @@ class TradingEngine:
             try:
                 with open(self.trades_file, "r") as f:
                     self.trades = json.load(f)
-                logger.info(f"Loaded {len(self.trades)} historical trades")
+                logger.info(f"Trades loaded: count={len(self.trades)} file={self.trades_file}")
             except Exception as e:
-                logger.error(f"Error loading trades: {e}")
+                logger.error(f"Trades load failed: file={self.trades_file} (error={str(e)})")
                 self.trades = []
 
     def _load_portfolio_state(self):
@@ -2028,10 +2028,17 @@ class TradingEngine:
                         except Exception as e:
                             logger.debug(f"Error logging stop-loss event: {e}")
             elif take_profit_triggered:
+                # Calculate profit locked
+                if side == "long":
+                    profit_locked = (current_price - entry_price) * quantity
+                else:  # short
+                    profit_locked = (entry_price - current_price) * quantity
+                
                 logger.info(
                     f"TAKE_PROFIT_TRIGGERED symbol={symbol} side={side} "
                     f"entry_price={entry_price:.2f} current_price={current_price:.2f} "
-                    f"take_profit_price={take_profit_price:.2f} pnl_pct={pnl_pct:.2f}%"
+                    f"take_profit_price={take_profit_price:.2f} pnl_pct={pnl_pct:.2f}% "
+                    f"profit_locked=${profit_locked:.2f}"
                 )
                 trade = self._close_position(symbol, current_price, quantity=None, reason="take_profit")
                 if trade:

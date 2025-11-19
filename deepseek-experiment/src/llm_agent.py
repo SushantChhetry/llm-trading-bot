@@ -16,8 +16,9 @@ from datetime import datetime
 
 from config import config
 from .llm_client import LLMClient
+from .logger import LogDomain, get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__, domain=LogDomain.LLM)
 
 # Decision schema for validation
 DECISION_SCHEMA = {

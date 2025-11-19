@@ -10,7 +10,9 @@ import sys
 from pathlib import Path
 from typing import Dict, List, Tuple
 
-logger = logging.getLogger(__name__)
+from .logger import LogDomain, get_logger
+
+logger = get_logger(__name__, domain=LogDomain.SYSTEM)
 
 
 class ValidationError(Exception):

@@ -21,8 +21,9 @@ import yaml
 
 from config import config
 from src.main import TradingBot
+from .logger import LogDomain, get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__, domain=LogDomain.SYSTEM)
 
 
 class ExperimentRunner:

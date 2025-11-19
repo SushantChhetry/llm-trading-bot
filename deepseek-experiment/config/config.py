@@ -60,8 +60,8 @@ elif LLM_PROVIDER == "anthropic":
     LLM_API_URL = LLM_API_URL or "https://api.anthropic.com/v1/messages"
     LLM_MODEL = LLM_MODEL or "claude-3-sonnet-20240229"
 
-# Bot workflow configuration - Alpha Arena style 2-3 minute cycles
-RUN_INTERVAL_SECONDS = int(os.getenv("RUN_INTERVAL_SECONDS", "150"))  # 2.5 minutes (150 seconds)
+# Bot workflow configuration - Reduced frequency to prevent over-trading
+RUN_INTERVAL_SECONDS = int(os.getenv("RUN_INTERVAL_SECONDS", "300"))  # 5 minutes (300 seconds) - reduced from 150s
 TRADING_MODE = os.getenv("TRADING_MODE", "paper")  # "paper" or "live"
 
 # Logging configuration
@@ -70,8 +70,8 @@ LOG_FILE = LOG_DIR / "bot.log"
 
 # Trading limits (safety measures)
 MAX_POSITION_SIZE = float(os.getenv("MAX_POSITION_SIZE", "0.1"))  # Max % of balance per trade
-STOP_LOSS_PERCENT = float(os.getenv("STOP_LOSS_PERCENT", "2.0"))  # 2% stop loss
-TAKE_PROFIT_PERCENT = float(os.getenv("TAKE_PROFIT_PERCENT", "3.0"))
+STOP_LOSS_PERCENT = float(os.getenv("STOP_LOSS_PERCENT", "1.5"))  # 1.5% stop loss (tighter for mean-reverting)
+TAKE_PROFIT_PERCENT = float(os.getenv("TAKE_PROFIT_PERCENT", "1.5"))  # 1.5% take profit (tighter for mean-reverting)
 
 # Leverage and risk management
 MAX_LEVERAGE = float(os.getenv("MAX_LEVERAGE", "10.0"))  # Maximum allowed leverage
@@ -81,9 +81,9 @@ MAX_RISK_PER_TRADE = float(os.getenv("MAX_RISK_PER_TRADE", "2.0"))  # Max 2% ris
 
 # Alpha Arena behavioral simulation
 MAX_ACTIVE_POSITIONS = int(os.getenv("MAX_ACTIVE_POSITIONS", "6"))  # Max simultaneous positions
-MIN_CONFIDENCE_THRESHOLD = float(os.getenv("MIN_CONFIDENCE_THRESHOLD", "0.4"))  # Min confidence to trade (lowered from 0.6 to allow more trades)
+MIN_CONFIDENCE_THRESHOLD = float(os.getenv("MIN_CONFIDENCE_THRESHOLD", "0.58"))  # Min confidence to trade (balanced: filters low-quality trades while allowing good ones)
 EXIT_CONFIDENCE_THRESHOLD = float(os.getenv("EXIT_CONFIDENCE_THRESHOLD", "0.5"))  # Confidence threshold for automatic exits (lower = more aggressive exits)
-FEE_IMPACT_WARNING_THRESHOLD = float(os.getenv("FEE_IMPACT_WARNING_THRESHOLD", "20.0"))  # Warn if fees > 20% of PnL
+FEE_IMPACT_WARNING_THRESHOLD = float(os.getenv("FEE_IMPACT_WARNING_THRESHOLD", "50.0"))  # Block trades if fees > 50% of PnL (increased from 20%)
 
 # Position monitoring and exit management
 ENABLE_POSITION_MONITORING = (

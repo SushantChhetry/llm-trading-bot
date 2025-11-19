@@ -27,9 +27,10 @@ except ImportError:
 
 from config import config
 
+from .logger import LogDomain, get_logger
 from .resilience import RetryConfig, RetryHandler, exchange_circuit_breaker
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__, domain=LogDomain.DATA)
 
 
 class DataFetcher:
