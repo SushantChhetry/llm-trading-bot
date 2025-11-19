@@ -16,6 +16,7 @@ import time
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List
+from zoneinfo import ZoneInfo
 
 import yaml
 
@@ -24,6 +25,14 @@ from src.main import TradingBot
 from .logger import LogDomain, get_logger
 
 logger = get_logger(__name__, domain=LogDomain.SYSTEM)
+
+# EST timezone (handles EST/EDT automatically)
+EST = ZoneInfo("America/New_York")
+
+
+def now_est() -> datetime:
+    """Get current datetime in EST timezone."""
+    return datetime.now(EST)
 
 
 class ExperimentRunner:
@@ -101,7 +110,7 @@ class ExperimentRunner:
             "parameters": experiment_params,
             "duration_minutes": duration_minutes,
             "seed": seed,
-            "timestamp": datetime.now().isoformat(),
+            "timestamp": now_est().isoformat(),
             "python_hashseed": os.environ.get("PYTHONHASHSEED"),
             "random_state": random.getstate() if seed is not None else None,
         }
@@ -125,9 +134,9 @@ class ExperimentRunner:
             logger.addHandler(exp_handler)
 
             # Run experiment
-            start_time = datetime.now()
+            start_time = now_est()
             results = self._run_experiment_bot(bot, duration_minutes)
-            end_time = datetime.now()
+            end_time = now_est()
 
             # Calculate metrics
             metrics = self._calculate_experiment_metrics(results, start_time, end_time)
@@ -198,10 +207,10 @@ class ExperimentRunner:
             "total_experiments": len(param_combinations),
             "duration_per_experiment": duration_minutes,
             "results": results,
-            "timestamp": datetime.now().isoformat(),
+            "timestamp": now_est().isoformat(),
         }
 
-        sweep_file = self.experiments_dir / "results" / f"sweep_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+        sweep_file = self.experiments_dir / "results" / f"sweep_{now_est().strftime('%Y%m%d_%H%M%S')}.json"
         with open(sweep_file, "w") as f:
             json.dump(sweep_summary, f, indent=2)
 
